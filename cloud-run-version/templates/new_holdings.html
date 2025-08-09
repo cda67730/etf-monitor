@@ -1,0 +1,126 @@
+<!-- templates/new_holdings.html -->
+{% extends "base.html" %}
+
+{% block title %}新增持股 - ETF持股明細監控系統{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-plus-circle text-success"></i> 每日新增持股</h2>
+    </div>
+    <div class="card-body">
+        <!-- 篩選區域 -->
+        <div class="filter-section">
+            <form method="get" class="row g-3">
+                <div class="col-md-6">
+                    <label for="date" class="form-label">選擇日期</label>
+                    <select name="date" id="date" class="form-select" onchange="this.form.submit()">
+                        <option value="">請選擇日期</option>
+                        {% for date in dates %}
+                        <option value="{{ date }}" {% if date == selected_date %}selected{% endif %}>
+                            {{ date }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="etf_code" class="form-label">選擇ETF（可選）</label>
+                    <select name="etf_code" id="etf_code" class="form-select" onchange="this.form.submit()">
+                        <option value="">全部ETF</option>
+                        {% for code in etf_codes %}
+                        <option value="{{ code }}" {% if code == selected_etf %}selected{% endif %}>
+                            {{ code }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+
+        {% if new_holdings %}
+        <div class="alert alert-success">
+            <i class="fas fa-info-circle"></i> 找到 {{ new_holdings|length }} 檔新增持股
+        </div>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-success">
+                    <tr>
+                        <th>ETF代碼</th>
+                        <th>ETF名稱</th>
+                        <th>股票代碼</th>
+                        <th>股票名稱</th>
+                        <th>新增權重 (%)</th>
+                        <th>新增股數</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for holding in new_holdings %}
+                    <tr>
+                        <td><span class="badge bg-success">{{ holding.etf_code }}</span></td>
+                        <td><small class="text-muted">{{ holding.etf_name }}</small></td>
+                        <td><strong>{{ holding.stock_code }}</strong></td>
+                        <td>{{ holding.stock_name }}</td>
+                        <td class="change-positive">{{ "%.2f"|format(holding.weight) }}%</td>
+                        <td class="change-positive">{{ "{:,}".format(holding.shares) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 如果顯示全部ETF，按ETF分組顯示統計 -->
+        {% if not selected_etf %}
+        <div class="mt-4">
+            <h5><i class="fas fa-chart-pie"></i> 各ETF新增統計</h5>
+            <div class="row">
+                {% set etf_stats = {} %}
+                {% for holding in new_holdings %}
+                    {% if holding.etf_code not in etf_stats %}
+                        {% set _ = etf_stats.update({holding.etf_code: {'name': holding.etf_name, 'count': 0, 'holdings': []}}) %}
+                    {% endif %}
+                    {% set _ = etf_stats[holding.etf_code].update({'count': etf_stats[holding.etf_code]['count'] + 1}) %}
+                    {% set _ = etf_stats[holding.etf_code]['holdings'].append(holding) %}
+                {% endfor %}
+
+                {% for etf_code, stats in etf_stats.items() %}
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <div class="card border-success">
+                        <div class="card-header bg-success text-white">
+                            <h6 class="mb-0">
+                                <i class="fas fa-plus-circle"></i> {{ etf_code }}
+                                <br><small>{{ stats.name }}</small>
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-2">
+                                <strong>新增股票數：</strong> {{ stats.count }} 檔
+                            </div>
+                            <div class="text-muted">
+                                <strong>主要股票：</strong>
+                                {% for holding in stats.holdings[:3] %}
+                                <div>{{ holding.stock_code }} {{ holding.stock_name }}</div>
+                                {% endfor %}
+                                {% if stats.holdings|length > 3 %}
+                                <small>...等 {{ stats.holdings|length - 3 }} 檔</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% elif selected_date %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> {{ selected_date }} 當日無新增持股
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> 請選擇日期以查看新增持股
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

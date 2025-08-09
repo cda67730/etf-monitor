@@ -1,0 +1,286 @@
+<!-- templates/decreased_holdings.html -->
+{% extends "base.html" %}
+
+{% block title %}減持表 - ETF持股明細監控系統{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-minus-circle text-danger"></i> 每日減持表</h2>
+    </div>
+    <div class="card-body">
+        <!-- 篩選區域 -->
+        <div class="filter-section">
+            <form method="get" class="row g-3">
+                <div class="col-md-6">
+                    <label for="date" class="form-label">選擇日期</label>
+                    <select name="date" id="date" class="form-select" onchange="this.form.submit()">
+                        <option value="">請選擇日期</option>
+                        {% for date in dates %}
+                        <option value="{{ date }}" {% if date == selected_date %}selected{% endif %}>
+                            {{ date }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="etf_code" class="form-label">選擇ETF（可選）</label>
+                    <select name="etf_code" id="etf_code" class="form-select" onchange="this.form.submit()">
+                        <option value="">全部ETF</option>
+                        {% for code in etf_codes %}
+                        <option value="{{ code }}" {% if code == selected_etf %}selected{% endif %}>
+                            {{ code }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+
+        {% if decreased_holdings %}
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i> 找到 {{ decreased_holdings|length }} 筆減持記錄
+            <small class="ms-2 text-muted">點擊表頭可進行排序</small>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover" id="decreasedTable">
+                <thead class="table-warning">
+                    <tr>
+                        <th class="sortable" data-sort="etf_code">
+                            ETF代碼 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="etf_name">
+                            ETF名稱 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="stock_code">
+                            股票代碼 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="stock_name">
+                            股票名稱 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="change_type">
+                            變化類型 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="old_shares" data-type="number">
+                            原持股數 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="new_shares" data-type="number">
+                            現持股數 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="change_amount" data-type="number">
+                            變化數量 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="old_weight" data-type="number">
+                            原權重 (%) <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="new_weight" data-type="number">
+                            現權重 (%) <i class="fas fa-sort text-muted"></i>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for holding in decreased_holdings %}
+                    <tr {% if holding.change_type == '完全移除' %}class="change-removed"{% endif %}
+                        data-etf_code="{{ holding.etf_code }}"
+                        data-etf_name="{{ holding.etf_name }}"
+                        data-stock_code="{{ holding.stock_code }}"
+                        data-stock_name="{{ holding.stock_name }}"
+                        data-change_type="{{ holding.change_type }}"
+                        data-old_shares="{{ holding.old_shares }}"
+                        data-new_shares="{{ holding.new_shares }}"
+                        data-change_amount="{{ holding.change_amount }}"
+                        data-old_weight="{{ holding.old_weight }}"
+                        data-new_weight="{{ holding.new_weight }}">
+                        <td><span class="badge bg-warning">{{ holding.etf_code }}</span></td>
+                        <td><small class="text-muted">{{ holding.etf_name }}</small></td>
+                        <td><strong>{{ holding.stock_code }}</strong></td>
+                        <td>{{ holding.stock_name }}</td>
+                        <td>
+                            {% if holding.change_type == '完全移除' %}
+                            <span class="badge bg-secondary">{{ holding.change_type }}</span>
+                            {% else %}
+                            <span class="badge bg-danger">{{ holding.change_type }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ "{:,}".format(holding.old_shares) }}</td>
+                        <td>{{ "{:,}".format(holding.new_shares) }}</td>
+                        <td class="change-negative">-{{ "{:,}".format(holding.change_amount) }}</td>
+                        <td>{{ "%.2f"|format(holding.old_weight) }}%</td>
+                        <td>{{ "%.2f"|format(holding.new_weight) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 簡化版統計 - 移除複雜的Jinja2操作 -->
+        {% if not selected_etf and decreased_holdings %}
+        <div class="mt-4">
+            <h5><i class="fas fa-chart-line"></i> 各ETF減持統計</h5>
+            <div class="alert alert-info">
+                <small><i class="fas fa-info-circle"></i> 
+                統計資訊：共 {{ decreased_holdings|length }} 筆減持記錄
+                </small>
+            </div>
+            
+            <!-- 簡單的ETF列表 -->
+            <div class="row">
+                {% for etf_code in ['00981A', '00982A', '00983A', '00984A', '00985A'] %}
+                    {% set etf_holdings = decreased_holdings|selectattr("etf_code", "equalto", etf_code)|list %}
+                    {% if etf_holdings %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card border-warning">
+                            <div class="card-header bg-warning text-dark">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-minus-circle"></i> {{ etf_code }}
+                                    <br><small>{{ etf_holdings[0].etf_name }}</small>
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-2">
+                                    <strong>減持股票數：</strong> {{ etf_holdings|length }} 檔
+                                </div>
+                                <div class="mb-2">
+                                    {% set removed_count = etf_holdings|selectattr("change_type", "equalto", "完全移除")|list|length %}
+                                    {% set decreased_count = etf_holdings|length - removed_count %}
+                                    <span class="badge bg-danger me-1">完全移除: {{ removed_count }}</span>
+                                    <span class="badge bg-warning text-dark">減持: {{ decreased_count }}</span>
+                                </div>
+                                <div class="text-muted">
+                                    <strong>主要異動：</strong>
+                                    {% for holding in etf_holdings[:3] %}
+                                    <div class="small">
+                                        {{ holding.stock_code }} {{ holding.stock_name }}
+                                        <span class="text-danger">-{{ "{:,}".format(holding.change_amount) }}</span>
+                                    </div>
+                                    {% endfor %}
+                                    {% if etf_holdings|length > 3 %}
+                                    <small>...等 {{ etf_holdings|length - 3 }} 檔</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% elif selected_date %}
+        <div class="alert alert-success">
+            <i class="fas fa-check-circle"></i> {{ selected_date }} 當日無減持記錄
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> 請選擇日期以查看減持記錄
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 添加自定義樣式 -->
+<style>
+.change-removed {
+    background-color: #fff5f5;
+}
+.change-negative {
+    color: #dc3545;
+    font-weight: bold;
+}
+.change-positive {
+    color: #28a745;
+    font-weight: bold;
+}
+.sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+}
+.sortable:hover {
+    background-color: rgba(0,0,0,.075);
+}
+.sortable.sort-asc i {
+    color: #28a745 !important;
+}
+.sortable.sort-desc i {
+    color: #dc3545 !important;
+}
+.sortable.sort-asc i:before {
+    content: "\f0de";
+}
+.sortable.sort-desc i:before {
+    content: "\f0dd";
+}
+</style>
+
+<!-- 排序功能JavaScript -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const table = document.getElementById('decreasedTable');
+    if (!table) return;
+    
+    const headers = table.querySelectorAll('.sortable');
+    let currentSort = { column: null, direction: 'asc' };
+    
+    headers.forEach(header => {
+        header.addEventListener('click', function() {
+            const column = this.dataset.sort;
+            const type = this.dataset.type || 'string';
+            
+            // 更新排序方向
+            if (currentSort.column === column) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.direction = 'asc';
+            }
+            currentSort.column = column;
+            
+            // 更新表頭樣式
+            headers.forEach(h => {
+                h.classList.remove('sort-asc', 'sort-desc');
+            });
+            this.classList.add(currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+            
+            // 排序表格
+            sortTable(column, type, currentSort.direction);
+        });
+    });
+    
+    function sortTable(column, type, direction) {
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        
+        rows.sort((a, b) => {
+            let aVal = a.dataset[column];
+            let bVal = b.dataset[column];
+            
+            // 處理數字類型
+            if (type === 'number') {
+                aVal = parseFloat(aVal) || 0;
+                bVal = parseFloat(bVal) || 0;
+            } else {
+                aVal = aVal.toString().toLowerCase();
+                bVal = bVal.toString().toLowerCase();
+            }
+            
+            let result = 0;
+            if (aVal < bVal) result = -1;
+            if (aVal > bVal) result = 1;
+            
+            return direction === 'desc' ? -result : result;
+        });
+        
+        // 重新插入排序後的行
+        rows.forEach(row => tbody.appendChild(row));
+    }
+    
+    // 默認按變化數量降序排序
+    const changeAmountHeader = table.querySelector('[data-sort="change_amount"]');
+    if (changeAmountHeader) {
+        changeAmountHeader.click();
+        setTimeout(() => changeAmountHeader.click(), 100); // 點擊兩次變成降序
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,22 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+.venv
+pip-log.txt
+.tox
+.coverage
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.DS_Store
+
+# 原本的檔案 (不包含在容器中)
+../fastapi_app.py
+../improved_etf_scraper.py
+../etf_holdings.db
+*.sqlite
+*.sqlite3
