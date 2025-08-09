@@ -1,0 +1,103 @@
+<!-- templates/index.html -->
+{% extends "base.html" %}
+
+{% block title %}首頁 - ETF持股明細監控系統{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-home"></i> 系統首頁</h2>
+                <div>
+                    <span class="text-muted">當前時間：</span>
+                    <span id="current-time" class="fw-bold"></span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card stat-card border-primary">
+                            <div class="card-body">
+                                <h5 class="card-title text-primary">
+                                    <i class="fas fa-database"></i> 監控ETF數量
+                                </h5>
+                                <h2 class="text-primary">{{ etf_codes|length }}</h2>
+                                <p class="card-text">{{ ', '.join(etf_codes) }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card stat-card border-success">
+                            <div class="card-body">
+                                <h5 class="card-title text-success">
+                                    <i class="fas fa-calendar-alt"></i> 數據日期數量
+                                </h5>
+                                <h2 class="text-success">{{ dates|length }}</h2>
+                                <p class="card-text">
+                                    最新：{{ dates[0] if dates else '無數據' }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card stat-card border-warning">
+                            <div class="card-body">
+                                <h5 class="card-title text-warning">
+                                    <i class="fas fa-sync-alt"></i> 手動更新
+                                </h5>
+                                <button id="manual-scrape-btn" class="btn btn-warning" onclick="manualScrape()">
+                                    <i class="fas fa-download"></i> 立即爬取
+                                </button>
+                                <p class="card-text mt-2">自動執行：週一至週五 21:30</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-list"></i> 功能導航</h5>
+                            </div>
+                            <div class="list-group list-group-flush">
+                                <a href="/holdings" class="list-group-item list-group-item-action">
+                                    <i class="fas fa-chart-pie"></i> 每日持股明細
+                                    <small class="text-muted d-block">查看各ETF的完整持股組合</small>
+                                </a>
+                                <a href="/new-holdings" class="list-group-item list-group-item-action">
+                                    <i class="fas fa-plus-circle text-success"></i> 每日新增持股
+                                    <small class="text-muted d-block">追蹤新加入的股票投資</small>
+                                </a>
+                                <a href="/decreased-holdings" class="list-group-item list-group-item-action">
+                                    <i class="fas fa-minus-circle text-danger"></i> 每日減持表
+                                    <small class="text-muted d-block">監控減少或移除的持股</small>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-info-circle"></i> 系統說明</h5>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-unstyled">
+                                    <li><i class="fas fa-check text-success"></i> 自動爬取：週一至週五 21:30</li>
+                                    <li><i class="fas fa-check text-success"></i> 監控5檔ETF持股變化</li>
+                                    <li><i class="fas fa-check text-success"></i> 支援歷史數據查詢</li>
+                                    <li><i class="fas fa-check text-success"></i> 即時持股變化分析</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
