@@ -1,11 +1,11 @@
-# Cloud Run 版本的 ETF 爬蟲
+# improved_etf_scraper_cloud.py - 修改版本
 import requests
-import sqlite3
 import time
 import json
 from datetime import datetime, timedelta
 import logging
 import traceback
+from database_config import db_config
 
 # Cloud Run 友善的日誌設定
 logging.basicConfig(
@@ -18,8 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class ETFHoldingsScraper:
-    def __init__(self, db_path='etf_holdings.db'):
-        self.db_path = db_path
+    def __init__(self):
         self.base_url = 'https://www.pocket.tw/api/cm/MobileService/ashx/GetDtnoData.ashx'
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -38,50 +37,69 @@ class ETFHoldingsScraper:
         self.init_database()
     
     def init_database(self):
-        """初始化SQLite資料庫"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # 主要持股表
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS etf_holdings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                etf_code TEXT NOT NULL,
-                stock_code TEXT NOT NULL,
-                stock_name TEXT NOT NULL,
-                weight REAL NOT NULL,
-                shares INTEGER NOT NULL,
-                unit TEXT DEFAULT '股',
-                update_date TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(etf_code, stock_code, update_date)
-            )
-        ''')
-        
-        # 新增持股變化表
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS holdings_changes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                etf_code TEXT NOT NULL,
-                stock_code TEXT NOT NULL,
-                stock_name TEXT NOT NULL,
-                change_type TEXT NOT NULL, -- 'NEW', 'INCREASED', 'DECREASED', 'REMOVED'
-                old_shares INTEGER DEFAULT 0,
-                new_shares INTEGER DEFAULT 0,
-                old_weight REAL DEFAULT 0.0,
-                new_weight REAL DEFAULT 0.0,
-                change_date TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # 創建索引
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_etf_date ON etf_holdings(etf_code, update_date)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_changes_date ON holdings_changes(etf_code, change_date)')
-        
-        conn.commit()
-        conn.close()
-        logger.info("資料庫初始化完成")
+        """初始化數據庫表"""
+        try:
+            # 主要持股表
+            holdings_table_sql = '''
+                CREATE TABLE IF NOT EXISTS etf_holdings (
+                    id SERIAL PRIMARY KEY,
+                    etf_code TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    stock_name TEXT NOT NULL,
+                    weight REAL NOT NULL,
+                    shares INTEGER NOT NULL,
+                    unit TEXT DEFAULT '股',
+                    update_date TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            '''
+            
+            # 持股變化表
+            changes_table_sql = '''
+                CREATE TABLE IF NOT EXISTS holdings_changes (
+                    id SERIAL PRIMARY KEY,
+                    etf_code TEXT NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    stock_name TEXT NOT NULL,
+                    change_type TEXT NOT NULL,
+                    old_shares INTEGER DEFAULT 0,
+                    new_shares INTEGER DEFAULT 0,
+                    old_weight REAL DEFAULT 0.0,
+                    new_weight REAL DEFAULT 0.0,
+                    change_date TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            '''
+            
+            db_config.execute_query(holdings_table_sql)
+            db_config.execute_query(changes_table_sql)
+            
+            # 創建索引
+            if db_config.db_type == "postgresql":
+                # PostgreSQL 索引
+                index_sqls = [
+                    'CREATE INDEX IF NOT EXISTS idx_etf_date ON etf_holdings(etf_code, update_date)',
+                    'CREATE INDEX IF NOT EXISTS idx_changes_date ON holdings_changes(etf_code, change_date)',
+                    'CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_holding ON etf_holdings(etf_code, stock_code, update_date)'
+                ]
+            else:
+                # SQLite 索引
+                index_sqls = [
+                    'CREATE INDEX IF NOT EXISTS idx_etf_date ON etf_holdings(etf_code, update_date)',
+                    'CREATE INDEX IF NOT EXISTS idx_changes_date ON holdings_changes(etf_code, change_date)'
+                ]
+            
+            for sql in index_sqls:
+                try:
+                    db_config.execute_query(sql)
+                except Exception as e:
+                    logger.warning(f"創建索引失敗（可能已存在）: {e}")
+            
+            logger.info(f"數據庫初始化完成 - 使用 {db_config.db_type}")
+            
+        except Exception as e:
+            logger.error(f"數據庫初始化錯誤: {e}")
+            raise e
     
     def get_holdings_data(self, etf_code):
         """獲取指定ETF的持股明細"""
@@ -179,28 +197,31 @@ class ETFHoldingsScraper:
     
     def get_previous_holdings(self, etf_code, current_date):
         """獲取前一交易日的持股數據"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT stock_code, stock_name, weight, shares
-            FROM etf_holdings 
-            WHERE etf_code = ? AND update_date < ?
-            ORDER BY update_date DESC 
-            LIMIT 1000
-        ''', (etf_code, current_date))
-        
-        previous_data = {}
-        for row in cursor.fetchall():
-            stock_code, stock_name, weight, shares = row
-            previous_data[stock_code] = {
-                'stock_name': stock_name,
-                'weight': weight,
-                'shares': shares
-            }
-        
-        conn.close()
-        return previous_data
+        try:
+            query = '''
+                SELECT stock_code, stock_name, weight, shares
+                FROM etf_holdings 
+                WHERE etf_code = %s AND update_date < %s
+                ORDER BY update_date DESC 
+                LIMIT 1000
+            '''
+            
+            results = db_config.execute_query(query, (etf_code, current_date), fetch="all")
+            
+            previous_data = {}
+            for row in results:
+                stock_code = row['stock_code']
+                previous_data[stock_code] = {
+                    'stock_name': row['stock_name'],
+                    'weight': row['weight'],
+                    'shares': row['shares']
+                }
+            
+            return previous_data
+            
+        except Exception as e:
+            logger.error(f"獲取前一日持股數據錯誤: {e}")
+            return {}
     
     def analyze_holdings_changes(self, etf_code, current_holdings, current_date):
         """分析持股變化"""
@@ -275,54 +296,52 @@ class ETFHoldingsScraper:
         if not holdings:
             return
         
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
         try:
             etf_code = holdings[0]['etf_code']
             today = holdings[0]['update_date']
             
             # 刪除當日舊數據
-            cursor.execute('DELETE FROM etf_holdings WHERE etf_code = ? AND update_date = ?', 
-                         (etf_code, today))
+            delete_query = 'DELETE FROM etf_holdings WHERE etf_code = %s AND update_date = %s'
+            db_config.execute_query(delete_query, (etf_code, today))
             
             # 插入持股數據
+            insert_holding_query = '''
+                INSERT INTO etf_holdings 
+                (etf_code, stock_code, stock_name, weight, shares, unit, update_date)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            '''
+            
             for holding in holdings:
-                cursor.execute('''
-                    INSERT OR REPLACE INTO etf_holdings 
-                    (etf_code, stock_code, stock_name, weight, shares, unit, update_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (
+                db_config.execute_query(insert_holding_query, (
                     holding['etf_code'], holding['stock_code'], holding['stock_name'],
                     holding['weight'], holding['shares'], holding['unit'], holding['update_date']
                 ))
             
             # 插入變化數據
             if changes:
-                cursor.execute('DELETE FROM holdings_changes WHERE etf_code = ? AND change_date = ?',
-                             (etf_code, today))
+                delete_changes_query = 'DELETE FROM holdings_changes WHERE etf_code = %s AND change_date = %s'
+                db_config.execute_query(delete_changes_query, (etf_code, today))
+                
+                insert_change_query = '''
+                    INSERT INTO holdings_changes 
+                    (etf_code, stock_code, stock_name, change_type, old_shares, new_shares, 
+                     old_weight, new_weight, change_date)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                '''
                 
                 for change in changes:
-                    cursor.execute('''
-                        INSERT INTO holdings_changes 
-                        (etf_code, stock_code, stock_name, change_type, old_shares, new_shares, 
-                         old_weight, new_weight, change_date)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
+                    db_config.execute_query(insert_change_query, (
                         change['etf_code'], change['stock_code'], change['stock_name'],
                         change['change_type'], change['old_shares'], change['new_shares'],
                         change['old_weight'], change['new_weight'], change['change_date']
                     ))
             
-            conn.commit()
             logger.info(f"成功存入 {etf_code} 持股明細 {len(holdings)} 筆，變化 {len(changes) if changes else 0} 筆")
             
         except Exception as e:
             logger.error(f"存入資料庫時出錯: {e}")
             logger.error(traceback.format_exc())
-            conn.rollback()
-        finally:
-            conn.close()
+            raise e
     
     def scrape_single_etf(self, etf_code):
         """爬取單個ETF的持股明細"""
@@ -390,6 +409,3 @@ class ETFHoldingsScraper:
                 logger.info(f"第一筆持股範例: {holdings[0]}")
             return holdings
         return None
-
-# 這個檔案不包含主程式執行部分，因為在 Cloud Run 中
-# 是由 fastapi_app_cloud.py 來調用這個類別
