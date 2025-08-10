@@ -1,0 +1,259 @@
+<!-- templates/changes.html -->
+{% extends "base.html" %}
+
+{% block title %}持股變化 - ETF持股明細監控系統{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-exchange-alt text-warning"></i> 持股變化記錄</h2>
+    </div>
+    <div class="card-body">
+        <!-- 篩選區域 -->
+        <div class="filter-section">
+            <form method="get" class="row g-3">
+                <div class="col-md-6">
+                    <label for="date" class="form-label">選擇日期</label>
+                    <select name="date" id="date" class="form-select" onchange="this.form.submit()">
+                        <option value="">請選擇日期</option>
+                        {% for date in available_dates %}
+                        <option value="{{ date }}" {% if date == selected_date %}selected{% endif %}>
+                            {{ date }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="etf_code" class="form-label">選擇ETF（可選）</label>
+                    <select name="etf_code" id="etf_code" class="form-select" onchange="this.form.submit()">
+                        <option value="">全部ETF</option>
+                        {% for etf in etf_info %}
+                        <option value="{{ etf.code }}" {% if etf.code == selected_etf %}selected{% endif %}>
+                            {{ etf.code }} - {{ etf.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+
+        {% if changes %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> 找到 {{ changes|length }} 筆變化記錄
+            <small class="ms-2 text-muted">點擊表頭可進行排序</small>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover" id="changesTable">
+                <thead class="table-info">
+                    <tr>
+                        <th class="sortable" data-sort="etf_code">
+                            ETF代碼 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="stock_code">
+                            股票代碼 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="stock_name">
+                            股票名稱 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="change_type">
+                            變化類型 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="old_shares" data-type="number">
+                            原持股數 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="new_shares" data-type="number">
+                            現持股數 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="old_weight" data-type="number">
+                            原權重(%) <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="new_weight" data-type="number">
+                            現權重(%) <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="sortable" data-sort="change_date">
+                            變化日期 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for change in changes %}
+                    <tr data-etf_code="{{ change.etf_code }}"
+                        data-stock_code="{{ change.stock_code }}"
+                        data-stock_name="{{ change.stock_name }}"
+                        data-change_type="{{ change.change_type }}"
+                        data-old_shares="{{ change.old_shares }}"
+                        data-new_shares="{{ change.new_shares }}"
+                        data-old_weight="{{ change.old_weight }}"
+                        data-new_weight="{{ change.new_weight }}"
+                        data-change_date="{{ change.change_date }}">
+                        <td><span class="badge bg-primary">{{ change.etf_code }}</span></td>
+                        <td><strong>{{ change.stock_code }}</strong></td>
+                        <td>{{ change.stock_name }}</td>
+                        <td>
+                            {% if change.change_type == 'NEW' %}
+                            <span class="badge bg-success">新增</span>
+                            {% elif change.change_type == 'INCREASED' %}
+                            <span class="badge bg-info">增持</span>
+                            {% elif change.change_type == 'DECREASED' %}
+                            <span class="badge bg-warning">減持</span>
+                            {% elif change.change_type == 'REMOVED' %}
+                            <span class="badge bg-danger">移除</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ change.change_type }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ "{:,}".format(change.old_shares) }}</td>
+                        <td>{{ "{:,}".format(change.new_shares) }}</td>
+                        <td>{{ "%.2f"|format(change.old_weight) }}%</td>
+                        <td>{{ "%.2f"|format(change.new_weight) }}%</td>
+                        <td>{{ change.change_date }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 統計摘要 -->
+        {% if changes and not selected_etf %}
+        <div class="mt-4">
+            <h5><i class="fas fa-chart-bar"></i> 變化統計</h5>
+            <div class="row">
+                {% set change_stats = {} %}
+                {% for change in changes %}
+                    {% if change.change_type not in change_stats %}
+                        {% set _ = change_stats.update({change.change_type: 0}) %}
+                    {% endif %}
+                    {% set _ = change_stats.update({change.change_type: change_stats[change.change_type] + 1}) %}
+                {% endfor %}
+                
+                {% for change_type, count in change_stats.items() %}
+                <div class="col-md-3 mb-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            {% if change_type == 'NEW' %}
+                            <h4 class="text-success">{{ count }}</h4>
+                            <p class="card-text text-success">新增</p>
+                            {% elif change_type == 'INCREASED' %}
+                            <h4 class="text-info">{{ count }}</h4>
+                            <p class="card-text text-info">增持</p>
+                            {% elif change_type == 'DECREASED' %}
+                            <h4 class="text-warning">{{ count }}</h4>
+                            <p class="card-text text-warning">減持</p>
+                            {% elif change_type == 'REMOVED' %}
+                            <h4 class="text-danger">{{ count }}</h4>
+                            <p class="card-text text-danger">移除</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% elif selected_date %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> {{ selected_date }} 當日無持股變化記錄
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> 請選擇日期以查看持股變化記錄
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 添加排序功能的樣式 -->
+<style>
+.sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+}
+.sortable:hover {
+    background-color: rgba(0,0,0,.075);
+}
+.sortable.sort-asc i {
+    color: #28a745 !important;
+}
+.sortable.sort-desc i {
+    color: #dc3545 !important;
+}
+.sortable.sort-asc i:before {
+    content: "\f0de";
+}
+.sortable.sort-desc i:before {
+    content: "\f0dd";
+}
+</style>
+
+<!-- 排序功能JavaScript -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const table = document.getElementById('changesTable');
+    if (!table) return;
+    
+    const headers = table.querySelectorAll('.sortable');
+    let currentSort = { column: null, direction: 'asc' };
+    
+    headers.forEach(header => {
+        header.addEventListener('click', function() {
+            const column = this.dataset.sort;
+            const type = this.dataset.type || 'string';
+            
+            // 更新排序方向
+            if (currentSort.column === column) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.direction = 'asc';
+            }
+            currentSort.column = column;
+            
+            // 更新表頭樣式
+            headers.forEach(h => {
+                h.classList.remove('sort-asc', 'sort-desc');
+            });
+            this.classList.add(currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+            
+            // 排序表格
+            sortTable(column, type, currentSort.direction);
+        });
+    });
+    
+    function sortTable(column, type, direction) {
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        
+        rows.sort((a, b) => {
+            let aVal = a.dataset[column];
+            let bVal = b.dataset[column];
+            
+            // 處理數字類型
+            if (type === 'number') {
+                aVal = parseFloat(aVal) || 0;
+                bVal = parseFloat(bVal) || 0;
+            } else {
+                aVal = aVal.toString().toLowerCase();
+                bVal = bVal.toString().toLowerCase();
+            }
+            
+            let result = 0;
+            if (aVal < bVal) result = -1;
+            if (aVal > bVal) result = 1;
+            
+            return direction === 'desc' ? -result : result;
+        });
+        
+        // 重新插入排序後的行
+        rows.forEach(row => tbody.appendChild(row));
+    }
+    
+    // 默認按變化日期降序排序
+    const dateHeader = table.querySelector('[data-sort="change_date"]');
+    if (dateHeader) {
+        dateHeader.click();
+        setTimeout(() => dateHeader.click(), 100); // 點擊兩次變成降序
+    }
+});
+</script>
+{% endblock %}
