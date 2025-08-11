@@ -1,4 +1,4 @@
-# database_config.py
+# database_config.py - 針對 Railway 的優化版本
 import os
 import sqlite3
 import psycopg2
@@ -8,6 +8,7 @@ import logging
 from typing import Optional, Dict, Any, Union
 from contextlib import contextmanager
 from urllib.parse import urlparse
+import ssl
 
 logger = logging.getLogger(__name__)
 
@@ -46,25 +47,46 @@ class DatabaseConfig:
     def _initialize_postgresql(self):
         """初始化 PostgreSQL 連接池"""
         try:
+            # Railway 的 DATABASE_URL 格式處理
+            database_url = self.database_url
+            
+            # 處理 Railway 可能的 postgres:// 前綴
+            if database_url.startswith("postgres://"):
+                database_url = database_url.replace("postgres://", "postgresql://", 1)
+            
             # 解析 DATABASE_URL
-            parsed = urlparse(self.database_url)
+            parsed = urlparse(database_url)
+            
+            # Railway PostgreSQL 連接參數
+            connection_params = {
+                'host': parsed.hostname,
+                'port': parsed.port or 5432,
+                'database': parsed.path[1:],  # 移除開頭的 '/'
+                'user': parsed.username,
+                'password': parsed.password,
+                'cursor_factory': psycopg2.extras.RealDictCursor,
+                'sslmode': 'require',  # Railway 要求 SSL
+            }
             
             # 創建連接池
             self.pg_pool = SimpleConnectionPool(
                 minconn=1,
                 maxconn=20,
-                host=parsed.hostname,
-                port=parsed.port or 5432,
-                database=parsed.path[1:],  # 移除開頭的 '/'
-                user=parsed.username,
-                password=parsed.password,
-                cursor_factory=psycopg2.extras.RealDictCursor
+                **connection_params
             )
             
             logger.info("PostgreSQL 連接池初始化成功")
             
+            # 測試連接
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT version();")
+                    version = cur.fetchone()
+                    logger.info(f"PostgreSQL 版本: {version['version']}")
+            
         except Exception as e:
             logger.error(f"PostgreSQL 初始化失敗: {e}")
+            logger.error(f"DATABASE_URL: {self.database_url[:50]}...")
             # 降級到 SQLite
             self.db_type = "sqlite"
             self._initialize_sqlite()
@@ -85,10 +107,12 @@ class DatabaseConfig:
             conn = None
             try:
                 conn = self.pg_pool.getconn()
+                conn.autocommit = True  # 自動提交
                 yield conn
             except Exception as e:
                 if conn:
                     conn.rollback()
+                logger.error(f"PostgreSQL 連接錯誤: {e}")
                 raise e
             finally:
                 if conn:
@@ -127,7 +151,8 @@ class DatabaseConfig:
                         return dict(result)
                     return None
                 else:
-                    conn.commit()
+                    if self.db_type == "sqlite":
+                        conn.commit()
                     return None
                     
             except Exception as e:
@@ -142,7 +167,7 @@ class DatabaseConfig:
             # SQLite -> PostgreSQL 語法轉換
             query = query.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
             query = query.replace("TIMESTAMP DEFAULT CURRENT_TIMESTAMP", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-            query = query.replace("?", "%s")  # 參數佔位符轉換
+            # 參數佔位符已經是 %s，不需要轉換
             
         return query
     
