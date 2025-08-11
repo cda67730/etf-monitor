@@ -1404,6 +1404,159 @@ async def shutdown_event():
     except Exception as e:
         logger.error(f"關閉應用程式時出錯: {e}")
 
+
+# 添加到您的 fastapi_app_cloud.py 中
+
+@app.get("/diagnostic")
+async def diagnostic_database(request: Request):
+    """線上數據庫診斷端點"""
+    try:
+        # 檢查認證（可選，診斷時可以暫時註釋掉）
+        # if not await check_authentication(request):
+        #     raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        diagnostic_info = {
+            "timestamp": datetime.now().isoformat(),
+            "environment": "production",
+            "database_status": {},
+            "environment_variables": {},
+            "connection_test": {},
+            "railway_info": {}
+        }
+        
+        # 1. 檢查環境變數
+        database_url = os.getenv("DATABASE_URL")
+        diagnostic_info["environment_variables"] = {
+            "DATABASE_URL_exists": database_url is not None,
+            "DATABASE_URL_length": len(database_url) if database_url else 0,
+            "DATABASE_URL_prefix": database_url[:50] if database_url else None,
+            "DATABASE_URL_scheme": database_url.split("://")[0] if database_url and "://" in database_url else None
+        }
+        
+        # 2. Railway 環境檢查
+        railway_vars = {
+            "RAILWAY_ENVIRONMENT": os.getenv("RAILWAY_ENVIRONMENT"),
+            "RAILWAY_PROJECT_ID": os.getenv("RAILWAY_PROJECT_ID"),
+            "RAILWAY_SERVICE_ID": os.getenv("RAILWAY_SERVICE_ID"),
+            "PORT": os.getenv("PORT"),
+        }
+        diagnostic_info["railway_info"] = railway_vars
+        
+        # 3. 數據庫配置狀態
+        if db_config:
+            diagnostic_info["database_status"] = {
+                "db_config_available": True,
+                "detected_type": db_config.db_type,
+                "connection_status": getattr(db_config, 'connection_status', 'unknown'),
+                "has_pg_pool": db_config.pg_pool is not None if hasattr(db_config, 'pg_pool') else False
+            }
+            
+            # 如果有 get_status 方法，調用它
+            if hasattr(db_config, 'get_status'):
+                diagnostic_info["database_status"].update(db_config.get_status())
+        else:
+            diagnostic_info["database_status"] = {
+                "db_config_available": False,
+                "error": "db_config 未初始化"
+            }
+        
+        # 4. 連接測試
+        try:
+            if db_config and db_config.db_type == "postgresql":
+                # 測試 PostgreSQL 連接
+                with db_config.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT version();")
+                    version_info = cursor.fetchone()
+                    
+                    cursor.execute("SELECT current_database(), current_user;")
+                    db_info = cursor.fetchone()
+                    
+                    diagnostic_info["connection_test"] = {
+                        "status": "success",
+                        "database_type": "postgresql",
+                        "version": str(version_info) if version_info else "unknown",
+                        "current_database": str(db_info) if db_info else "unknown"
+                    }
+            elif db_config and db_config.db_type == "sqlite":
+                # 測試 SQLite 連接
+                with db_config.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT sqlite_version();")
+                    version_info = cursor.fetchone()
+                    
+                    diagnostic_info["connection_test"] = {
+                        "status": "success", 
+                        "database_type": "sqlite",
+                        "version": str(version_info) if version_info else "unknown",
+                        "file_path": db_config.sqlite_path if hasattr(db_config, 'sqlite_path') else "unknown"
+                    }
+            else:
+                diagnostic_info["connection_test"] = {
+                    "status": "failed",
+                    "error": "無法識別數據庫類型或 db_config 不可用"
+                }
+                
+        except Exception as e:
+            diagnostic_info["connection_test"] = {
+                "status": "failed",
+                "error": str(e),
+                "error_type": type(e).__name__
+            }
+        
+        # 5. 表檢查
+        try:
+            if db_config:
+                # 檢查表是否存在
+                if db_config.db_type == "postgresql":
+                    query = """
+                        SELECT table_name 
+                        FROM information_schema.tables 
+                        WHERE table_schema = 'public'
+                        AND table_name IN ('etf_holdings', 'holdings_changes')
+                    """
+                else:
+                    query = """
+                        SELECT name FROM sqlite_master 
+                        WHERE type='table' 
+                        AND name IN ('etf_holdings', 'holdings_changes')
+                    """
+                
+                results = db_config.execute_query(query, fetch="all")
+                diagnostic_info["tables"] = {
+                    "existing_tables": [row['table_name'] if 'table_name' in row else row['name'] for row in results] if results else [],
+                    "expected_tables": ['etf_holdings', 'holdings_changes']
+                }
+        except Exception as e:
+            diagnostic_info["tables"] = {
+                "error": str(e)
+            }
+        
+        return diagnostic_info
+        
+    except Exception as e:
+        logger.error(f"診斷端點錯誤: {e}")
+        logger.error(traceback.format_exc())
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+# 簡化版診斷端點（無需認證）
+@app.get("/debug/db-status")
+async def simple_db_status():
+    """簡單的數據庫狀態檢查（無需認證）"""
+    return {
+        "database_url_exists": os.getenv("DATABASE_URL") is not None,
+        "database_url_prefix": os.getenv("DATABASE_URL", "")[:50],
+        "db_config_available": db_config is not None,
+        "db_type": db_config.db_type if db_config else "unknown",
+        "railway_env": os.getenv("RAILWAY_ENVIRONMENT"),
+        "timestamp": datetime.now().isoformat()
+    }
+
+
 # ============ 主程式入口 ============
 if __name__ == "__main__":
     import uvicorn
