@@ -44,12 +44,35 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============ 數據庫初始化 ============
+# 替換 fastapi_app_cloud.py 中的數據庫初始化部分（第 41-49行）
+
+# ============ 數據庫初始化 ============
+logger.info("開始初始化數據庫配置...")
+
+# 檢查環境變數
+database_url = os.getenv("DATABASE_URL")
+logger.info(f"DATABASE_URL 環境變數: {database_url[:50] if database_url else 'None'}...")
+
 try:
     from database_config import db_config
     from improved_etf_scraper_cloud import ETFHoldingsScraper
-    logger.info(f"成功初始化數據庫配置 - 類型: {db_config.db_type}")
+    
+    logger.info(f"database_config 模組導入成功")
+    logger.info(f"初始檢測數據庫類型: {db_config.db_type}")
+    logger.info(f"使用的數據庫 URL: {db_config.database_url[:50] if hasattr(db_config, 'database_url') else 'Unknown'}...")
+    
+    # 測試數據庫連接
+    try:
+        with db_config.get_connection() as conn:
+            logger.info("數據庫連接測試成功")
+    except Exception as e:
+        logger.error(f"數據庫連接測試失敗: {e}")
+    
+    logger.info(f"✅ 成功初始化數據庫配置 - 最終類型: {db_config.db_type}")
+    
 except Exception as e:
-    logger.error(f"數據庫初始化失敗: {e}")
+    logger.error(f"❌ 數據庫初始化失敗: {e}")
+    logger.error(traceback.format_exc())
     db_config = None
 
 # ============ FastAPI 應用初始化 ============
