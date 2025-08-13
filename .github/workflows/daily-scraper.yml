@@ -1,7 +1,7 @@
 name: ETF Scraper
 on: 
   schedule: 
-    - cron: '30 13 * * 1-5'  # 台灣時間晚上 9:30, 週一到週五
+    - cron: '30 12 * * 1-5'  # 台灣時間晚上 9:30, 週一到週五
   workflow_dispatch:  # 允許手動觸發
 
 jobs:
