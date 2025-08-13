@@ -197,32 +197,53 @@ class ETFHoldingsScraper:
     
     def get_previous_holdings(self, etf_code, current_date):
         """獲取前一交易日的持股數據"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
         try:
-            query = '''
+            # 第一步：找到前一個交易日
+            cursor.execute('''
+                SELECT MAX(update_date)
+                FROM etf_holdings 
+                WHERE etf_code = ? AND update_date < ?
+            ''', (etf_code, current_date))
+            
+            result = cursor.fetchone()
+            previous_date = result[0] if result else None
+            
+            if not previous_date:
+                logger.info(f"{etf_code} 沒有找到前一交易日的數據")
+                return {}
+            
+            logger.info(f"{etf_code} 找到前一交易日: {previous_date}")
+            
+            # 第二步：只查詢那一天的記錄
+            cursor.execute('''
                 SELECT stock_code, stock_name, weight, shares
                 FROM etf_holdings 
-                WHERE etf_code = %s AND update_date < %s
-                ORDER BY update_date DESC 
-                LIMIT 1000
-            '''
+                WHERE etf_code = ? AND update_date = ?
+            ''', (etf_code, previous_date))
             
-            results = db_config.execute_query(query, (etf_code, current_date), fetch="all")
-            
+            # 第三步：建立字典
             previous_data = {}
-            for row in results:
-                stock_code = row['stock_code']
+            for row in cursor.fetchall():
+                stock_code, stock_name, weight, shares = row
                 previous_data[stock_code] = {
-                    'stock_name': row['stock_name'],
-                    'weight': row['weight'],
-                    'shares': row['shares']
+                    'stock_name': stock_name,
+                    'weight': weight,
+                    'shares': shares
                 }
             
+            logger.info(f"{etf_code} 前一日持股數量: {len(previous_data)}")
             return previous_data
             
         except Exception as e:
-            logger.error(f"獲取前一日持股數據錯誤: {e}")
+            logger.error(f"獲取 {etf_code} 前一日持股時出錯: {e}")
             return {}
-    
+        finally:
+            conn.close()
+
+
     def analyze_holdings_changes(self, etf_code, current_holdings, current_date):
         """分析持股變化"""
         previous_holdings = self.get_previous_holdings(etf_code, current_date)
