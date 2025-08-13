@@ -1,17 +1,20 @@
-name: ETF Scraper - Minimal
-
-on:
-  schedule:
-    - cron: '0 12 * * *'
-  workflow_dispatch:
+name: ETF Scraper
+on: 
+  schedule: 
+    - cron: '30 13 * * 1-5'  # 台灣時間晚上 9:30, 週一到週五
+  workflow_dispatch:  # 允許手動觸發
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Scraper
-        run: |
-          curl -X POST \
-            -H "Authorization: Bearer ${{ secrets.SCHEDULER_TOKEN }}" \
-            "${{ secrets.RAILWAY_SERVICE_URL }}/trigger-scrape" \
-            && echo "✅ 成功" || echo "❌ 失敗"
+    - name: Trigger ETF Scraper
+      run: |
+        echo "🕐 執行時間: $(date -u)"
+        echo "🌏 台灣時間: $(TZ='Asia/Taipei' date)"
+        
+        # 改為正確的端點 /manual-scrape
+        curl -X POST \
+          "${{ secrets.RAILWAY_SERVICE_URL }}/manual-scrape" \
+          && echo "✅ 成功觸發 ETF 爬蟲" \
+          || echo "❌ 觸發失敗"
