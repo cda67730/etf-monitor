@@ -1256,6 +1256,99 @@ class DatabaseQuery:
 # 初始化數據庫查詢對象
 db_query = DatabaseQuery()
 
+def get_sort_icon(field: str, current_sort: str) -> str:
+    """獲取排序圖標後綴"""
+    if current_sort == f"{field}_desc":
+        return "-down"  # fa-sort-down
+    elif current_sort == f"{field}_asc":
+        return "-up"    # fa-sort-up
+    else:
+        return ""       # fa-sort
+
+def get_sort_display(sort_by: str) -> str:
+    """獲取排序顯示文字"""
+    sort_names = {
+        'weight_desc': '權重(高→低)',
+        'weight_asc': '權重(低→高)', 
+        'increase_desc': '新增股數(多→少)',
+        'increase_asc': '新增股數(少→多)',
+        'decrease_desc': '減少股數(多→少)',
+        'decrease_asc': '減少股數(少→多)',
+        'etf_stock': 'ETF+股票代碼'
+    }
+    return sort_names.get(sort_by, '權重(高→低)')
+
+def apply_holdings_sorting(holdings: List[Dict[str, Any]], sort_by: str) -> List[Dict[str, Any]]:
+    """應用持股排序邏輯 - 修正版"""
+    if not holdings:
+        return holdings
+    
+    try:
+        # 確保所有記錄都有必要的排序欄位，設置默認值
+        for holding in holdings:
+            # 確保必要欄位存在
+            holding.setdefault('shares_increase', 0)
+            holding.setdefault('shares_decrease', 0)
+            holding.setdefault('weight', 0.0)
+            holding.setdefault('etf_code', '')
+            holding.setdefault('stock_code', '')
+            
+            # 轉換None為0
+            if holding['shares_increase'] is None:
+                holding['shares_increase'] = 0
+            if holding['shares_decrease'] is None:
+                holding['shares_decrease'] = 0
+            if holding['weight'] is None:
+                holding['weight'] = 0.0
+        
+        # 應用排序
+        if sort_by == "weight_desc":
+            return sorted(holdings, key=lambda x: x['weight'], reverse=True)
+        
+        elif sort_by == "weight_asc":
+            return sorted(holdings, key=lambda x: x['weight'], reverse=False)
+        
+        elif sort_by == "increase_desc":
+            # 按新增股數降序，然後按權重降序
+            return sorted(holdings, 
+                         key=lambda x: (x['shares_increase'], x['weight']), 
+                         reverse=True)
+        
+        elif sort_by == "increase_asc":
+            # 按新增股數升序，然後按權重降序
+            return sorted(holdings, 
+                         key=lambda x: (x['shares_increase'], -x['weight']), 
+                         reverse=False)
+        
+        elif sort_by == "decrease_desc":
+            # 按減少股數降序，然後按權重降序
+            return sorted(holdings, 
+                         key=lambda x: (x['shares_decrease'], x['weight']), 
+                         reverse=True)
+        
+        elif sort_by == "decrease_asc":
+            # 按減少股數升序，然後按權重降序
+            return sorted(holdings, 
+                         key=lambda x: (x['shares_decrease'], -x['weight']), 
+                         reverse=False)
+        
+        elif sort_by == "etf_stock":
+            # 按ETF代碼，然後按股票代碼排序
+            return sorted(holdings, 
+                         key=lambda x: (x['etf_code'], x['stock_code']))
+        
+        else:
+            # 默認按權重降序
+            return sorted(holdings, key=lambda x: x['weight'], reverse=True)
+            
+    except Exception as e:
+        logger.error(f"排序應用錯誤: {e}")
+        logger.error(f"排序參數: {sort_by}")
+        logger.error(f"資料筆數: {len(holdings)}")
+        # 如果排序失敗，返回原始數據
+        return holdings
+
+
 # ============ API 路由 ============
 @app.get("/api/holdings")
 async def api_get_holdings(
@@ -1529,11 +1622,18 @@ async def cross_holdings_page(request: Request, date: str = Query(None)):
 
 
 @app.get("/holdings", response_class=HTMLResponse)
-async def holdings_page(request: Request, date: str = Query(None), etf_code: str = Query(None)):
-    """每日持股頁面 - 修正版本"""
+async def holdings_page(
+    request: Request, 
+    date: str = Query(None), 
+    etf_code: str = Query(None),
+    sort_by: str = Query("weight_desc", description="排序方式")  # ⭐ 新增排序參數
+):
+    """每日持股頁面 - 修正版本帶排序功能"""
     try:
         if not templates:
             raise HTTPException(status_code=503, detail="Templates unavailable")
+        
+        logger.info(f"持股頁面請求: date={date}, etf_code={etf_code}, sort_by={sort_by}")
         
         dates = db_query.get_available_dates()
         etf_codes = db_query.get_etf_codes()
@@ -1542,35 +1642,49 @@ async def holdings_page(request: Request, date: str = Query(None), etf_code: str
         change_stats = {}
         
         if date:
-            # ✅ 使用正確的方法獲取包含變化數據的持股信息
-            holdings = db_query.get_holdings_with_changes(date, etf_code)
+            # ⭐ 關鍵修正：使用正確的方法
+            logger.info(f"獲取持股資料: date={date}, etf_code={etf_code}")
+            holdings = db_query.get_holdings_with_changes(date, etf_code)  # ⭐ 這裡是關鍵
             
-            # ✅ 計算變化統計
             if holdings:
+                logger.info(f"原始資料筆數: {len(holdings)}")
+                
+                # 應用排序
+                holdings = apply_holdings_sorting(holdings, sort_by)  # ⭐ 使用排序函數
+                logger.info(f"排序後資料筆數: {len(holdings)}, 排序方式: {sort_by}")
+                
+                # 計算變化統計
                 change_stats = db_query.get_holdings_change_stats(holdings)
-            
-            # 如果指定了ETF但沒有使用etf_code參數，需要添加
-            if etf_code:
-                for holding in holdings:
-                    if 'etf_code' not in holding:
-                        holding['etf_code'] = etf_code
+                logger.info(f"變化統計: {change_stats}")
+            else:
+                logger.warning(f"沒有找到日期 {date} 的持股資料")
         
-        return templates.TemplateResponse("holdings.html", {
+        # ⭐ 重要：將函數添加到模板上下文
+        template_context = {
             "request": request,
             "holdings": holdings,
             "dates": dates,
             "etf_codes": etf_codes,
             "selected_date": date,
             "selected_etf": etf_code,
-            "change_stats": change_stats  # ✅ 添加變化統計
-        })
+            "sort_by": sort_by,
+            "change_stats": change_stats,
+            # ⭐ 將函數添加到模板上下文
+            "get_sort_icon": get_sort_icon,
+            "get_sort_display": get_sort_display
+        }
+        
+        logger.info(f"返回模板，資料筆數: {len(holdings)}")
+        return templates.TemplateResponse("holdings.html", template_context)
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"每日持股頁面錯誤: {e}")
+        logger.error(f"錯誤詳情: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
     
+
 @app.post("/manual-scrape")
 async def manual_scrape(request: Request):
     """手動爬取功能"""
