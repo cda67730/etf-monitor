@@ -1527,9 +1527,10 @@ async def cross_holdings_page(request: Request, date: str = Query(None)):
         logger.error(f"跨ETF重複持股頁面錯誤: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/holdings", response_class=HTMLResponse)
 async def holdings_page(request: Request, date: str = Query(None), etf_code: str = Query(None)):
-    """每日持股頁面"""
+    """每日持股頁面 - 修正版本"""
     try:
         if not templates:
             raise HTTPException(status_code=503, detail="Templates unavailable")
@@ -1538,14 +1539,21 @@ async def holdings_page(request: Request, date: str = Query(None), etf_code: str
         etf_codes = db_query.get_etf_codes()
         
         holdings = []
+        change_stats = {}
+        
         if date:
+            # ✅ 使用正確的方法獲取包含變化數據的持股信息
+            holdings = db_query.get_holdings_with_changes(date, etf_code)
+            
+            # ✅ 計算變化統計
+            if holdings:
+                change_stats = db_query.get_holdings_change_stats(holdings)
+            
+            # 如果指定了ETF但沒有使用etf_code參數，需要添加
             if etf_code:
-                holdings = db_query.get_holdings_by_etf(etf_code, date)
-                # 添加 etf_code 到每個記錄
                 for holding in holdings:
-                    holding['etf_code'] = etf_code
-            else:
-                holdings = db_query.get_holdings_by_date(date)
+                    if 'etf_code' not in holding:
+                        holding['etf_code'] = etf_code
         
         return templates.TemplateResponse("holdings.html", {
             "request": request,
@@ -1553,7 +1561,8 @@ async def holdings_page(request: Request, date: str = Query(None), etf_code: str
             "dates": dates,
             "etf_codes": etf_codes,
             "selected_date": date,
-            "selected_etf": etf_code
+            "selected_etf": etf_code,
+            "change_stats": change_stats  # ✅ 添加變化統計
         })
         
     except HTTPException:
@@ -1561,7 +1570,7 @@ async def holdings_page(request: Request, date: str = Query(None), etf_code: str
     except Exception as e:
         logger.error(f"每日持股頁面錯誤: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
+    
 @app.post("/manual-scrape")
 async def manual_scrape(request: Request):
     """手動爬取功能"""
