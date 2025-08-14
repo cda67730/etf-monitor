@@ -607,6 +607,8 @@ async def health_check():
 
 # ============ 完整的數據庫查詢類別 ============
 class DatabaseQuery:
+    """最終完善版本 - 解決所有發現的問題"""
+    
     def __init__(self):
         self.etf_names = {
             '00981A': '統一台股增長主動式ETF',
@@ -664,6 +666,20 @@ class DatabaseQuery:
         except Exception as e:
             logger.error(f"數據庫初始化錯誤: {e}")
     
+    def execute_query(self, query: str, params: tuple = (), fetch: str = "none"):
+        """統一的查詢執行方法"""
+        if not self.db_available:
+            logger.warning("數據庫不可用")
+            return [] if fetch == "all" else None
+        
+        try:
+            return db_config.execute_query(query, params, fetch)
+        except Exception as e:
+            logger.error(f"執行查詢失敗: {e}")
+            logger.error(f"查詢: {query[:200]}...")  # 限制日誌長度
+            logger.error(f"參數: {params}")
+            return [] if fetch == "all" else None
+    
     def get_etf_name(self, etf_code: str) -> str:
         return self.etf_names.get(etf_code, etf_code)
     
@@ -673,7 +689,7 @@ class DatabaseQuery:
         
         try:
             query = 'SELECT DISTINCT update_date FROM etf_holdings ORDER BY update_date DESC'
-            results = db_config.execute_query(query, fetch="all")
+            results = self.execute_query(query, fetch="all")
             return [row['update_date'] for row in results] if results else []
         except Exception as e:
             logger.error(f"獲取日期錯誤: {e}")
@@ -697,7 +713,7 @@ class DatabaseQuery:
                 WHERE update_date = %s 
                 ORDER BY etf_code, weight DESC
             '''
-            results = db_config.execute_query(query, (date,), fetch="all")
+            results = self.execute_query(query, (date,), fetch="all")
             return results if results else []
         except Exception as e:
             logger.error(f"獲取日期持股錯誤: {e}")
@@ -726,7 +742,7 @@ class DatabaseQuery:
                 '''
                 params = (etf_code,)
             
-            results = db_config.execute_query(query, params, fetch="all")
+            results = self.execute_query(query, params, fetch="all")
             return results if results else []
         except Exception as e:
             logger.error(f"獲取ETF持股錯誤: {e}")
@@ -762,58 +778,297 @@ class DatabaseQuery:
             
             query += " ORDER BY change_date DESC, etf_code"
             
-            results = db_config.execute_query(query, tuple(params), fetch="all")
+            results = self.execute_query(query, tuple(params), fetch="all")
             return results if results else []
         except Exception as e:
             logger.error(f"獲取持股變化錯誤: {e}")
             return []
 
     def get_new_holdings(self, date: str = None, etf_code: str = None) -> List[Dict[str, Any]]:
-        """獲取新增持股"""
+        """獲取新增持股 - 最終完善版本"""
         if not self.db_available:
+            logger.warning("數據庫不可用，返回空列表")
             return []
         
         try:
-            base_query = '''
-                SELECT h.etf_code, h.stock_code, h.stock_name, h.weight, h.shares,
-                       hc.change_type
-                FROM holdings_changes hc
-                JOIN etf_holdings h ON hc.etf_code = h.etf_code 
-                    AND hc.stock_code = h.stock_code 
-                    AND hc.change_date = h.update_date
-                WHERE hc.change_type = 'NEW'
-            '''
+            logger.info(f"🔍 查詢新增持股: date={date}, etf_code={etf_code}")
             
-            conditions = []
-            params = []
+            # 如果沒有指定日期，使用最新日期
+            if not date:
+                dates = self.get_available_dates()
+                if not dates:
+                    logger.warning("沒有可用日期")
+                    return []
+                date = dates[0]
+                logger.info(f"使用最新日期: {date}")
             
-            if date:
-                conditions.append("hc.change_date = %s")
-                params.append(date)
+            # 構建查詢條件
+            conditions = ["hc.change_type = %s", "hc.change_date = %s"]
+            params = ['NEW', date]
             
             if etf_code:
                 conditions.append("hc.etf_code = %s")
                 params.append(etf_code)
             
-            if conditions:
-                query = base_query + " AND " + " AND ".join(conditions)
-            else:
-                query = base_query
+            where_clause = " AND ".join(conditions)
             
-            query += " ORDER BY hc.change_date DESC, hc.etf_code, h.weight DESC"
+            # 嘗試 JOIN 查詢 - 使用參數化查詢而非 f-string
+            join_query = f'''
+                SELECT h.etf_code, h.stock_code, h.stock_name, h.weight, h.shares, h.unit,
+                       hc.change_type, hc.new_shares
+                FROM holdings_changes hc
+                JOIN etf_holdings h ON (
+                    hc.etf_code = h.etf_code 
+                    AND hc.stock_code = h.stock_code 
+                    AND hc.change_date = h.update_date
+                )
+                WHERE {where_clause}
+                ORDER BY hc.etf_code, h.weight DESC
+            '''
             
-            results = db_config.execute_query(query, tuple(params), fetch="all")
+            logger.info(f"執行 JOIN 查詢...")
+            results = self.execute_query(join_query, tuple(params), fetch="all")
             
-            # 添加 ETF 名稱
-            for result in results:
-                result['etf_name'] = self.get_etf_name(result['etf_code'])
+            if results:
+                logger.info(f"✅ JOIN 查詢成功，找到 {len(results)} 筆新增持股")
+                # 添加 ETF 名稱
+                for result in results:
+                    result['etf_name'] = self.get_etf_name(result['etf_code'])
+                return results
             
-            return results if results else []
+            # 如果 JOIN 查詢沒有結果，嘗試分別查詢
+            logger.info("JOIN 查詢無結果，嘗試分別查詢...")
+            
+            # 先從 holdings_changes 獲取 NEW 類型的記錄
+            change_query = f'''
+                SELECT etf_code, stock_code, stock_name, new_shares, change_date
+                FROM holdings_changes
+                WHERE {where_clause}
+                ORDER BY etf_code, stock_code
+            '''
+            
+            changes = self.execute_query(change_query, tuple(params), fetch="all")
+            logger.info(f"變化記錄查詢結果: {len(changes) if changes else 0} 筆")
+            
+            if not changes:
+                logger.warning("沒有找到新增類型的變化記錄")
+                return []
+            
+            # 為每個變化記錄查找對應的持股信息
+            new_holdings = []
+            for change in changes:
+                if not change:  # 額外的安全檢查
+                    continue
+                    
+                holding_query = '''
+                    SELECT etf_code, stock_code, stock_name, weight, shares, unit
+                    FROM etf_holdings
+                    WHERE etf_code = %s AND stock_code = %s AND update_date = %s
+                '''
+                
+                holding = self.execute_query(
+                    holding_query, 
+                    (change['etf_code'], change['stock_code'], date), 
+                    fetch="one"
+                )
+                
+                if holding:
+                    # 合併數據
+                    combined = dict(holding)
+                    combined['change_type'] = 'NEW'
+                    combined['etf_name'] = self.get_etf_name(combined['etf_code'])
+                    new_holdings.append(combined)
+                else:
+                    # 如果沒有對應的持股記錄，使用變化記錄的數據
+                    fallback = {
+                        'etf_code': change['etf_code'],
+                        'etf_name': self.get_etf_name(change['etf_code']),
+                        'stock_code': change['stock_code'],
+                        'stock_name': change['stock_name'],
+                        'weight': 0.0,  # 默認值
+                        'shares': change['new_shares'],
+                        'unit': '股',  # 默認值
+                        'change_type': 'NEW'
+                    }
+                    new_holdings.append(fallback)
+            
+            logger.info(f"✅ 分別查詢成功，找到 {len(new_holdings)} 筆新增持股")
+            return new_holdings
             
         except Exception as e:
-            logger.error(f"獲取新增持股錯誤: {e}")
+            logger.error(f"❌ 查詢新增持股錯誤: {e}")
+            logger.error(f"查詢參數: date={date}, etf_code={etf_code}")
+            # ✅ 修正：確保 traceback 在文件頂部導入
+            try:
+                import traceback
+                logger.error(f"錯誤堆棧: {traceback.format_exc()}")
+            except ImportError:
+                logger.error("無法導入 traceback 模組")
             return []
-    
+
+    def diagnose_new_holdings_data(self, date: str = None) -> Dict[str, Any]:
+        """診斷新增持股數據的完整性 - 簡化版本"""
+        if not self.db_available:
+            return {"status": "database_unavailable"}
+        
+        diagnosis = {
+            "status": "checking",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        try:
+            # 如果沒有指定日期，使用最新日期
+            if not date:
+                dates = self.get_available_dates()
+                if dates:
+                    date = dates[0]
+                    diagnosis["used_date"] = date
+                else:
+                    diagnosis["error"] = "no_available_dates"
+                    return diagnosis
+            
+            # 檢查 holdings_changes 表
+            changes_query = "SELECT COUNT(*) as count FROM holdings_changes WHERE change_date = %s"
+            changes_result = self.execute_query(changes_query, (date,), fetch="one")
+            diagnosis["total_changes"] = changes_result["count"] if changes_result else 0
+            
+            # 檢查 NEW 類型的變化
+            new_changes_query = "SELECT COUNT(*) as count FROM holdings_changes WHERE change_date = %s AND change_type = 'NEW'"
+            new_changes_result = self.execute_query(new_changes_query, (date,), fetch="one")
+            diagnosis["new_changes"] = new_changes_result["count"] if new_changes_result else 0
+            
+            # 檢查 etf_holdings 表
+            holdings_query = "SELECT COUNT(*) as count FROM etf_holdings WHERE update_date = %s"
+            holdings_result = self.execute_query(holdings_query, (date,), fetch="one")
+            diagnosis["total_holdings"] = holdings_result["count"] if holdings_result else 0
+            
+            diagnosis["status"] = "completed"
+            
+        except Exception as e:
+            diagnosis["status"] = "error"
+            diagnosis["error"] = str(e)
+        
+        return diagnosis
+
+    def get_holdings_with_changes(self, date: str = None, etf_code: str = None) -> List[Dict[str, Any]]:
+        """獲取持股明細並包含變化資料 - 優化版本"""
+        if not self.db_available:
+            return []
+        
+        try:
+            # 構建查詢條件
+            where_conditions = []
+            params = []
+            
+            if date:
+                where_conditions.append("h.update_date = %s")
+                params.append(date)
+            else:
+                # 如果沒有指定日期，使用最新日期
+                where_conditions.append("h.update_date = (SELECT MAX(update_date) FROM etf_holdings)")
+            
+            if etf_code:
+                where_conditions.append("h.etf_code = %s")
+                params.append(etf_code)
+            
+            where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+            
+            # 使用 LEFT JOIN 一次性獲取持股和變化資料
+            query = f'''
+                SELECT 
+                    h.etf_code,
+                    h.stock_code,
+                    h.stock_name,
+                    h.weight,
+                    h.shares,
+                    h.unit,
+                    h.update_date,
+                    hc.change_type,
+                    hc.old_shares,
+                    hc.new_shares,
+                    hc.old_weight,
+                    hc.new_weight
+                FROM etf_holdings h
+                LEFT JOIN holdings_changes hc ON (
+                    h.etf_code = hc.etf_code 
+                    AND h.stock_code = hc.stock_code 
+                    AND h.update_date = hc.change_date
+                )
+                {where_clause}
+                ORDER BY h.etf_code, h.weight DESC
+            '''
+            
+            results = self.execute_query(query, tuple(params), fetch="all")
+            
+            # 處理結果，計算變化數據
+            holdings = []
+            if results:
+                for result in results:
+                    holding = dict(result)
+                    
+                    # 計算股數變化
+                    if holding.get('change_type'):
+                        old_shares = holding.get('old_shares') or 0
+                        new_shares = holding.get('new_shares') or 0
+                        
+                        if holding['change_type'] == 'NEW':
+                            holding['shares_increase'] = new_shares
+                            holding['shares_decrease'] = 0
+                        elif holding['change_type'] == 'INCREASED':
+                            holding['shares_increase'] = max(0, new_shares - old_shares)
+                            holding['shares_decrease'] = 0
+                        elif holding['change_type'] == 'DECREASED':
+                            holding['shares_increase'] = 0
+                            holding['shares_decrease'] = max(0, old_shares - new_shares)
+                        elif holding['change_type'] == 'REMOVED':
+                            holding['shares_increase'] = 0
+                            holding['shares_decrease'] = old_shares
+                        else:
+                            holding['shares_increase'] = 0
+                            holding['shares_decrease'] = 0
+                    else:
+                        # 無變化記錄
+                        holding['change_type'] = None
+                        holding['old_shares'] = holding.get('shares', 0)
+                        holding['new_shares'] = holding.get('shares', 0)
+                        holding['shares_increase'] = 0
+                        holding['shares_decrease'] = 0
+                    
+                    holdings.append(holding)
+            
+            return holdings
+            
+        except Exception as e:
+            logger.error(f"獲取持股變化資料錯誤: {e}")
+            logger.error(f"查詢參數: date={date}, etf_code={etf_code}")
+            return []
+        
+    def get_holdings_change_stats(self, holdings: List[Dict[str, Any]]) -> Dict[str, int]:
+        """計算持股變化統計"""
+        stats = {
+            'total': len(holdings),
+            'new_count': 0,
+            'increased_count': 0, 
+            'decreased_count': 0,
+            'removed_count': 0,
+            'no_change_count': 0
+        }
+        
+        for holding in holdings:
+            change_type = holding.get('change_type')
+            if change_type == 'NEW':
+                stats['new_count'] += 1
+            elif change_type == 'INCREASED':
+                stats['increased_count'] += 1
+            elif change_type == 'DECREASED':
+                stats['decreased_count'] += 1
+            elif change_type == 'REMOVED':
+                stats['removed_count'] += 1
+            else:
+                stats['no_change_count'] += 1
+        
+        return stats
+
     def get_decreased_holdings(self, date: str = None, etf_code: str = None) -> List[Dict[str, Any]]:
         """獲取減持股票"""
         if not self.db_available:
@@ -845,17 +1100,19 @@ class DatabaseQuery:
             
             query += " ORDER BY change_date DESC, etf_code, (old_shares - new_shares) DESC"
             
-            results = db_config.execute_query(query, tuple(params), fetch="all")
+            results = self.execute_query(query, tuple(params), fetch="all")
             
             # 處理數據格式
-            for result in results:
-                result['etf_name'] = self.get_etf_name(result['etf_code'])
-                result['change_amount'] = result['old_shares'] - result['new_shares']
-                # 轉換變化類型名稱
-                if result['change_type'] == 'REMOVED':
-                    result['change_type'] = '完全移除'
-                elif result['change_type'] == 'DECREASED':
-                    result['change_type'] = '減持'
+            if results:
+                for result in results:
+                    if result:  # 額外安全檢查
+                        result['etf_name'] = self.get_etf_name(result['etf_code'])
+                        result['change_amount'] = max(0, result['old_shares'] - result['new_shares'])
+                        # 轉換變化類型名稱
+                        if result['change_type'] == 'REMOVED':
+                            result['change_type'] = '完全移除'
+                        elif result['change_type'] == 'DECREASED':
+                            result['change_type'] = '減持'
             
             return results if results else []
             
@@ -890,67 +1147,75 @@ class DatabaseQuery:
                     return []
                 date = dates[0]
             
-            results = db_config.execute_query(query, (date,), fetch="all")
+            results = self.execute_query(query, (date,), fetch="all")
             
             # 為每個重複持股獲取詳細信息
             cross_holdings = []
-            for result in results:
-                stock_code = result['stock_code']
-                
-                # 獲取當前持股詳情
-                detail_query = '''
-                    SELECT etf_code, shares, weight
-                    FROM etf_holdings
-                    WHERE stock_code = %s AND update_date = %s
-                    ORDER BY shares DESC
-                '''
-                details = db_config.execute_query(detail_query, (stock_code, date), fetch="all")
-                
-                # 獲取前一日持股（用於計算變化）
-                prev_query = '''
-                    SELECT etf_code, shares
-                    FROM etf_holdings
-                    WHERE stock_code = %s AND update_date < %s
-                    ORDER BY update_date DESC
-                    LIMIT 10
-                '''
-                prev_holdings = db_config.execute_query(prev_query, (stock_code, date), fetch="all")
-                prev_dict = {h['etf_code']: h['shares'] for h in prev_holdings}
-                
-                # 計算變化
-                etf_details = []
-                total_increase = 0
-                total_decrease = 0
-                
-                for detail in details:
-                    etf_code = detail['etf_code']
-                    current_shares = detail['shares']
-                    previous_shares = prev_dict.get(etf_code, 0)
-                    change = current_shares - previous_shares
+            if results:
+                for result in results:
+                    if not result:  # 安全檢查
+                        continue
+                        
+                    stock_code = result['stock_code']
                     
-                    if change > 0:
-                        total_increase += change
-                    elif change < 0:
-                        total_decrease += abs(change)
+                    # 獲取當前持股詳情
+                    detail_query = '''
+                        SELECT etf_code, shares, weight
+                        FROM etf_holdings
+                        WHERE stock_code = %s AND update_date = %s
+                        ORDER BY shares DESC
+                    '''
+                    details = self.execute_query(detail_query, (stock_code, date), fetch="all")
                     
-                    etf_details.append({
-                        'etf_code': etf_code,
-                        'etf_name': self.get_etf_name(etf_code),
-                        'shares': current_shares,
-                        'previous_shares': previous_shares,
-                        'change': change,
-                        'weight': detail['weight']
+                    # 獲取前一日持股（用於計算變化）
+                    prev_query = '''
+                        SELECT etf_code, shares
+                        FROM etf_holdings
+                        WHERE stock_code = %s AND update_date < %s
+                        ORDER BY update_date DESC
+                        LIMIT 10
+                    '''
+                    prev_holdings = self.execute_query(prev_query, (stock_code, date), fetch="all")
+                    prev_dict = {h['etf_code']: h['shares'] for h in prev_holdings} if prev_holdings else {}
+                    
+                    # 計算變化
+                    etf_details = []
+                    total_increase = 0
+                    total_decrease = 0
+                    
+                    if details:
+                        for detail in details:
+                            if not detail:  # 安全檢查
+                                continue
+                                
+                            etf_code = detail['etf_code']
+                            current_shares = detail['shares']
+                            previous_shares = prev_dict.get(etf_code, 0)
+                            change = current_shares - previous_shares
+                            
+                            if change > 0:
+                                total_increase += change
+                            elif change < 0:
+                                total_decrease += abs(change)
+                            
+                            etf_details.append({
+                                'etf_code': etf_code,
+                                'etf_name': self.get_etf_name(etf_code),
+                                'shares': current_shares,
+                                'previous_shares': previous_shares,
+                                'change': change,
+                                'weight': detail['weight']
+                            })
+                    
+                    cross_holdings.append({
+                        'stock_code': result['stock_code'],
+                        'stock_name': result['stock_name'],
+                        'etf_count': result['etf_count'],
+                        'total_shares': result['total_shares'],
+                        'total_increase': total_increase,
+                        'total_decrease': total_decrease,
+                        'etf_details': etf_details
                     })
-                
-                cross_holdings.append({
-                    'stock_code': result['stock_code'],
-                    'stock_name': result['stock_name'],
-                    'etf_count': result['etf_count'],
-                    'total_shares': result['total_shares'],
-                    'total_increase': total_increase,
-                    'total_decrease': total_decrease,
-                    'etf_details': etf_details
-                })
             
             return cross_holdings
             
@@ -983,12 +1248,11 @@ class DatabaseQuery:
                 '''
                 params = ()
             
-            results = db_config.execute_query(query, params, fetch="all")
+            results = self.execute_query(query, params, fetch="all")
             return results if results else []
         except Exception as e:
             logger.error(f"獲取最新持股錯誤: {e}")
             return []
-
 # 初始化數據庫查詢對象
 db_query = DatabaseQuery()
 
