@@ -611,6 +611,7 @@ class DatabaseQuery:
     
     def __init__(self):
         self.etf_names = {
+            '00980A': '主動野村臺灣優選ETF',
             '00981A': '統一台股增長主動式ETF',
             '00982A': '群益台灣精選強棒主動式ETF', 
             '00983A': '中信ARK創新主動式ETF',
@@ -696,7 +697,7 @@ class DatabaseQuery:
             return []
     
     def get_etf_codes(self):
-        return ['00981A', '00982A', '00983A', '00984A', '00985A']
+        return ['00980A', '00981A', '00982A', '00983A', '00984A', '00985A']  # ⭐ 新增 00980A
     
     def get_etf_codes_with_names(self):
         return [{'code': code, 'name': self.get_etf_name(code)} for code in self.get_etf_codes()]

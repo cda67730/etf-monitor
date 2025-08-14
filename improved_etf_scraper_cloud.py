@@ -32,7 +32,7 @@ class ETFHoldingsScraper:
         self.dtno = '59449513'
         
         # 支援的ETF代碼清單
-        self.etf_codes = ['00981A', '00982A', '00983A', '00984A', '00985A']
+        self.etf_codes = ['00980A', '00981A', '00982A', '00983A', '00984A', '00985A']  # 新增 00980A
         
         self.init_database()
     
