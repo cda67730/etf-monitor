@@ -769,51 +769,178 @@ class DatabaseQuery:
             return []
 
     def get_new_holdings(self, date: str = None, etf_code: str = None) -> List[Dict[str, Any]]:
-        """獲取新增持股"""
+        """獲取新增持股 - 修復版本"""
         if not self.db_available:
+            logger.warning("數據庫不可用，返回空列表")
             return []
         
         try:
-            base_query = '''
-                SELECT h.etf_code, h.stock_code, h.stock_name, h.weight, h.shares,
-                       hc.change_type
-                FROM holdings_changes hc
-                JOIN etf_holdings h ON hc.etf_code = h.etf_code 
-                    AND hc.stock_code = h.stock_code 
-                    AND hc.change_date = h.update_date
-                WHERE hc.change_type = 'NEW'
-            '''
+            logger.info(f"🔍 查詢新增持股: date={date}, etf_code={etf_code}")
             
-            conditions = []
-            params = []
+            # 如果沒有指定日期，使用最新日期
+            if not date:
+                dates = self.get_available_dates()
+                if not dates:
+                    logger.warning("沒有可用日期")
+                    return []
+                date = dates[0]
+                logger.info(f"使用最新日期: {date}")
             
-            if date:
-                conditions.append("hc.change_date = %s")
-                params.append(date)
+            # 方法1: 優先從 holdings_changes 表查詢 NEW 類型的記錄
+            conditions = ["hc.change_type = 'NEW'", "hc.change_date = %s"]
+            params = [date]
             
             if etf_code:
                 conditions.append("hc.etf_code = %s")
                 params.append(etf_code)
             
-            if conditions:
-                query = base_query + " AND " + " AND ".join(conditions)
-            else:
-                query = base_query
+            where_clause = " AND ".join(conditions)
             
-            query += " ORDER BY hc.change_date DESC, hc.etf_code, h.weight DESC"
+            # 嘗試 JOIN 查詢
+            join_query = f'''
+                SELECT h.etf_code, h.stock_code, h.stock_name, h.weight, h.shares, h.unit,
+                    hc.change_type, hc.new_shares
+                FROM holdings_changes hc
+                JOIN etf_holdings h ON (
+                    hc.etf_code = h.etf_code 
+                    AND hc.stock_code = h.stock_code 
+                    AND hc.change_date = h.update_date
+                )
+                WHERE {where_clause}
+                ORDER BY hc.etf_code, h.weight DESC
+            '''
             
-            results = db_config.execute_query(query, tuple(params), fetch="all")
+            logger.info(f"執行 JOIN 查詢...")
+            results = self.execute_query(join_query, tuple(params), fetch="all")
             
-            # 添加 ETF 名稱
-            for result in results:
-                result['etf_name'] = self.get_etf_name(result['etf_code'])
+            if results:
+                logger.info(f"✅ JOIN 查詢成功，找到 {len(results)} 筆新增持股")
+                # 添加 ETF 名稱
+                for result in results:
+                    result['etf_name'] = self.get_etf_name(result['etf_code'])
+                return results
             
-            return results if results else []
+            # 方法2: 如果 JOIN 查詢沒有結果，嘗試分別查詢
+            logger.info("JOIN 查詢無結果，嘗試分別查詢...")
+            
+            # 先從 holdings_changes 獲取 NEW 類型的記錄
+            change_query = f'''
+                SELECT etf_code, stock_code, stock_name, new_shares, change_date
+                FROM holdings_changes
+                WHERE {where_clause}
+                ORDER BY etf_code, stock_code
+            '''
+            
+            changes = self.execute_query(change_query, tuple(params), fetch="all")
+            logger.info(f"變化記錄查詢結果: {len(changes)} 筆")
+            
+            if not changes:
+                logger.warning("沒有找到新增類型的變化記錄")
+                return []
+            
+            # 為每個變化記錄查找對應的持股信息
+            new_holdings = []
+            for change in changes:
+                holding_query = '''
+                    SELECT etf_code, stock_code, stock_name, weight, shares, unit
+                    FROM etf_holdings
+                    WHERE etf_code = %s AND stock_code = %s AND update_date = %s
+                '''
+                
+                holding = self.execute_query(
+                    holding_query, 
+                    (change['etf_code'], change['stock_code'], date), 
+                    fetch="one"
+                )
+                
+                if holding:
+                    # 合併數據
+                    combined = dict(holding)
+                    combined['change_type'] = 'NEW'
+                    combined['etf_name'] = self.get_etf_name(combined['etf_code'])
+                    new_holdings.append(combined)
+                else:
+                    # 如果沒有對應的持股記錄，使用變化記錄的數據
+                    fallback = {
+                        'etf_code': change['etf_code'],
+                        'etf_name': self.get_etf_name(change['etf_code']),
+                        'stock_code': change['stock_code'],
+                        'stock_name': change['stock_name'],
+                        'weight': 0.0,  # 默認值
+                        'shares': change['new_shares'],
+                        'unit': '股',  # 默認值
+                        'change_type': 'NEW'
+                    }
+                    new_holdings.append(fallback)
+            
+            logger.info(f"✅ 分別查詢成功，找到 {len(new_holdings)} 筆新增持股")
+            return new_holdings
             
         except Exception as e:
-            logger.error(f"獲取新增持股錯誤: {e}")
+            logger.error(f"❌ 查詢新增持股錯誤: {e}")
+            logger.error(f"查詢參數: date={date}, etf_code={etf_code}")
+            import traceback
+            logger.error(f"錯誤堆棧: {traceback.format_exc()}")
             return []
-    
+    def diagnose_new_holdings_data(self, date: str = None) -> Dict[str, Any]:
+        """診斷新增持股數據的完整性"""
+        if not self.db_available:
+            return {"status": "database_unavailable"}
+        
+        diagnosis = {
+            "status": "checking",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        try:
+            # 如果沒有指定日期，使用最新日期
+            if not date:
+                dates = self.get_available_dates()
+                if dates:
+                    date = dates[0]
+                    diagnosis["used_date"] = date
+                else:
+                    diagnosis["error"] = "no_available_dates"
+                    return diagnosis
+            
+            # 檢查 holdings_changes 表
+            changes_query = "SELECT COUNT(*) as count FROM holdings_changes WHERE change_date = %s"
+            changes_result = self.execute_query(changes_query, (date,), fetch="one")
+            diagnosis["total_changes"] = changes_result["count"] if changes_result else 0
+            
+            # 檢查 NEW 類型的變化
+            new_changes_query = "SELECT COUNT(*) as count FROM holdings_changes WHERE change_date = %s AND change_type = 'NEW'"
+            new_changes_result = self.execute_query(new_changes_query, (date,), fetch="one")
+            diagnosis["new_changes"] = new_changes_result["count"] if new_changes_result else 0
+            
+            # 檢查 etf_holdings 表
+            holdings_query = "SELECT COUNT(*) as count FROM etf_holdings WHERE update_date = %s"
+            holdings_result = self.execute_query(holdings_query, (date,), fetch="one")
+            diagnosis["total_holdings"] = holdings_result["count"] if holdings_result else 0
+            
+            # 檢查表結構
+            if self.db_type == "postgresql":
+                structure_query = """
+                    SELECT column_name, data_type 
+                    FROM information_schema.columns 
+                    WHERE table_name IN ('holdings_changes', 'etf_holdings')
+                    ORDER BY table_name, ordinal_position
+                """
+            else:
+                structure_query = "PRAGMA table_info(holdings_changes)"
+            
+            structure_result = self.execute_query(structure_query, fetch="all")
+            diagnosis["table_structure"] = structure_result
+            
+            diagnosis["status"] = "completed"
+            
+        except Exception as e:
+            diagnosis["status"] = "error"
+            diagnosis["error"] = str(e)
+        
+        return diagnosis
+
+
     def get_holdings_with_changes(self, date: str = None, etf_code: str = None) -> List[Dict[str, Any]]:
         """獲取持股明細並包含變化資料 - 優化版本"""
         if not self.db_available:
