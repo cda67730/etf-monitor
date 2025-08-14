@@ -814,6 +814,124 @@ class DatabaseQuery:
             logger.error(f"獲取新增持股錯誤: {e}")
             return []
     
+    def get_holdings_with_changes(self, date: str = None, etf_code: str = None) -> List[Dict[str, Any]]:
+        """獲取持股明細並包含變化資料 - 優化版本"""
+        if not self.db_available:
+            return []
+        
+        try:
+            # 構建查詢條件
+            where_conditions = []
+            params = []
+            
+            if date:
+                where_conditions.append("h.update_date = %s")
+                params.append(date)
+            else:
+                # 如果沒有指定日期，使用最新日期
+                where_conditions.append("h.update_date = (SELECT MAX(update_date) FROM etf_holdings)")
+            
+            if etf_code:
+                where_conditions.append("h.etf_code = %s")
+                params.append(etf_code)
+            
+            where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+            
+            # 使用 LEFT JOIN 一次性獲取持股和變化資料
+            query = f'''
+                SELECT 
+                    h.etf_code,
+                    h.stock_code,
+                    h.stock_name,
+                    h.weight,
+                    h.shares,
+                    h.unit,
+                    h.update_date,
+                    hc.change_type,
+                    hc.old_shares,
+                    hc.new_shares,
+                    hc.old_weight,
+                    hc.new_weight
+                FROM etf_holdings h
+                LEFT JOIN holdings_changes hc ON (
+                    h.etf_code = hc.etf_code 
+                    AND h.stock_code = hc.stock_code 
+                    AND h.update_date = hc.change_date
+                )
+                {where_clause}
+                ORDER BY h.etf_code, h.weight DESC
+            '''
+            
+            results = self.execute_query(query, tuple(params), fetch="all")
+            
+            # 處理結果，計算變化數據
+            holdings = []
+            for result in results:
+                holding = dict(result)
+                
+                # 計算股數變化
+                if holding['change_type']:
+                    old_shares = holding['old_shares'] or 0
+                    new_shares = holding['new_shares'] or 0
+                    
+                    if holding['change_type'] == 'NEW':
+                        holding['shares_increase'] = new_shares
+                        holding['shares_decrease'] = 0
+                    elif holding['change_type'] == 'INCREASED':
+                        holding['shares_increase'] = new_shares - old_shares
+                        holding['shares_decrease'] = 0
+                    elif holding['change_type'] == 'DECREASED':
+                        holding['shares_increase'] = 0
+                        holding['shares_decrease'] = old_shares - new_shares
+                    elif holding['change_type'] == 'REMOVED':
+                        holding['shares_increase'] = 0
+                        holding['shares_decrease'] = old_shares
+                    else:
+                        holding['shares_increase'] = 0
+                        holding['shares_decrease'] = 0
+                else:
+                    # 無變化記錄
+                    holding['change_type'] = None
+                    holding['old_shares'] = holding['shares']
+                    holding['new_shares'] = holding['shares']
+                    holding['shares_increase'] = 0
+                    holding['shares_decrease'] = 0
+                
+                holdings.append(holding)
+            
+            return holdings
+            
+        except Exception as e:
+            logger.error(f"獲取持股變化資料錯誤: {e}")
+            logger.error(f"查詢參數: date={date}, etf_code={etf_code}")
+            return []
+        
+    def get_holdings_change_stats(self, holdings: List[Dict[str, Any]]) -> Dict[str, int]:
+        """計算持股變化統計"""
+        stats = {
+            'total': len(holdings),
+            'new_count': 0,
+            'increased_count': 0, 
+            'decreased_count': 0,
+            'removed_count': 0,
+            'no_change_count': 0
+        }
+        
+        for holding in holdings:
+            change_type = holding.get('change_type')
+            if change_type == 'NEW':
+                stats['new_count'] += 1
+            elif change_type == 'INCREASED':
+                stats['increased_count'] += 1
+            elif change_type == 'DECREASED':
+                stats['decreased_count'] += 1
+            elif change_type == 'REMOVED':
+                stats['removed_count'] += 1
+            else:
+                stats['no_change_count'] += 1
+        
+        return stats
+
     def get_decreased_holdings(self, date: str = None, etf_code: str = None) -> List[Dict[str, Any]]:
         """獲取減持股票"""
         if not self.db_available:
@@ -1265,7 +1383,7 @@ async def cross_holdings_page(request: Request, date: str = Query(None)):
 
 @app.get("/holdings", response_class=HTMLResponse)
 async def holdings_page(request: Request, date: str = Query(None), etf_code: str = Query(None)):
-    """每日持股頁面"""
+    """每日持股頁面 - 包含變化資料"""
     try:
         if not templates:
             raise HTTPException(status_code=503, detail="Templates unavailable")
@@ -1274,14 +1392,13 @@ async def holdings_page(request: Request, date: str = Query(None), etf_code: str
         etf_codes = db_query.get_etf_codes()
         
         holdings = []
+        change_stats = {}
+        
         if date:
-            if etf_code:
-                holdings = db_query.get_holdings_by_etf(etf_code, date)
-                # 添加 etf_code 到每個記錄
-                for holding in holdings:
-                    holding['etf_code'] = etf_code
-            else:
-                holdings = db_query.get_holdings_by_date(date)
+            # 使用新的方法獲取帶變化資料的持股
+            holdings = db_query.get_holdings_with_changes(date, etf_code)
+            # 計算變化統計
+            change_stats = db_query.get_holdings_change_stats(holdings)
         
         return templates.TemplateResponse("holdings.html", {
             "request": request,
@@ -1289,7 +1406,8 @@ async def holdings_page(request: Request, date: str = Query(None), etf_code: str
             "dates": dates,
             "etf_codes": etf_codes,
             "selected_date": date,
-            "selected_etf": etf_code
+            "selected_etf": etf_code,
+            "change_stats": change_stats
         })
         
     except HTTPException:
@@ -1297,7 +1415,7 @@ async def holdings_page(request: Request, date: str = Query(None), etf_code: str
     except Exception as e:
         logger.error(f"每日持股頁面錯誤: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
+    
 @app.post("/manual-scrape")
 async def manual_scrape(request: Request):
     """手動爬取功能"""
@@ -1685,6 +1803,8 @@ class DatabaseConfig:
             self.connection_status = "sqlite_only"
         
         logger.info(f"最終數據庫狀態: {self.connection_status}")
+
+    
     
     def _initialize_postgresql(self) -> bool:
         """初始化 PostgreSQL，詳細錯誤處理"""
