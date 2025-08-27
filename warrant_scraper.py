@@ -168,8 +168,8 @@ class WarrantScraperHTMLComplete:
                 cell_texts.append(cell.get_text(strip=True))
                 cell_html += str(cell)
 
-            # 尋找權證連結 Link2Stk('AQ...'
-            warrant_match = re.search(r"Link2Stk\('AQ([A-Z0-9]+)\'\);">([A-Z0-9]+)&nbsp;([^<]+)<\/a>", cell_html)
+            # 尋找權證連結 Link2Stk('AQ...
+            warrant_match = re.search(r"Link2Stk\('AQ([A-Z0-9]+)'\);">([A-Z0-9]+)&nbsp;([^<]+)<\/a>", cell_html)
             if warrant_match:
                 warrant_code = warrant_match.group(1)
                 warrant_name = warrant_match.group(3)
@@ -178,7 +178,7 @@ class WarrantScraperHTMLComplete:
                 return None
 
             # 尋找標的股票名稱 GenLink2stk
-            underlying_match = re.search(r"GenLink2stk\('AS[A-Z0-9]+\'\,'([^\']+)\'\)", cell_html)
+            underlying_match = re.search(r"GenLink2stk\('AS[A-Z0-9]+\'\,\'([^\']+)\'\)", cell_html)
             if underlying_match:
                 underlying_name = underlying_match.group(1)
             
