@@ -1313,6 +1313,8 @@ async def warrant_ranking_page(
     summary_sort: str = Query("warrant_count")
 ):
     """權證排行頁面"""
+    if not await check_authentication(request):
+        return RedirectResponse(url="/login", status_code=302)
     try:
         if not templates:
             raise HTTPException(status_code=503, detail="Templates unavailable")
@@ -1681,6 +1683,8 @@ if __name__ == "__main__":
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """首頁"""
+    if not await check_authentication(request):
+        return RedirectResponse(url="/login", status_code=302)
     try:
         if not templates:
             return HTMLResponse(
@@ -1710,6 +1714,8 @@ async def home(request: Request):
 @app.get("/holdings/{etf_code}")
 async def holdings_detail(request: Request, etf_code: str, date: str = Query(None)):
     """持股明細頁面"""
+    if not await check_authentication(request):
+        return RedirectResponse(url="/login", status_code=302)
     try:
         if not templates:
             raise HTTPException(status_code=503, detail="Templates unavailable")
@@ -1744,6 +1750,8 @@ async def holdings_detail(request: Request, etf_code: str, date: str = Query(Non
 @app.get("/changes")
 async def changes_page(request: Request, etf_code: str = Query(None), date: str = Query(None)):
     """持股變化頁面"""
+    if not await check_authentication(request):
+        return RedirectResponse(url="/login", status_code=302)
     try:
         if not templates:
             raise HTTPException(status_code=503, detail="Templates unavailable")
@@ -1771,6 +1779,9 @@ async def changes_page(request: Request, etf_code: str = Query(None), date: str 
 @app.get("/new-holdings", response_class=HTMLResponse)
 async def new_holdings_page(request: Request, date: str = Query(None), etf_code: str = Query(None)):
     """新增持股頁面"""
+    if not await check_authentication(request):
+        return RedirectResponse(url="/login", status_code=302)
+    
     try:
         if not templates:
             raise HTTPException(status_code=503, detail="Templates unavailable")
@@ -1800,6 +1811,8 @@ async def new_holdings_page(request: Request, date: str = Query(None), etf_code:
 @app.get("/decreased-holdings", response_class=HTMLResponse)
 async def decreased_holdings_page(request: Request, date: str = Query(None), etf_code: str = Query(None)):
     """減持表頁面"""
+    if not await check_authentication(request):
+        return RedirectResponse(url="/login", status_code=302)
     try:
         if not templates:
             raise HTTPException(status_code=503, detail="Templates unavailable")
@@ -1829,6 +1842,8 @@ async def decreased_holdings_page(request: Request, date: str = Query(None), etf
 @app.get("/cross-holdings", response_class=HTMLResponse)
 async def cross_holdings_page(request: Request, date: str = Query(None)):
     """跨ETF重複持股頁面"""
+    if not await check_authentication(request):
+        return RedirectResponse(url="/login", status_code=302)
     try:
         if not templates:
             raise HTTPException(status_code=503, detail="Templates unavailable")
