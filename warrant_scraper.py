@@ -161,40 +161,28 @@ class WarrantScraperHTMLComplete:
             volume = 0
             implied_vol = 0.0
             
-            # 提取所有單元格的文本
+            # 提取所有單元格的文本和HTML
             cell_texts = []
+            cell_html = ""
             for cell in cells:
-                text = cell.get_text(strip=True)
-                cell_texts.append(text)
-                
-                # 尋找權證連結 Link2Stk('AQ...
-                warrant_links = cell.find_all('a', href=re.compile(r"Link2Stk\('AQ"))
-                for link in warrant_links:
-                    href = link.get('href', '')
-                    code_match = re.search(r"Link2Stk\('AQ([A-Z0-9]+)'\)", href)
-                    if code_match:
-                        warrant_code = code_match.group(1)
-                        warrant_name = link.get_text(strip=True)
-                        
-                        # 清理權證名稱
-                        if warrant_code in warrant_name:
-                            warrant_name = warrant_name.replace(warrant_code, '').strip()
-                        break
-                
-                # 尋找標的股票連結 Link2Stk('AP...
-                underlying_links = cell.find_all('a', href=re.compile(r"Link2Stk\('AP"))
-                for link in underlying_links:
-                    underlying_name = link.get_text(strip=True)
-                    # 移除可能的代碼部分
-                    parts = underlying_name.split()
-                    if len(parts) > 1:
-                        underlying_name = ' '.join(parts[1:])
-                    break
-            
+                cell_texts.append(cell.get_text(strip=True))
+                cell_html += str(cell)
+
+            # 尋找權證連結 Link2Stk('AQ...'
+            warrant_match = re.search(r"Link2Stk\('AQ([A-Z0-9]+)\'\);">([A-Z0-9]+)&nbsp;([^<]+)<\/a>", cell_html)
+            if warrant_match:
+                warrant_code = warrant_match.group(1)
+                warrant_name = warrant_match.group(3)
+
             if not warrant_code:
                 return None
+
+            # 尋找標的股票名稱 GenLink2stk
+            underlying_match = re.search(r"GenLink2stk\('AS[A-Z0-9]+\'\,'([^\']+)\'\)", cell_html)
+            if underlying_match:
+                underlying_name = underlying_match.group(1)
             
-            logger.debug(f"找到權證: {warrant_code}, 單元格內容: {cell_texts}")
+            logger.debug(f"找到權證: {warrant_code}, 標的: {underlying_name}, 單元格內容: {cell_texts}")
             
             # 從單元格文本中提取數值資料
             for text in cell_texts:
