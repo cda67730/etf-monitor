@@ -1395,7 +1395,7 @@ async def manual_scrape_warrants(request: Request):
             raise HTTPException(status_code=503, detail="Warrant scraper unavailable")
         
         # 執行權證爬蟲
-        success = warrant_scraper.scrape_warrants(pages=3, sort_type=2)
+        success = warrant_scraper.scrape_warrants(pages=5, sort_type=3)
         
         if success:
             return {
@@ -1466,7 +1466,7 @@ async def trigger_scrape_warrants(request: Request):
             raise HTTPException(status_code=503, detail="Warrant scraper unavailable")
         
         # 執行權證爬蟲
-        success = warrant_scraper.scrape_warrants(pages=5, sort_type=2)
+        success = warrant_scraper.scrape_warrants(pages=5, sort_type=3)
         
         if success:
             return {
