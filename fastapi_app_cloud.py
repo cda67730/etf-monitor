@@ -725,15 +725,19 @@ class DatabaseQuery:
                 stats['no_change_count'] += 1
         
         return stats
-    
+
     def diagnose_new_holdings_data(self, date: str = None) -> Dict[str, Any]:
-        """診斷新增持股數據的完整性 - 簡化版本"""
+        """診斷新增持股數據的完整性 - 修正版本"""
         if not self.db_available:
             return {"status": "database_unavailable"}
         
         diagnosis = {
             "status": "checking",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "used_date": None,
+            "total_changes": 0,
+            "new_changes": 0,
+            "total_holdings": 0
         }
         
         try:
@@ -743,8 +747,166 @@ class DatabaseQuery:
                     date = dates[0]
                     diagnosis["used_date"] = date
                 else:
+                    diagnosis["status"] = "error"
                     diagnosis["error"] = "no_available_dates"
                     return diagnosis
+            else:
+                diagnosis["used_date"] = date
+            
+            ph = self._get_placeholder()
+            
+            # 檢查 holdings_changes 表
+            changes_query = f"SELECT COUNT(*) as count FROM holdings_changes WHERE change_date = {ph}"
+            changes_result = self.execute_query(changes_query, (date,), fetch="one")
+            diagnosis["total_changes"] = changes_result["count"] if changes_result else 0
+            
+            # 檢查 NEW 類型的變化
+            new_changes_query = f"SELECT COUNT(*) as count FROM holdings_changes WHERE change_date = {ph} AND change_type = 'NEW'"
+            new_changes_result = self.execute_query(new_changes_query, (date,), fetch="one")
+            diagnosis["new_changes"] = new_changes_result["count"] if new_changes_result else 0
+            
+            # 檢查 etf_holdings 表
+            holdings_query = f"SELECT COUNT(*) as count FROM etf_holdings WHERE update_date = {ph}"
+            holdings_result = self.execute_query(holdings_query, (date,), fetch="one")
+            diagnosis["total_holdings"] = holdings_result["count"] if holdings_result else 0
+            
+            diagnosis["status"] = "completed"
+            
+        except Exception as e:
+            diagnosis["status"] = "error"
+            diagnosis["error"] = str(e)
+        
+        # 修正了返回語句，移除了未定義的 'fetch' 變數
+        return diagnosis    
+    def ensure_tables_exist(self):
+            """確保資料表存在 - 由 database_config 處理"""
+            pass  # database_config.__init__ 已處理表格初始化
+
+    def execute_query(self, query: str, params: tuple = (), fetch: str = "all"):
+        """執行資料庫查詢"""
+        if not self.db_available:
+            return [] if fetch == "all" else None
+        
+        try:
+            return db_config.execute_query(query, params, fetch)
+        except Exception as e:
+            logger.error(f"執行查詢失敗: {e}")
+            logger.error(f"查詢: {query[:200]}...")
+            logger.error(f"參數: {params}")
+            return [] if fetch == "all" else None
+
+    def _get_placeholder(self) -> str:
+        """獲取資料庫佔位符"""
+        if db_config and db_config.db_type == "postgresql":
+            return "%s"
+        return "?"
+
+    def get_etf_name(self, etf_code: str) -> str:
+        """獲取 ETF 名稱"""
+        return self.etf_names.get(etf_code, etf_code)
+
+    def get_available_dates(self) -> List[str]:
+        """獲取可用的日期列表"""
+        if not self.db_available:
+            return []
+        
+        try:
+            query = "SELECT DISTINCT update_date FROM etf_holdings ORDER BY update_date DESC"
+            results = self.execute_query(query, (), fetch="all")
+            return [result['update_date'] for result in results] if results else []
+        except Exception as e:
+            logger.error(f"獲取可用日期錯誤: {e}")
+            return []
+
+    def get_etf_codes(self) -> List[str]:
+        """獲取 ETF 代碼列表"""
+        return list(self.etf_names.keys())
+
+    def get_etf_codes_with_names(self) -> Dict[str, str]:
+        """獲取 ETF 代碼和名稱字典"""
+        return self.etf_names.copy()
+
+    def get_warrant_available_dates(self) -> List[str]:
+        """獲取權證資料的可用日期"""
+        if not self.db_available:
+            return []
+        
+        try:
+            query = "SELECT DISTINCT update_date FROM warrant_data ORDER BY update_date DESC"
+            results = self.execute_query(query, (), fetch="all")
+            return [result['update_date'] for result in results] if results else []
+        except Exception as e:
+            logger.error(f"獲取權證可用日期錯誤: {e}")
+            return []
+
+    def get_holdings_by_etf(self, etf_code: str, date: str = None) -> List[Dict[str, Any]]:
+        """獲取特定 ETF 的持股明細"""
+        if not self.db_available:
+            return []
+        
+        try:
+            ph = self._get_placeholder()
+            if not date:
+                dates = self.get_available_dates()
+                date = dates[0] if dates else None
+            
+            if not date:
+                return []
+            
+            query = f'''
+                SELECT etf_code, stock_code, stock_name, weight, shares, unit, update_date
+                FROM etf_holdings 
+                WHERE etf_code = {ph} AND update_date = {ph}
+                ORDER BY weight DESC
+            '''
+            
+            results = self.execute_query(query, (etf_code, date), fetch="all")
+            return results if results else []
+        except Exception as e:
+            logger.error(f"獲取 ETF 持股錯誤: {e}")
+            return []
+
+    def get_holdings_changes(self, etf_code: str = None, date: str = None) -> List[Dict[str, Any]]:
+        """獲取持股變化資料"""
+        if not self.db_available:
+            return []
+        
+        try:
+            ph = self._get_placeholder()
+            where_conditions = []
+            params = []
+            
+            if date:
+                where_conditions.append(f"change_date = {ph}")
+                params.append(date)
+            
+            if etf_code:
+                where_conditions.append(f"etf_code = {ph}")
+                params.append(etf_code)
+            
+            where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+            
+            query = f'''
+                SELECT etf_code, stock_code, stock_name, change_type,
+                       old_shares, new_shares, old_weight, new_weight, change_date
+                FROM holdings_changes 
+                {where_clause}
+                ORDER BY change_date DESC, etf_code, stock_code
+            '''
+            
+            results = self.execute_query(query, tuple(params), fetch="all")
+            
+            # 添加 ETF 名稱
+            if results:
+                for result in results:
+                    if result:
+                        result['etf_name'] = self.get_etf_name(result['etf_code'])
+            
+            return results if results else []
+        except Exception as e:
+            logger.error(f"獲取持股變化錯誤: {e}")
+            return []
+
 
     # ========== 權證相關查詢方法 ==========
     
@@ -928,7 +1090,7 @@ class DatabaseQuery:
             return []
     
     def search_warrants(self, keyword: str, date: str = None, search_type: str = 'all'):
-        """搜索權證 - 新增方法"""
+        """搜索權證 - 修復後版本"""
         if not self.db_available:
             return []
         
@@ -975,58 +1137,50 @@ class DatabaseQuery:
         except Exception as e:
             logger.error(f"搜索權證錯誤: {e}")
             return []
-            
-            ph = self._get_placeholder()
-            
-            # 檢查 holdings_changes 表
-            changes_query = f"SELECT COUNT(*) as count FROM holdings_changes WHERE change_date = {ph}"
-            changes_result = self.execute_query(changes_query, (date,), fetch="one")
-            diagnosis["total_changes"] = changes_result["count"] if changes_result else 0
-            
-            # 檢查 NEW 類型的變化
-            new_changes_query = f"SELECT COUNT(*) as count FROM holdings_changes WHERE change_date = {ph} AND change_type = 'NEW'"
-            new_changes_result = self.execute_query(new_changes_query, (date,), fetch="one")
-            diagnosis["new_changes"] = new_changes_result["count"] if new_changes_result else 0
-            
-            # 檢查 etf_holdings 表
-            holdings_query = f"SELECT COUNT(*) as count FROM etf_holdings WHERE update_date = {ph}"
-            holdings_result = self.execute_query(holdings_query, (date,), fetch="one")
-            diagnosis["total_holdings"] = holdings_result["count"] if holdings_result else 0
-            
-            diagnosis["status"] = "completed"
-            
-        except Exception as e:
-            diagnosis["status"] = "error"
-            diagnosis["error"] = str(e)
-        
-        return diagnosis if fetch == "all" else None
-        
-        try:
-            return db_config.execute_query(query, params, fetch)
-        except Exception as e:
-            logger.error(f"執行查詢失敗: {e}")
-            logger.error(f"查詢: {query[:200]}...")
-            logger.error(f"參數: {params}")
-            return [] if fetch == "all" else None
-    
-    
-    
     # ========== 保留所有原有的ETF方法 ==========
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+        
+    def apply_holdings_sorting(holdings: List[Dict], sort_by: str) -> List[Dict]:
+        """應用持股排序"""
+        if not holdings:
+            return holdings
+        
+        if sort_by == 'weight_desc':
+            return sorted(holdings, key=lambda x: x.get('weight', 0), reverse=True)
+        elif sort_by == 'weight_asc':
+            return sorted(holdings, key=lambda x: x.get('weight', 0), reverse=False)
+        elif sort_by == 'shares_desc':
+            return sorted(holdings, key=lambda x: x.get('shares', 0), reverse=True)
+        elif sort_by == 'shares_asc':
+            return sorted(holdings, key=lambda x: x.get('shares', 0), reverse=False)
+        elif sort_by == 'stock_code_asc':
+            return sorted(holdings, key=lambda x: x.get('stock_code', ''), reverse=False)
+        elif sort_by == 'stock_name_asc':
+            return sorted(holdings, key=lambda x: x.get('stock_name', ''), reverse=False)
+        else:
+            # 默認按權重降序
+            return sorted(holdings, key=lambda x: x.get('weight', 0), reverse=True)
 
-    
+    def get_sort_icon(current_sort: str, field: str) -> str:
+        """獲取排序圖標"""
+        if current_sort == f"{field}_desc":
+            return "↓"
+        elif current_sort == f"{field}_asc":
+            return "↑"
+        return ""
+
+    def get_sort_display(sort_by: str) -> str:
+        """獲取排序顯示名稱"""
+        sort_names = {
+            'weight_desc': '權重降序',
+            'weight_asc': '權重升序',
+            'shares_desc': '股數降序',
+            'shares_asc': '股數升序',
+            'stock_code_asc': '股票代碼升序',
+            'stock_name_asc': '股票名稱升序'
+        }
+        return sort_names.get(sort_by, sort_by)    
+
 
     
 
