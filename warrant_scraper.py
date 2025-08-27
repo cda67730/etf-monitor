@@ -150,86 +150,59 @@ class WarrantScraperHTMLComplete:
     def _parse_warrant_row(self, cells, ranking, page_num):
         """解析表格行中的權證資料"""
         try:
-            # 從所有單元格中尋找權證連結和資料
-            warrant_code = ""
-            warrant_name = ""
-            underlying_name = ""
-            warrant_type = ""
-            close_price = 0.0
-            change_amount = 0.0
-            change_percent = 0.0
-            volume = 0
-            implied_vol = 0.0
-            
-            # 提取所有單元格的文本和HTML
-            cell_texts = []
-            cell_html = ""
-            for cell in cells:
-                cell_texts.append(cell.get_text(strip=True))
-                cell_html += str(cell)
-
-            # 尋找權證連結 Link2Stk('AQ... 
-            warrant_match = re.search(r"Link2Stk	ing('AQ([A-Z0-9]+)'	ing);(.+?)</a>", cell_html)
-            if warrant_match:
-                warrant_code = warrant_match.group(1)
-                warrant_name = warrant_match.group(2).replace(f"{warrant_code}&nbsp;", "").strip()
-
-            if not warrant_code:
-                return None
-
-            # 尋找標的股票名稱 GenLink2stk
-            underlying_match = re.search(r"GenLink2stk	ing('AS[A-Z0-9]+	ing','([^']+)'	ing)", cell_html)
-            if underlying_match:
-                underlying_name = underlying_match.group(1)
-            
-            logger.debug(f"找到權證: {warrant_code}, 標的: {underlying_name}, 單元格內容: {cell_texts}")
-            
-            # 從單元格文本中提取數值資料
-            for text in cell_texts:
-                if not text or text == '|':
-                    continue
-                
-                # 權證類型
-                if text in ['認購', '認售']:
-                    warrant_type = text
-                # 價格（小數點，通常小於100）
-                elif self._is_price_like(text) and close_price == 0.0:
-                    close_price = self._safe_float(text)
-                # 漲跌（可能為負數）
-                elif self._is_change_like(text) and change_amount == 0.0:
-                    change_amount = self._safe_float(text)
-                # 百分比
-                elif '%' in text and change_percent == 0.0:
-                    change_percent = self._safe_float(text.replace('%', ''))
-                # 成交量（大數字，有逗號）
-                elif self._is_volume_like(text) and volume == 0:
-                    volume = self._safe_int(text.replace(',', ''))
-                # 隱含波動率（百分比，通常10-200之間）
-                elif self._is_implied_vol_like(text) and implied_vol == 0.0:
-                    implied_vol = self._safe_float(text.replace('%', ''))
-            
-            # 驗證必要欄位
-            if not warrant_type or warrant_type not in ['認購', '認售']:
-                warrant_type = "認購"  # 預設值
-            
-            return {
+            warrant_data = {
                 'ranking': ranking,
-                'warrant_code': warrant_code,
-                'warrant_name': warrant_name,
-                'underlying_name': underlying_name,
-                'warrant_type': warrant_type,
-                'close_price': close_price,
-                'change_amount': change_amount,
-                'change_percent': abs(change_percent),
-                'volume': volume,
-                'implied_volatility': implied_vol,
                 'page_number': page_num,
                 'update_date': datetime.now().strftime('%Y-%m-%d'),
-                'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'warrant_code': '',
+                'warrant_name': '',
+                'underlying_name': '',
+                'warrant_type': '',
+                'close_price': 0.0,
+                'change_amount': 0.0,
+                'change_percent': 0.0,
+                'volume': 0,
+                'implied_volatility': 0.0
             }
+
+            # 提取權證代碼和名稱 (第二欄)
+            warrant_link = cells[1].find('a', href=re.compile(r"Link2Stk\('AQ")))
+            if warrant_link:
+                href = warrant_link.get('href', '')
+                code_match = re.search(r"'AQ([A-Z0-9]+)'", href)
+                if code_match:
+                    warrant_data['warrant_code'] = code_match.group(1)
+                full_name = warrant_link.get_text(strip=True)
+                warrant_data['warrant_name'] = full_name.replace(warrant_data['warrant_code'], '').strip()
+
+            # 提取標的名稱 (第三欄)
+            underlying_script = cells[2].find('script')
+            if underlying_script:
+                script_content = underlying_script.string
+                underlying_match = re.search(r"GenLink2stk\('AS[A-Z0-9]+','([^']+)'\)", script_content)
+                if underlying_match:
+                    warrant_data['underlying_name'] = underlying_match.group(1)
+            else: #備用方案
+                underlying_link = cells[2].find('a', href=re.compile(r"Link2Stk\('AS")))
+                if underlying_link:
+                     warrant_data['underlying_name'] = underlying_link.get_text(strip=True)
+
+            # 提取其他數值
+            warrant_data['warrant_type'] = cells[3].get_text(strip=True)
+            warrant_data['close_price'] = self._safe_float(cells[4].get_text(strip=True))
+            warrant_data['change_amount'] = self._safe_float(cells[5].get_text(strip=True))
+            warrant_data['change_percent'] = self._safe_float(cells[6].get_text(strip=True).replace('%',''))
+            warrant_data['volume'] = self._safe_int(cells[7].get_text(strip=True))
+            warrant_data['implied_volatility'] = self._safe_float(cells[8].get_text(strip=True).replace('%',''))
+
+            if not warrant_data.get('warrant_code'):
+                return None
+
+            return warrant_data
             
         except Exception as e:
-            logger.warning(f"解析權證行失敗: {e}")
+            logger.warning(f"解析權證行失敗: {e}, cells: {cells}")
             return None
     
     def _extract_from_page_content(self, content, page_num):
