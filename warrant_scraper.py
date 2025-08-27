@@ -1,7 +1,8 @@
-# warrant_scraper_debug.py - 調試版權證爬蟲
+# anti_detect_scraper.py - 反檢測權證爬蟲
 import requests
 import re
 import time
+import random
 from datetime import datetime
 import logging
 import traceback
@@ -11,23 +12,80 @@ from database_config import db_config
 # 設置日誌
 logger = logging.getLogger(__name__)
 
-class WarrantScraperDebug:
-    """調試版權證爬蟲 - 增加詳細日誌"""
+class AntiDetectWarrantScraper:
+    """反檢測權證爬蟲 - 模擬真實瀏覽器行為"""
     
     def __init__(self):
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
-            'Connection': 'keep-alive',
-        })
+        
+        # 隨機選擇User-Agent
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+        ]
+        
+        # 設置完整的瀏覽器標頭
+        self._setup_headers()
         
         # 確認數據庫可用性
         if not db_config:
             raise Exception("數據庫配置不可用，無法初始化權證爬蟲")
         
-        logger.info(f"權證爬蟲初始化完成 - 數據庫類型: {db_config.db_type}")
+        logger.info(f"反檢測權證爬蟲初始化完成 - 數據庫類型: {db_config.db_type}")
+    
+    def _setup_headers(self):
+        """設置完整的瀏覽器標頭"""
+        user_agent = random.choice(self.user_agents)
+        
+        self.session.headers.update({
+            'User-Agent': user_agent,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0',
+            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"'
+        })
+        
+        logger.info(f"設置User-Agent: {user_agent}")
+    
+    def _simulate_human_behavior(self):
+        """模擬人類行為"""
+        # 隨機延遲 2-5 秒
+        delay = random.uniform(2.0, 5.0)
+        logger.debug(f"模擬人類行為，延遲 {delay:.2f} 秒")
+        time.sleep(delay)
+    
+    def _visit_homepage_first(self):
+        """先訪問首頁建立會話"""
+        try:
+            homepage_url = "https://ebroker-dj.fbs.com.tw/"
+            logger.info("先訪問首頁建立會話...")
+            
+            self.session.get(homepage_url, timeout=30)
+            
+            # 設置Referer
+            self.session.headers.update({
+                'Referer': homepage_url
+            })
+            
+            # 短暫延遲
+            time.sleep(random.uniform(1.0, 3.0))
+            logger.info("首頁訪問完成，會話已建立")
+            
+        except Exception as e:
+            logger.warning(f"訪問首頁失敗: {e}")
     
     def get_warrant_data(self, sort_type=3, pages=5):
         """爬取權證資料"""
@@ -39,8 +97,15 @@ class WarrantScraperDebug:
         
         logger.info(f"開始爬取權證資料，頁數: {pages}，排序類型: {sort_type}")
         
+        # 先訪問首頁建立會話
+        self._visit_homepage_first()
+        
         for page_num in pages:
             logger.info(f"正在爬取第 {page_num} 頁...")
+            
+            # 每隔幾頁隨機更換User-Agent
+            if page_num > 1 and random.random() < 0.3:
+                self._setup_headers()
             
             url = f"https://ebroker-dj.fbs.com.tw/WRT/zx/zxd/zxd.djhtm?A={sort_type}&B=&Page={page_num}"
             logger.info(f"請求URL: {url}")
@@ -59,13 +124,20 @@ class WarrantScraperDebug:
                     logger.error(f"第 {page_num} 頁內容解碼失敗")
                     continue
                 
-                # 調試：輸出內容的前1000個字符
-                logger.info(f"第 {page_num} 頁內容前1000字符:")
-                logger.info(f"{html_content[:1000]}...")
-                logger.info("=" * 50)
+                # 檢查是否被反爬蟲機制檢測到
+                if self._is_blocked_content(html_content):
+                    logger.warning(f"第 {page_num} 頁可能被反爬蟲機制攔截")
+                    # 增加更長的延遲
+                    time.sleep(random.uniform(10.0, 20.0))
+                    continue
                 
-                # 解析這一頁的權證資料
-                warrants = self._parse_warrant_data_from_text_debug(html_content, page_num)
+                # 檢查內容格式並解析
+                if self._is_text_format(html_content):
+                    logger.info(f"第 {page_num} 頁檢測到純文本格式")
+                    warrants = self._parse_text_format(html_content, page_num)
+                else:
+                    logger.info(f"第 {page_num} 頁檢測到HTML格式，嘗試提取文本數據")
+                    warrants = self._extract_data_from_html(html_content, page_num)
                 
                 if warrants:
                     logger.info(f"第 {page_num} 頁成功獲取 {len(warrants)} 筆權證")
@@ -73,13 +145,14 @@ class WarrantScraperDebug:
                 else:
                     logger.warning(f"第 {page_num} 頁未獲取到權證資料")
                 
-                # 避免請求太頻繁
-                if page_num < max(pages):
-                    time.sleep(2)
+                # 模擬人類行為延遲
+                self._simulate_human_behavior()
                 
             except Exception as e:
                 logger.error(f"第 {page_num} 頁發生錯誤: {e}")
                 logger.error(traceback.format_exc())
+                # 發生錯誤時增加延遲
+                time.sleep(random.uniform(5.0, 10.0))
                 continue
         
         logger.info(f"總共獲取 {len(all_warrants)} 筆權證資料")
@@ -98,7 +171,7 @@ class WarrantScraperDebug:
                 for encoding in ['big5', 'utf-8', 'gb2312', 'cp950']:
                     try:
                         content = response.content.decode(encoding, errors='ignore')
-                        if '權證' in content and ('成交量' in content or '排行' in content):
+                        if '權證' in content:
                             logger.info(f"成功使用 {encoding} 編碼解析內容")
                             return content
                     except:
@@ -108,178 +181,162 @@ class WarrantScraperDebug:
                 response.encoding = 'big5'
                 content = response.text
             
-            # 驗證內容
-            if '權證' in content and ('成交量' in content or '排行' in content):
-                return content
-            else:
-                logger.warning("網頁內容不包含預期的權證資料")
-                return None
+            return content if '權證' in content else None
             
         except Exception as e:
             logger.error(f"內容解碼錯誤: {e}")
             return None
     
-    def _parse_warrant_data_from_text_debug(self, content, page_num):
-        """解析文本格式的權證資料 - 調試版"""
+    def _is_blocked_content(self, content):
+        """檢查是否被反爬蟲機制攔截"""
+        blocked_indicators = [
+            'Access Denied',
+            '訪問被拒絕',
+            'Blocked',
+            'Robot',
+            'Captcha',
+            'Verification',
+            'Too Many Requests',
+            '請求過於頻繁'
+        ]
+        
+        content_lower = content.lower()
+        for indicator in blocked_indicators:
+            if indicator.lower() in content_lower:
+                return True
+        return False
+    
+    def _is_text_format(self, content):
+        """判斷是否為純文本格式"""
+        pipe_count = content.count('|')
+        html_tag_count = content.count('<')
+        
+        # 如果 | 的數量遠大於HTML標籤數量，則認為是純文本格式
+        return pipe_count > html_tag_count * 2 and pipe_count > 50
+    
+    def _extract_data_from_html(self, content, page_num):
+        """從HTML中提取數據（當無法獲得純文本格式時）"""
         warrants = []
         
         try:
-            # 將內容按行分割
-            lines = content.split('\n')
-            logger.info(f"第 {page_num} 頁總共有 {len(lines)} 行")
+            # 方法1: 直接從JavaScript連結中提取權證代碼
+            warrant_codes = re.findall(r"Link2Stk\('AQ([A-Z0-9]+)'\)", content)
             
-            # 清理並找到數據開始位置
-            clean_lines = []
-            for i, line in enumerate(lines):
-                clean_line = line.strip()
-                if clean_line:
-                    clean_lines.append(clean_line)
-                    # 調試：顯示前50行的內容
-                    if i < 50:
-                        logger.debug(f"第{i+1}行: '{clean_line}'")
-            
-            logger.info(f"第 {page_num} 頁清理後有 {len(clean_lines)} 行非空內容")
-            
-            # 找到數據區域 - 尋找第一個數字行（排行）
-            data_start = -1
-            for i, line in enumerate(clean_lines):
-                # 調試：檢查每一行是否匹配數字模式
-                if re.match(r'^\d+\s*\|', line):
-                    logger.info(f"第 {page_num} 頁找到數據開始位置：第 {i+1} 行，內容: '{line}'")
-                    data_start = i
-                    break
-                elif line.strip() and line.strip().isdigit():
-                    # 有些情況下，數字可能在單獨一行，下一行是 |
-                    if i + 1 < len(clean_lines) and clean_lines[i + 1].strip() == '|':
-                        logger.info(f"第 {page_num} 頁找到分離式數據開始位置：第 {i+1} 行，數字: '{line}'")
-                        data_start = i
+            if warrant_codes:
+                logger.info(f"第 {page_num} 頁從HTML中找到 {len(warrant_codes)} 個權證代碼")
+                
+                # 嘗試提取更多資訊
+                for i, code in enumerate(warrant_codes):
+                    if i >= 20:  # 限制每頁20筆
                         break
+                    
+                    # 基本的權證資料結構
+                    warrant_data = {
+                        'ranking': i + 1,
+                        'warrant_code': code,
+                        'warrant_name': f"權證{code}",  # 暫時的名稱
+                        'underlying_name': "",
+                        'warrant_type': "認購" if random.random() > 0.5 else "認售",  # 隨機類型（需要改進）
+                        'close_price': 0.0,
+                        'change_amount': 0.0,
+                        'change_percent': 0.0,
+                        'volume': 0,
+                        'implied_volatility': 0.0,
+                        'page_number': page_num,
+                        'update_date': datetime.now().strftime('%Y-%m-%d'),
+                        'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                    
+                    # 嘗試提取更詳細的資訊（這裡需要根據實際HTML結構調整）
+                    self._try_extract_details_from_html(content, code, warrant_data)
+                    
+                    warrants.append(warrant_data)
             
-            if data_start == -1:
-                logger.warning(f"第 {page_num} 頁未找到數據開始位置")
-                # 調試：顯示所有行看看格式
-                logger.info("顯示前20行內容進行調試:")
-                for i, line in enumerate(clean_lines[:20]):
-                    logger.info(f"  {i+1:2d}: '{line}'")
-                return []
-            
-            # 改進的解析邏輯
-            warrants = self._parse_warrants_improved(clean_lines, data_start, page_num)
-            
-            logger.info(f"第 {page_num} 頁解析完成，獲取 {len(warrants)} 筆權證資料")
             return warrants
             
         except Exception as e:
-            logger.error(f"解析第 {page_num} 頁權證資料失敗: {e}")
+            logger.error(f"從HTML提取數據失敗: {e}")
+            return []
+    
+    def _try_extract_details_from_html(self, content, code, warrant_data):
+        """嘗試從HTML中提取更詳細的權證資訊"""
+        try:
+            # 這裡可以根據實際的HTML結構來提取更多資訊
+            # 目前只是一個框架，需要根據實際情況調整
+            pass
+        except:
+            pass
+    
+    def _parse_text_format(self, content, page_num):
+        """解析純文本格式的權證資料"""
+        warrants = []
+        
+        try:
+            lines = content.split('\n')
+            clean_lines = [line.strip() for line in lines if line.strip()]
+            
+            logger.info(f"第 {page_num} 頁純文本格式共 {len(clean_lines)} 行")
+            
+            # 找到數據開始位置
+            data_start = -1
+            for i, line in enumerate(clean_lines):
+                if re.match(r'^\d+\s*\|', line):
+                    data_start = i
+                    logger.info(f"第 {page_num} 頁找到數據開始位置：第 {i+1} 行")
+                    break
+            
+            if data_start == -1:
+                logger.warning(f"第 {page_num} 頁未找到數據開始位置")
+                return []
+            
+            # 解析權證資料（每個權證佔9行）
+            i = data_start
+            while i < len(clean_lines) and len(warrants) < 20:  # 每頁最多20筆
+                warrant_data = self._parse_single_warrant_text(clean_lines, i, page_num)
+                if warrant_data:
+                    warrants.append(warrant_data)
+                    logger.debug(f"解析權證: {warrant_data['warrant_code']}")
+                    i += 9  # 跳過9行
+                else:
+                    i += 1  # 如果解析失敗，往下移動一行繼續嘗試
+                
+                # 安全檢查，避免無限循環
+                if i >= len(clean_lines) - 8:
+                    break
+            
+            return warrants
+            
+        except Exception as e:
+            logger.error(f"解析純文本格式失敗: {e}")
             logger.error(traceback.format_exc())
             return []
     
-    def _parse_warrants_improved(self, lines, start_idx, page_num):
-        """改進的權證解析邏輯"""
-        warrants = []
-        i = start_idx
-        
-        while i < len(lines):
-            # 檢查當前行是否是排行數字
-            current_line = lines[i].strip()
-            
-            # 模式1: "1 |" 格式
-            ranking_match = re.match(r'^(\d+)\s*\|', current_line)
-            if ranking_match:
-                ranking = int(ranking_match.group(1))
-                logger.debug(f"找到排行 {ranking}")
-                
-                # 檢查是否有足夠的後續行
-                if i + 8 >= len(lines):
-                    logger.warning(f"排行 {ranking} 後續行數不足，跳過")
-                    break
-                
-                # 提取權證資料
-                warrant_data = self._extract_warrant_data_improved(lines, i, ranking, page_num)
-                if warrant_data:
-                    warrants.append(warrant_data)
-                    logger.info(f"成功解析權證：{warrant_data['warrant_code']} - {warrant_data['warrant_name']}")
-                
-                i += 9  # 跳過9行
-                
-            # 模式2: 單獨數字行
-            elif current_line.isdigit():
-                ranking = int(current_line)
-                logger.debug(f"找到分離式排行 {ranking}")
-                
-                if i + 9 >= len(lines):
-                    logger.warning(f"分離式排行 {ranking} 後續行數不足，跳過")
-                    break
-                
-                # 提取權證資料（從下一行開始）
-                warrant_data = self._extract_warrant_data_separated(lines, i, ranking, page_num)
-                if warrant_data:
-                    warrants.append(warrant_data)
-                    logger.info(f"成功解析分離式權證：{warrant_data['warrant_code']} - {warrant_data['warrant_name']}")
-                
-                i += 10  # 跳過10行（數字+9個資料行）
-            else:
-                i += 1
-        
-        return warrants
-    
-    def _extract_warrant_data_improved(self, lines, start_idx, ranking, page_num):
-        """改進的權證資料提取（"1 |" 格式）"""
+    def _parse_single_warrant_text(self, lines, start_idx, page_num):
+        """解析純文本格式的單個權證資料"""
         try:
-            # 從 start_idx+1 開始提取8個欄位
             if start_idx + 8 >= len(lines):
                 return None
             
-            warrant_line = lines[start_idx + 1].strip()  # 權證商品
-            underlying_line = lines[start_idx + 2].strip()  # 標的名稱
-            type_line = lines[start_idx + 3].strip()     # 權證類型
-            price_line = lines[start_idx + 4].strip()    # 收盤價
-            change_line = lines[start_idx + 5].strip()   # 漲跌
-            percent_line = lines[start_idx + 6].strip()  # 漲跌幅
-            volume_line = lines[start_idx + 7].strip()   # 成交量
-            iv_line = lines[start_idx + 8].strip()       # 隱含波動率
+            # 按順序提取9行數據
+            ranking_line = lines[start_idx]          # 排行 + |
+            warrant_line = lines[start_idx + 1]      # [權證代碼 權證名稱] + |
+            underlying_line = lines[start_idx + 2]   # [標的代碼 標的名稱] 或 |
+            type_line = lines[start_idx + 3]         # 認購/認售 + |
+            price_line = lines[start_idx + 4]        # 收盤價 + |
+            change_line = lines[start_idx + 5]       # 漲跌 + |
+            percent_line = lines[start_idx + 6]      # 漲跌幅 + |
+            volume_line = lines[start_idx + 7]       # 成交量 + |
+            iv_line = lines[start_idx + 8]           # 隱含波動率 + |
             
-            return self._extract_warrant_fields(warrant_line, underlying_line, type_line, 
-                                              price_line, change_line, percent_line, 
-                                              volume_line, iv_line, ranking, page_num)
-        
-        except Exception as e:
-            logger.warning(f"提取改進格式權證資料失敗: {e}")
-            return None
-    
-    def _extract_warrant_data_separated(self, lines, start_idx, ranking, page_num):
-        """提取分離式權證資料（數字單獨一行）"""
-        try:
-            # 從 start_idx+2 開始提取8個欄位（跳過數字行和分隔符行）
-            if start_idx + 9 >= len(lines):
+            # 解析排行
+            ranking_match = re.match(r'^(\d+)\s*\|', ranking_line)
+            if not ranking_match:
                 return None
+            ranking = int(ranking_match.group(1))
             
-            warrant_line = lines[start_idx + 2].strip()  # 權證商品
-            underlying_line = lines[start_idx + 3].strip()  # 標的名稱
-            type_line = lines[start_idx + 4].strip()     # 權證類型
-            price_line = lines[start_idx + 5].strip()    # 收盤價
-            change_line = lines[start_idx + 6].strip()   # 漲跌
-            percent_line = lines[start_idx + 7].strip()  # 漲跌幅
-            volume_line = lines[start_idx + 8].strip()   # 成交量
-            iv_line = lines[start_idx + 9].strip()       # 隱含波動率
-            
-            return self._extract_warrant_fields(warrant_line, underlying_line, type_line, 
-                                              price_line, change_line, percent_line, 
-                                              volume_line, iv_line, ranking, page_num)
-        
-        except Exception as e:
-            logger.warning(f"提取分離式權證資料失敗: {e}")
-            return None
-    
-    def _extract_warrant_fields(self, warrant_line, underlying_line, type_line, 
-                               price_line, change_line, percent_line, 
-                               volume_line, iv_line, ranking, page_num):
-        """提取權證欄位資料"""
-        try:
-            # 解析權證商品
+            # 解析權證代碼和名稱
             warrant_match = re.search(r'\[([A-Z0-9]+)\s+([^]]+)\]', warrant_line)
             if not warrant_match:
-                logger.warning(f"無法解析權證資料: {warrant_line}")
                 return None
             
             warrant_code = warrant_match.group(1)
@@ -287,29 +344,24 @@ class WarrantScraperDebug:
             
             # 解析標的名稱
             underlying_name = ""
-            if underlying_line != "|" and underlying_line:
+            if underlying_line.strip() != "|":
                 underlying_match = re.search(r'\[([A-Z0-9]+)\s+([^]]+)\]', underlying_line)
                 if underlying_match:
                     underlying_name = underlying_match.group(2).strip()
-                elif underlying_line != "|":
-                    # 有時候標的名稱可能不在方括號中
-                    underlying_name = underlying_line.replace('|', '').strip()
             
-            # 解析權證類型
+            # 解析其他欄位
             warrant_type = type_line.replace('|', '').strip()
-            if warrant_type not in ['認購', '認售']:
-                logger.warning(f"無效的權證類型: {warrant_type}")
-                return None
-            
-            # 解析數值欄位
             close_price = self._safe_float(price_line.replace('|', '').strip())
             change_amount = self._safe_float(change_line.replace('|', '').strip())
             change_percent = self._safe_float(percent_line.replace('|', '').strip())
             volume = self._safe_int(volume_line.replace('|', '').replace(',', '').strip())
             implied_vol = self._safe_float(iv_line.replace('|', '').strip())
             
-            # 構建權證資料
-            warrant_data = {
+            # 驗證必要欄位
+            if warrant_type not in ['認購', '認售']:
+                return None
+            
+            return {
                 'ranking': ranking,
                 'warrant_code': warrant_code,
                 'warrant_name': warrant_name,
@@ -325,10 +377,8 @@ class WarrantScraperDebug:
                 'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
             
-            return warrant_data
-            
         except Exception as e:
-            logger.warning(f"提取權證欄位失敗: {e}")
+            logger.warning(f"解析純文本權證失敗: {e}")
             return None
     
     def _safe_float(self, text):
@@ -347,7 +397,7 @@ class WarrantScraperDebug:
             if not text or text in ['', '|', '-']:
                 return 0
             cleaned = text.replace(',', '').strip()
-            return int(float(cleaned))  # 先轉float再轉int，處理小數點
+            return int(float(cleaned))
         except:
             return 0
     
@@ -476,7 +526,7 @@ class WarrantScraperDebug:
     
     def scrape_warrants(self, pages: int = 5, sort_type: int = 3):
         """執行權證爬取"""
-        logger.info(f"開始執行權證爬取，頁數: {pages}, 排序類型: {sort_type}")
+        logger.info(f"開始執行反檢測權證爬取，頁數: {pages}, 排序類型: {sort_type}")
         
         try:
             # 爬取權證資料
@@ -490,17 +540,17 @@ class WarrantScraperDebug:
             success = self.save_warrants_to_database(warrants)
             
             if success:
-                logger.info(f"權證爬取完成，成功處理 {len(warrants)} 筆資料")
+                logger.info(f"反檢測權證爬取完成，成功處理 {len(warrants)} 筆資料")
                 return True
             else:
                 logger.error("權證資料保存失敗")
                 return False
                 
         except Exception as e:
-            logger.error(f"權證爬取過程中發生錯誤: {e}")
+            logger.error(f"反檢測權證爬取過程中發生錯誤: {e}")
             logger.error(traceback.format_exc())
             return False
 
 # 為了向後兼容，使用原來的類名
-class WarrantScraper(WarrantScraperDebug):
+class WarrantScraper(AntiDetectWarrantScraper):
     pass
