@@ -49,3 +49,4 @@ pydantic==2.5.0
 
 # JSON 處理優化 (可選)
 # orjson==3.9.10
+beautifulsoup4
