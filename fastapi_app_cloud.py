@@ -272,6 +272,50 @@ class RateLimiter:
 session_manager = SessionManager()
 rate_limiter = RateLimiter()
 
+
+def apply_holdings_sorting(holdings: List[Dict], sort_by: str) -> List[Dict]:
+    """應用持股排序"""
+    if not holdings:
+        return holdings
+    
+    if sort_by == 'weight_desc':
+        return sorted(holdings, key=lambda x: x.get('weight', 0), reverse=True)
+    elif sort_by == 'weight_asc':
+        return sorted(holdings, key=lambda x: x.get('weight', 0), reverse=False)
+    elif sort_by == 'shares_desc':
+        return sorted(holdings, key=lambda x: x.get('shares', 0), reverse=True)
+    elif sort_by == 'shares_asc':
+        return sorted(holdings, key=lambda x: x.get('shares', 0), reverse=False)
+    elif sort_by == 'stock_code_asc':
+        return sorted(holdings, key=lambda x: x.get('stock_code', ''), reverse=False)
+    elif sort_by == 'stock_name_asc':
+        return sorted(holdings, key=lambda x: x.get('stock_name', ''), reverse=False)
+    else:
+        # 默認按權重降序
+        return sorted(holdings, key=lambda x: x.get('weight', 0), reverse=True)
+
+def get_sort_icon(current_sort: str, field: str) -> str:
+    """獲取排序圖標"""
+    if current_sort == f"{field}_desc":
+        return "↓"
+    elif current_sort == f"{field}_asc":
+        return "↑"
+    return ""
+
+def get_sort_display(sort_by: str) -> str:
+    """獲取排序顯示名稱"""
+    sort_names = {
+        'weight_desc': '權重降序',
+        'weight_asc': '權重升序',
+        'shares_desc': '股數降序',
+        'shares_asc': '股數升序',
+        'stock_code_asc': '股票代碼升序',
+        'stock_name_asc': '股票名稱升序'
+    }
+    return sort_names.get(sort_by, sort_by)
+
+
+
 # ============ 安全檢查函數（保持原有代碼不變）============
 def verify_password(input_password: str) -> bool:
     """驗證密碼"""
