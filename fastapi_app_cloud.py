@@ -1674,11 +1674,6 @@ async def shutdown_event():
     except Exception as e:
         logger.error(f"關閉應用程序時出錯: {e}")
 
-# ============ 主程式入口 ============
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=settings.port)
-
 # ============ 主要頁面路由 ============
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
@@ -1926,3 +1921,50 @@ async def holdings_page(
         logger.error(f"每日持股頁面錯誤: {e}")
         logger.error(f"錯誤詳情: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+# ============ 登入/登出路由 ============
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, error: str = Query(None)):
+    """顯示登入頁面"""
+    if not templates:
+        raise HTTPException(status_code=503, detail="Templates unavailable")
+    return templates.TemplateResponse("login.html", {"request": request, "error": error})
+
+@app.post("/login")
+async def login_process(request: Request, password: str = Form(...)):
+    """處理登入請求"""
+    if not verify_password(password):
+        logger.warning(f"❌ 密碼錯誤，登入失敗，IP: {session_manager.get_client_ip(request)}")
+        return RedirectResponse(url="/login?error=Invalid password", status_code=302)
+    
+    session_id = session_manager.create_session(request)
+    response = RedirectResponse(url="/", status_code=302)
+    response.set_cookie(
+        key="session_id",
+        value=session_id,
+        max_age=settings.session_timeout,
+        httponly=True,
+        secure=settings.environment == "production",
+        samesite="lax"
+    )
+    return response
+
+@app.get("/logout")
+async def logout(request: Request):
+    """處理登出請求"""
+    session_id = request.cookies.get("session_id")
+    if session_id and session_id in session_manager.sessions:
+        del session_manager.sessions[session_id]
+        logger.info(f"🧹 用戶登出，會話已刪除: {session_id[:8]}...")
+    
+    response = RedirectResponse(url="/login", status_code=302)
+    response.delete_cookie("session_id")
+    return response
+
+# ============ 主程式入口 ============
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=settings.port)
