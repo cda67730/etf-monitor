@@ -43,6 +43,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+logging.basicConfig(
+    level=logging.DEBUG,  # 改為 DEBUG 級別以顯示更多資訊
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+
 # ============ 數據庫初始化 ============
 logger.info("開始初始化數據庫配置...")
 
