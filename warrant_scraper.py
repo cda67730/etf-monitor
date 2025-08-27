@@ -307,8 +307,22 @@ class WarrantScraper:
         
         if not date:
             date = datetime.now().strftime('%Y-%m-%d')
+
+        # 去重處理
+        unique_warrants = {}
+        for warrant in warrants:
+            warrant_code = warrant.get('warrant_code')
+            if warrant_code and warrant_code not in unique_warrants:
+                unique_warrants[warrant_code] = warrant
         
-        logger.info(f"開始保存 {len(warrants)} 筆權證資料到資料庫 (日期: {date})...")
+        deduplicated_warrants = list(unique_warrants.values())
+        original_count = len(warrants)
+        deduplicated_count = len(deduplicated_warrants)
+
+        if original_count > deduplicated_count:
+            logger.info(f"去重處理完成，原始資料: {original_count} 筆, 去重後: {deduplicated_count} 筆")
+
+        logger.info(f"開始保存 {deduplicated_count} 筆權證資料到資料庫 (日期: {date})...")
         
         # 根據數據庫類型使用正確的參數佔位符
         if db_config.db_type == "postgresql":
@@ -341,7 +355,7 @@ class WarrantScraper:
                     '''
                     
                     warrants_inserted = 0
-                    for warrant in warrants:
+                    for warrant in deduplicated_warrants:
                         cursor.execute(insert_query, (
                             warrant['ranking'], warrant['warrant_code'], warrant['warrant_name'],
                             warrant['underlying_name'], warrant['warrant_type'],
