@@ -167,7 +167,7 @@ class WarrantScraperHTMLComplete:
             }
 
             # 提取權證代碼和名稱 (第二欄)
-            warrant_link = cells[1].find('a', href=re.compile(r"Link2Stk\('AQ")))
+            warrant_link = cells[1].find('a', href=re.compile(r"Link2Stk\('AQ"))
             if warrant_link:
                 href = warrant_link.get('href', '')
                 code_match = re.search(r"'AQ([A-Z0-9]+)'", href)
@@ -184,7 +184,7 @@ class WarrantScraperHTMLComplete:
                 if underlying_match:
                     warrant_data['underlying_name'] = underlying_match.group(1)
             else: #備用方案
-                underlying_link = cells[2].find('a', href=re.compile(r"Link2Stk\('AS")))
+                underlying_link = cells[2].find('a', href=re.compile(r"Link2Stk\('AS"))
                 if underlying_link:
                      warrant_data['underlying_name'] = underlying_link.get_text(strip=True)
 
