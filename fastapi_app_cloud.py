@@ -43,13 +43,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-logging.basicConfig(
-    level=logging.DEBUG,  # 改為 DEBUG 級別以顯示更多資訊
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
-)
-
 # ============ 數據庫初始化 ============
 logger.info("開始初始化數據庫配置...")
 
@@ -135,7 +128,8 @@ try:
         logger.info("權證爬蟲初始化成功")
     
 except Exception as e:
-    logger.warning(f"爬蟲初始化失敗: {e}")
+    logger.error(f"爬蟲初始化失敗: {e}")
+    logger.error(traceback.format_exc())
     scraper = None
     warrant_scraper = None
 
@@ -1338,6 +1332,10 @@ async def warrant_ranking_page(
         
         # 獲取標的統計資料（上半部）
         underlying_summary = db_query.get_underlying_summary(date, summary_sort)
+
+        # 將標的統計資料分成認購和認售
+        call_summary = [s for s in underlying_summary if s['warrant_type'] == '認購']
+        put_summary = [s for s in underlying_summary if s['warrant_type'] == '認售']
         
         # 獲取權證詳細資料（下半部）
         warrant_ranking = db_query.get_warrant_ranking(date, warrant_type, sort_by)
@@ -1350,7 +1348,8 @@ async def warrant_ranking_page(
             "sort_by": sort_by,
             "summary_sort": summary_sort,
             "stats": stats,
-            "underlying_summary": underlying_summary,
+            "call_summary": call_summary,
+            "put_summary": put_summary,
             "warrant_ranking": warrant_ranking,
             "database_type": db_config.db_type if db_config else "unavailable"
         })
