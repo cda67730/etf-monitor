@@ -138,57 +138,80 @@
 {% endif %}
 
 <!-- 上半部：標的統計 -->
-{% if underlying_summary %}
+{% if call_summary or put_summary %}
 <div class="row mt-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5><i class="fas fa-layer-group"></i> 標的股票統計 <small class="text-muted">（認購/認售分開統計）</small></h5>
+    <!-- 認購 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h5><i class="fas fa-arrow-up"></i> 認購標的成交量排行 (前10)</h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover">
+                    <table class="table table-striped table-hover table-sm mb-0">
                         <thead class="table-dark">
                             <tr>
-                                <th>標的名稱</th>
-                                <th>權證類型</th>
-                                <th>權證數量</th>
+                                <th>標的</th>
                                 <th>總成交量</th>
-                                <th>平均隱含波動率</th>
-                                <th>總跌幅金額</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for summary in underlying_summary %}
+                            {% for summary in call_summary %}
                             <tr>
-                                <td>
-                                    <strong>{{ summary.underlying_name }}</strong>
-                                </td>
-                                <td>
-                                    {% if summary.warrant_type == "認購" %}
-                                        <span class="badge bg-success">{{ summary.warrant_type }}</span>
-                                    {% else %}
-                                        <span class="badge bg-danger">{{ summary.warrant_type }}</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <span class="fw-bold">{{ summary.warrant_count }}</span> 檔
-                                </td>
-                                <td>
-                                    {{ "{:,}".format(summary.total_volume) }} 張
-                                </td>
-                                <td>
-                                    {{ "%.2f"|format(summary.avg_implied_volatility) }}%
-                                </td>
-                                <td>
-                                    {{ "%.2f"|format(summary.total_change_amount) }}
-                                </td>
+                                <td><strong>{{ summary.underlying_name }}</strong></td>
+                                <td>{{ "{:,}".format(summary.total_volume) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="2" class="text-center">無認購資料</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- 認售 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-danger text-white">
+                <h5><i class="fas fa-arrow-down"></i> 認售標的成交量排行 (前10)</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover table-sm mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>標的</th>
+                                <th>總成交量</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for summary in put_summary %}
+                            <tr>
+                                <td><strong>{{ summary.underlying_name }}</strong></td>
+                                <td>{{ "{:,}".format(summary.total_volume) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="2" class="text-center">無認售資料</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i> 
+            目前沒有可顯示的標的統計資料，請先執行權證爬蟲。
         </div>
     </div>
 </div>
