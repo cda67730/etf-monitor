@@ -422,7 +422,7 @@ class WarrantScraper:
             logger.error(f"更新標的統計資料失敗: {e}")
             raise e
     
-    def scrape_warrants(self, pages: int = 3, sort_type: int = 2):
+    def scrape_warrants(self, pages: int = 5, sort_type: int = 3):
         """執行權證爬取"""
         logger.info(f"開始執行權證爬取，頁數: {pages}, 排序類型: {sort_type}")
         
