@@ -1007,7 +1007,7 @@ class DatabaseQuery:
             logger.error(f"獲取權證排行資料錯誤: {e}")
             return []
     
-    def get_underlying_summary(self, date: str = None, sort_by: str = 'warrant_count'):
+    def get_underlying_summary(self, date: str = None, sort_by: str = 'warrant_count', limit: int = None):
         """獲取標的統計資料 - 認購認售分開統計，修正版本"""
         if not self.db_available:
             return []
@@ -1026,7 +1026,8 @@ class DatabaseQuery:
             }
             
             order_clause = f"ORDER BY {sort_options.get(sort_by, 'warrant_count DESC, total_volume DESC')}"
-            
+            limit_clause = f"LIMIT {limit}" if limit else ""
+
             query = f'''
                 SELECT 
                     underlying_name,
@@ -1039,6 +1040,7 @@ class DatabaseQuery:
                 FROM warrant_underlying_summary 
                 WHERE {where_condition}
                 {order_clause}
+                {limit_clause}
             '''
             
             results = self.execute_query(query, params, fetch="all")
@@ -1311,7 +1313,7 @@ async def warrant_ranking_page(
     date: str = Query(None), 
     warrant_type: str = Query(None),
     sort_by: str = Query("ranking"),
-    summary_sort: str = Query("warrant_count")
+    summary_sort: str = Query("total_volume")
 ):
     """權證排行頁面"""
     if not await check_authentication(request):
@@ -1331,11 +1333,11 @@ async def warrant_ranking_page(
         stats = db_query.get_warrant_statistics(date)
         
         # 獲取標的統計資料（上半部）
-        underlying_summary = db_query.get_underlying_summary(date, summary_sort)
+        underlying_summary = db_query.get_underlying_summary(date, sort_by=summary_sort, limit=100)
 
         # 將標的統計資料分成認購和認售
-        call_summary = [s for s in underlying_summary if s['warrant_type'] == '認購']
-        put_summary = [s for s in underlying_summary if s['warrant_type'] == '認售']
+        call_summary = sorted([s for s in underlying_summary if s['warrant_type'] == '認購'], key=lambda x: x['total_volume'], reverse=True)[:10]
+        put_summary = sorted([s for s in underlying_summary if s['warrant_type'] == '認售'], key=lambda x: x['total_volume'], reverse=True)[:10]
         
         # 獲取權證詳細資料（下半部）
         warrant_ranking = db_query.get_warrant_ranking(date, warrant_type, sort_by)
