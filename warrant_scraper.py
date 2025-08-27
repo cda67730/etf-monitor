@@ -29,12 +29,12 @@ class WarrantScraper:
         
         logger.info(f"權證爬蟲初始化完成 - 數據庫類型: {db_config.db_type}")
     
-    def get_warrant_data(self, sort_type=2, pages=None):
+    def get_warrant_data(self, sort_type=3, pages=None):
         """
         獲取權證資料
         
         Args:
-            sort_type (int): 排序類型 (2=跌幅排行)
+            sort_type (int): 排序類型 (3=成交量排行)
             pages (int or list): 頁數
             
         Returns:
