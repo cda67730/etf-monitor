@@ -1,0 +1,274 @@
+<!-- templates/warrant_volume_comparison.html - 使用 base.html 的統一風格版本 -->
+{% extends "base.html" %}
+
+{% block title %}權證標的成交量比對分析 - ETF持股明細監控系統{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-chart-bar"></i> 權證標的成交量比對分析</h2>
+                <div class="text-muted">
+                    當日成交量 vs 前五日平均成交量
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- 控制面板 -->
+                <div class="filter-section">
+                    <div class="row align-items-center">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="dateSelect" class="form-label">分析日期：</label>
+                                <select id="dateSelect" class="form-select" onchange="changeDate()">
+                                    <option value="">請選擇日期</option>
+                                    {% for date in available_dates %}
+                                    <option value="{{ date }}" {% if date == selected_date %}selected{% endif %}>
+                                        {{ date }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <button onclick="refreshData()" class="btn btn-primary">
+                                <i class="fas fa-sync-alt"></i> 重新整理
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            {% if analysis_info.analysis_date %}
+                            <div class="d-flex gap-3">
+                                <div class="badge bg-info fs-6">
+                                    分析日期: {{ analysis_info.analysis_date }}
+                                </div>
+                                <div class="badge bg-secondary fs-6">
+                                    前{{ analysis_info.previous_dates_count or 0 }}日平均
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if analysis_info.analysis_date %}
+                <!-- 統計摘要 -->
+                <div class="row mb-4">
+                    <div class="col-md-3 col-6">
+                        <div class="card stat-card border-success">
+                            <div class="card-body text-center">
+                                <h3 class="text-success">{{ analysis_info.call_underlyings_count or 0 }}</h3>
+                                <p class="card-text">認購標的</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="card stat-card border-danger">
+                            <div class="card-body text-center">
+                                <h3 class="text-danger">{{ analysis_info.put_underlyings_count or 0 }}</h3>
+                                <p class="card-text">認售標的</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="card stat-card border-warning">
+                            <div class="card-body text-center">
+                                <h3 class="text-warning">{{ analysis_info.call_high_change_count or 0 }}</h3>
+                                <p class="card-text">認購異常量(>70%)</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="card stat-card border-warning">
+                            <div class="card-body text-center">
+                                <h3 class="text-warning">{{ analysis_info.put_high_change_count or 0 }}</h3>
+                                <p class="card-text">認售異常量(>70%)</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 資料表格 -->
+                <div class="row">
+                    <!-- 認購權證表格 -->
+                    <div class="col-lg-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-success text-white">
+                                <h5 class="mb-0"><i class="fas fa-arrow-up"></i> 認購權證 ({{ call_data|length }} 個標的)</h5>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0 table-sm">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th onclick="sortTable('call', 'underlying_name')" style="cursor: pointer;" title="點擊排序">
+                                                    標的名稱 <i class="fas fa-sort text-muted"></i>
+                                                </th>
+                                                <th onclick="sortTable('call', 'current_volume')" style="cursor: pointer;" title="點擊排序" class="text-end">
+                                                    當日量 <i class="fas fa-sort text-muted"></i>
+                                                </th>
+                                                <th onclick="sortTable('call', 'five_day_avg')" style="cursor: pointer;" title="點擊排序" class="text-end">
+                                                    五日均量 <i class="fas fa-sort text-muted"></i>
+                                                </th>
+                                                <th onclick="sortTable('call', 'volume_diff')" style="cursor: pointer;" title="點擊排序" class="text-end">
+                                                    差異張數 <i class="fas fa-sort text-muted"></i>
+                                                </th>
+                                                <th onclick="sortTable('call', 'change_percent')" style="cursor: pointer;" title="點擊排序" class="text-end">
+                                                    差異% <i class="fas fa-sort text-muted"></i>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for item in call_data %}
+                                            <tr {% if item.is_high_change %}class="table-danger"{% endif %}>
+                                                <td class="fw-semibold text-truncate" style="max-width: 120px;" title="{{ item.underlying_name }}">
+                                                    {{ item.underlying_name }}
+                                                </td>
+                                                <td class="text-end">{{ "{:,}".format(item.current_volume) }}</td>
+                                                <td class="text-end">{{ "{:,}".format(item.five_day_avg) }}</td>
+                                                <td class="text-end">
+                                                    <span class="{% if item.volume_diff > 0 %}text-success fw-bold{% elif item.volume_diff < 0 %}text-danger fw-bold{% endif %}">
+                                                        {{ "{:+,}".format(item.volume_diff) }}
+                                                    </span>
+                                                </td>
+                                                <td class="text-end">
+                                                    <span class="{% if item.change_percent > 0 %}text-success fw-bold{% elif item.change_percent < 0 %}text-danger fw-bold{% endif %}">
+                                                        {{ "{:+.1f}%".format(item.change_percent) }}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                            {% else %}
+                                            <tr>
+                                                <td colspan="5" class="text-center text-muted py-4">
+                                                    暫無認購權證資料
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 認售權證表格 -->
+                    <div class="col-lg-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-danger text-white">
+                                <h5 class="mb-0"><i class="fas fa-arrow-down"></i> 認售權證 ({{ put_data|length }} 個標的)</h5>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0 table-sm">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th onclick="sortTable('put', 'underlying_name')" style="cursor: pointer;" title="點擊排序">
+                                                    標的名稱 <i class="fas fa-sort text-muted"></i>
+                                                </th>
+                                                <th onclick="sortTable('put', 'current_volume')" style="cursor: pointer;" title="點擊排序" class="text-end">
+                                                    當日量 <i class="fas fa-sort text-muted"></i>
+                                                </th>
+                                                <th onclick="sortTable('put', 'five_day_avg')" style="cursor: pointer;" title="點擊排序" class="text-end">
+                                                    五日均量 <i class="fas fa-sort text-muted"></i>
+                                                </th>
+                                                <th onclick="sortTable('put', 'volume_diff')" style="cursor: pointer;" title="點擊排序" class="text-end">
+                                                    差異張數 <i class="fas fa-sort text-muted"></i>
+                                                </th>
+                                                <th onclick="sortTable('put', 'change_percent')" style="cursor: pointer;" title="點擊排序" class="text-end">
+                                                    差異% <i class="fas fa-sort text-muted"></i>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for item in put_data %}
+                                            <tr {% if item.is_high_change %}class="table-danger"{% endif %}>
+                                                <td class="fw-semibold text-truncate" style="max-width: 120px;" title="{{ item.underlying_name }}">
+                                                    {{ item.underlying_name }}
+                                                </td>
+                                                <td class="text-end">{{ "{:,}".format(item.current_volume) }}</td>
+                                                <td class="text-end">{{ "{:,}".format(item.five_day_avg) }}</td>
+                                                <td class="text-end">
+                                                    <span class="{% if item.volume_diff > 0 %}text-success fw-bold{% elif item.volume_diff < 0 %}text-danger fw-bold{% endif %}">
+                                                        {{ "{:+,}".format(item.volume_diff) }}
+                                                    </span>
+                                                </td>
+                                                <td class="text-end">
+                                                    <span class="{% if item.change_percent > 0 %}text-success fw-bold{% elif item.change_percent < 0 %}text-danger fw-bold{% endif %}">
+                                                        {{ "{:+.1f}%".format(item.change_percent) }}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                            {% else %}
+                                            <tr>
+                                                <td colspan="5" class="text-center text-muted py-4">
+                                                    暫無認售權證資料
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 說明 -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-info-circle"></i> 說明：</h6>
+                            <ul class="mb-0">
+                                <li><span class="badge bg-danger">紅色背景</span> 表示差異超過70%的異常變動</li>
+                                <li><span class="text-success fw-bold">綠色數字</span> 表示成交量增加</li>
+                                <li><span class="text-danger fw-bold">紅色數字</span> 表示成交量減少</li>
+                                <li>點擊表格標題可進行排序，預設按變動量大小排列</li>
+                                <li>數據比對前{{ analysis_info.previous_dates_count or 0 }}個交易日的平均成交量</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                {% else %}
+                <div class="alert alert-warning text-center">
+                    <h4><i class="fas fa-exclamation-triangle"></i> 請選擇分析日期</h4>
+                    <p class="mb-0">選擇日期後將顯示該日權證標的成交量與前五日平均的比對分析</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function changeDate() {
+    const selectedDate = document.getElementById('dateSelect').value;
+    if (selectedDate) {
+        window.location.href = `/warrant-volume-comparison?date=${selectedDate}`;
+    }
+}
+
+function refreshData() {
+    window.location.reload();
+}
+
+function sortTable(tableType, sortBy) {
+    const currentUrl = new URL(window.location);
+    const currentSort = currentUrl.searchParams.get(`${tableType}_sort`) || 'volume_diff';
+    const currentAsc = currentUrl.searchParams.get(`${tableType}_asc`) === 'true';
+    
+    // 如果點擊同一欄位，切換升降序；否則使用默認排序
+    let newAsc = false;
+    if (currentSort === sortBy) {
+        newAsc = !currentAsc;
+    } else {
+        // 對於數值欄位，默認降序；文字欄位默認升序
+        newAsc = sortBy === 'underlying_name';
+    }
+    
+    currentUrl.searchParams.set(`${tableType}_sort`, sortBy);
+    currentUrl.searchParams.set(`${tableType}_asc`, newAsc);
+    
+    window.location.href = currentUrl.toString();
+}
+</script>
+{% endblock %}
