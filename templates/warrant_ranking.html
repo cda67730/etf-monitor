@@ -1,0 +1,367 @@
+<!-- templates/warrant_ranking.html -->
+{% extends "base.html" %}
+
+{% block title %}權證排行 - ETF持股明細監控系統{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-certificate"></i> 權證排行</h2>
+                <div class="d-flex gap-2">
+                    <button id="manual-scrape-warrants-btn" class="btn btn-warning btn-sm" onclick="manualScrapeWarrants()">
+                        <i class="fas fa-download"></i> 手動爬取權證
+                    </button>
+                    <span class="text-muted">資料庫：{{ database_type|upper }}</span>
+                </div>
+            </div>
+            
+            <!-- 篩選區塊 -->
+            <div class="filter-section">
+                <form method="get" class="row g-3">
+                    <div class="col-md-3">
+                        <label for="date" class="form-label">選擇日期</label>
+                        <select name="date" id="date" class="form-select">
+                            <option value="">選擇日期</option>
+                            {% for date in warrant_dates %}
+                            <option value="{{ date }}" {% if date == selected_date %}selected{% endif %}>
+                                {{ date }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label for="warrant_type" class="form-label">權證類型</label>
+                        <select name="warrant_type" id="warrant_type" class="form-select">
+                            <option value="">全部</option>
+                            <option value="認購" {% if selected_warrant_type == "認購" %}selected{% endif %}>認購</option>
+                            <option value="認售" {% if selected_warrant_type == "認售" %}selected{% endif %}>認售</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label for="sort_by" class="form-label">權證排序</label>
+                        <select name="sort_by" id="sort_by" class="form-select">
+                            <option value="ranking" {% if sort_by == "ranking" %}selected{% endif %}>排行</option>
+                            <option value="change_percent_desc" {% if sort_by == "change_percent_desc" %}selected{% endif %}>跌幅(高→低)</option>
+                            <option value="volume_desc" {% if sort_by == "volume_desc" %}selected{% endif %}>成交量(高→低)</option>
+                            <option value="implied_volatility_desc" {% if sort_by == "implied_volatility_desc" %}selected{% endif %}>隱含波動率(高→低)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label for="summary_sort" class="form-label">標的排序</label>
+                        <select name="summary_sort" id="summary_sort" class="form-select">
+                            <option value="warrant_count" {% if summary_sort == "warrant_count" %}selected{% endif %}>權證數量</option>
+                            <option value="total_volume" {% if summary_sort == "total_volume" %}selected{% endif %}>總成交量</option>
+                            <option value="avg_implied_volatility" {% if summary_sort == "avg_implied_volatility" %}selected{% endif %}>平均隱含波動率</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-search"></i> 查詢
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 統計資訊卡片 -->
+{% if stats %}
+<div class="row mt-3" hidden>
+    <div class="col-md-2">
+        <div class="card stat-card border-info">
+            <div class="card-body">
+                <h6 class="card-title text-info">
+                    <i class="fas fa-list"></i> 總權證數
+                </h6>
+                <h4 class="text-info">{{ stats.total_warrants }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stat-card border-success">
+            <div class="card-body">
+                <h6 class="card-title text-success">
+                    <i class="fas fa-arrow-up"></i> 認購權證
+                </h6>
+                <h4 class="text-success">{{ stats.call_warrants }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stat-card border-danger">
+            <div class="card-body">
+                <h6 class="card-title text-danger">
+                    <i class="fas fa-arrow-down"></i> 認售權證
+                </h6>
+                <h4 class="text-danger">{{ stats.put_warrants }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stat-card border-primary">
+            <div class="card-body">
+                <h6 class="card-title text-primary">
+                    <i class="fas fa-building"></i> 標的股票
+                </h6>
+                <h4 class="text-primary">{{ stats.unique_underlyings }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stat-card border-warning">
+            <div class="card-body">
+                <h6 class="card-title text-warning">
+                    <i class="fas fa-chart-line"></i> 平均波動率
+                </h6>
+                <h4 class="text-warning">{{ stats.avg_implied_volatility }}%</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stat-card border-secondary">
+            <div class="card-body">
+                <h6 class="card-title text-secondary">
+                    <i class="fas fa-exchange-alt"></i> 總成交量
+                </h6>
+                <h4 class="text-secondary">{{ "{:,}".format(stats.total_volume) }}</h4>
+            </div>
+        </div>
+    </div>
+</div> 
+{% endif %}
+
+<!-- 上半部：標的統計 -->
+{% if call_summary or put_summary %}
+<div class="row mt-4">
+    <!-- 認購 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h5><i class="fas fa-arrow-up"></i> 認購標的成交量排行 (前10)</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover table-sm mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>標的</th>
+                                <th>總成交量</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for summary in call_summary %}
+                            <tr>
+                                <td><strong>{{ summary.underlying_name }}</strong></td>
+                                <td>{{ "{:,}".format(summary.total_volume) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="2" class="text-center">無認購資料</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 認售 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-danger text-white">
+                <h5><i class="fas fa-arrow-down"></i> 認售標的成交量排行 (前10)</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover table-sm mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>標的</th>
+                                <th>總成交量</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for summary in put_summary %}
+                            <tr>
+                                <td><strong>{{ summary.underlying_name }}</strong></td>
+                                <td>{{ "{:,}".format(summary.total_volume) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="2" class="text-center">無認售資料</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i> 
+            目前沒有可顯示的標的統計資料，請先執行權證爬蟲。
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 下半部：權證詳細排行 -->
+{% if warrant_ranking %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-trophy"></i> 權證詳細排行 <small class="text-muted">（共 {{ warrant_ranking|length }} 筆）</small></h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover table-sm">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>排行</th>
+                                <th>權證代碼</th>
+                                <th>權證名稱</th>
+                                <th>標的名稱</th>
+                                <th>類型</th>
+                                <th>收盤價</th>
+                                <th>漲跌</th>
+                                <th>跌幅%</th>
+                                <th>成交量</th>
+                                <th>隱含波動率</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for warrant in warrant_ranking %}
+                            <tr>
+                                <td>
+                                    {% if warrant.ranking <= 3 %}
+                                        <span class="badge bg-warning">{{ warrant.ranking }}</span>
+                                    {% else %}
+                                        {{ warrant.ranking }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <code class="text-primary">{{ warrant.warrant_code }}</code>
+                                </td>
+                                <td>
+                                    <small>{{ warrant.warrant_name }}</small>
+                                </td>
+                                <td>
+                                    {% if warrant.underlying_name %}
+                                        <small class="text-success">{{ warrant.underlying_name }}</small>
+                                    {% else %}
+                                        <small class="text-muted">未知</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if warrant.warrant_type == "認購" %}
+                                        <span class="badge bg-success">Call</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Put</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ "%.3f"|format(warrant.close_price) }}
+                                </td>
+                                <td>
+                                    {% if warrant.change_amount >= 0 %}
+                                        <span class="text-success">+{{ "%.3f"|format(warrant.change_amount) }}</span>
+                                    {% else %}
+                                        <span class="text-danger">{{ "%.3f"|format(warrant.change_amount) }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if warrant.change_percent > 5 %}
+                                        <span class="text-danger fw-bold">{{ "%.2f"|format(warrant.change_percent) }}%</span>
+                                    {% else %}
+                                        {{ "%.2f"|format(warrant.change_percent) }}%
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ "{:,}".format(warrant.volume) }}
+                                </td>
+                                <td>
+                                    {% if warrant.implied_volatility > 100 %}
+                                        <span class="text-warning fw-bold">{{ "%.2f"|format(warrant.implied_volatility) }}%</span>
+                                    {% else %}
+                                        {{ "%.2f"|format(warrant.implied_volatility) }}%
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> 
+            {% if selected_date %}
+                沒有找到 {{ selected_date }} 的權證資料，請選擇其他日期或手動爬取最新資料。
+            {% else %}
+                請選擇日期以查看權證排行資料。
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// 手動權證爬取功能
+async function manualScrapeWarrants() {
+    const button = document.getElementById('manual-scrape-warrants-btn');
+    if (!button) return;
+    
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 爬取中...';
+    button.disabled = true;
+
+    try {
+        const response = await fetch('/manual-scrape-warrants', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            alert('權證爬取成功！頁面將自動刷新。');
+            location.reload();
+        } else {
+            alert('權證爬取失敗：' + result.message);
+        }
+    } catch (error) {
+        alert('權證爬取失敗：' + error.message);
+    } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+// 自動提交表單當選項改變時
+document.addEventListener('DOMContentLoaded', function() {
+    const selects = document.querySelectorAll('select');
+    selects.forEach(select => {
+        select.addEventListener('change', function() {
+            // 延遲提交，讓用戶有時間進行多個選擇
+            setTimeout(() => {
+                this.form.submit();
+            }, 300);
+        });
+    });
+});
+</script>
+{% endblock %}

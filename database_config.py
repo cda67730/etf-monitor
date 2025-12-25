@@ -1,4 +1,4 @@
-# database_config_improved.py - 改進版本，增強調試和錯誤處理
+# database_config_improved.py - 改進版本，增強調試和錯誤處理，添加權證支持
 import os
 import sqlite3
 import psycopg2
@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 class DatabaseConfig:
-    """數據庫配置管理 - 改進版本"""
+    """數據庫配置管理 - 改進版本，添加權證支持"""
     
     def __init__(self):
         # 詳細記錄初始化過程
@@ -36,6 +36,8 @@ class DatabaseConfig:
         self.connection_status = "unknown"
         
         self._initialize_database()
+        # 初始化所有表格（包括權證表）
+        self._initialize_all_tables()
     
     def _get_database_url(self) -> str:
         """獲取數據庫 URL，檢查多個可能的環境變數"""
@@ -241,6 +243,134 @@ class DatabaseConfig:
             logger.info("✅ SQLite 連接測試成功")
         except Exception as e:
             logger.error(f"❌ SQLite 連接測試失敗: {e}")
+    
+    def _initialize_all_tables(self):
+        """初始化所有表格，包括 ETF 和權證表"""
+        try:
+            logger.info("開始初始化所有數據庫表格...")
+            
+            # 根據數據庫類型調整 SQL 語法
+            if self.db_type == "postgresql":
+                id_type = "SERIAL PRIMARY KEY"
+                timestamp_default = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            else:
+                id_type = "INTEGER PRIMARY KEY AUTOINCREMENT"
+                timestamp_default = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            
+            # ETF 相關表格
+            etf_tables = {
+                "etf_holdings": f'''
+                    CREATE TABLE IF NOT EXISTS etf_holdings (
+                        id {id_type},
+                        etf_code TEXT NOT NULL,
+                        stock_code TEXT NOT NULL,
+                        stock_name TEXT NOT NULL,
+                        weight REAL NOT NULL,
+                        shares INTEGER NOT NULL,
+                        unit TEXT DEFAULT '股',
+                        update_date TEXT NOT NULL,
+                        created_at {timestamp_default}
+                    )
+                ''',
+                "holdings_changes": f'''
+                    CREATE TABLE IF NOT EXISTS holdings_changes (
+                        id {id_type},
+                        etf_code TEXT NOT NULL,
+                        stock_code TEXT NOT NULL,
+                        stock_name TEXT NOT NULL,
+                        change_type TEXT NOT NULL,
+                        old_shares INTEGER DEFAULT 0,
+                        new_shares INTEGER DEFAULT 0,
+                        old_weight REAL DEFAULT 0.0,
+                        new_weight REAL DEFAULT 0.0,
+                        change_date TEXT NOT NULL,
+                        created_at {timestamp_default}
+                    )
+                '''
+            }
+            
+            # 權證相關表格
+            warrant_tables = {
+                "warrant_data": f'''
+                    CREATE TABLE IF NOT EXISTS warrant_data (
+                        id {id_type},
+                        ranking INTEGER NOT NULL,
+                        warrant_code TEXT NOT NULL,
+                        warrant_name TEXT NOT NULL,
+                        underlying_name TEXT,
+                        warrant_type TEXT NOT NULL,
+                        close_price REAL NOT NULL,
+                        change_amount REAL NOT NULL,
+                        change_percent REAL NOT NULL,
+                        volume INTEGER NOT NULL,
+                        implied_volatility REAL NOT NULL,
+                        page_number INTEGER DEFAULT 1,
+                        update_date TEXT NOT NULL,
+                        created_at {timestamp_default}
+                    )
+                ''',
+                "warrant_underlying_summary": f'''
+                    CREATE TABLE IF NOT EXISTS warrant_underlying_summary (
+                        id {id_type},
+                        underlying_name TEXT NOT NULL,
+                        warrant_type TEXT NOT NULL,
+                        warrant_count INTEGER NOT NULL,
+                        total_volume INTEGER NOT NULL,
+                        avg_implied_volatility REAL NOT NULL,
+                        total_change_amount REAL NOT NULL,
+                        update_date TEXT NOT NULL,
+                        created_at {timestamp_default}
+                    )
+                '''
+            }
+            
+            # 創建所有表格
+            all_tables = {**etf_tables, **warrant_tables}
+            
+            for table_name, create_sql in all_tables.items():
+                try:
+                    self.execute_query(create_sql)
+                    logger.info(f"✅ 表格 {table_name} 創建成功")
+                except Exception as e:
+                    logger.error(f"❌ 創建表格 {table_name} 失敗: {e}")
+            
+            # 創建索引
+            indexes = [
+                # ETF 索引
+                'CREATE INDEX IF NOT EXISTS idx_etf_date ON etf_holdings(etf_code, update_date)',
+                'CREATE INDEX IF NOT EXISTS idx_changes_date ON holdings_changes(etf_code, change_date)',
+                
+                # 權證索引
+                'CREATE INDEX IF NOT EXISTS idx_warrant_date ON warrant_data(update_date)',
+                'CREATE INDEX IF NOT EXISTS idx_warrant_type ON warrant_data(warrant_type, update_date)',
+                'CREATE INDEX IF NOT EXISTS idx_warrant_underlying ON warrant_data(underlying_name, update_date)',
+                'CREATE INDEX IF NOT EXISTS idx_underlying_summary ON warrant_underlying_summary(underlying_name, warrant_type, update_date)'
+            ]
+            
+            # PostgreSQL 特有的唯一索引
+            if self.db_type == "postgresql":
+                try:
+                    unique_indexes = [
+                        'CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_holding ON etf_holdings(etf_code, stock_code, update_date)',
+                        'CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_warrant ON warrant_data(warrant_code, update_date)',
+                        'CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_summary ON warrant_underlying_summary(underlying_name, warrant_type, update_date)'
+                    ]
+                    indexes.extend(unique_indexes)
+                except Exception as e:
+                    logger.warning(f"創建唯一索引失敗（可能已存在）: {e}")
+            
+            for index_sql in indexes:
+                try:
+                    self.execute_query(index_sql)
+                    logger.debug(f"索引創建成功: {index_sql[:50]}...")
+                except Exception as e:
+                    logger.warning(f"創建索引失敗（可能已存在）: {e}")
+            
+            logger.info(f"✅ 所有數據庫表格和索引初始化完成 - 使用 {self.db_type}")
+            
+        except Exception as e:
+            logger.error(f"❌ 數據庫表格初始化錯誤: {e}")
+            raise e
     
     @contextmanager
     def get_connection(self):
