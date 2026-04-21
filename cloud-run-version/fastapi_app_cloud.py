@@ -641,8 +641,6 @@ class DatabaseQuery:
                     SUM(shares) as total_shares
                 FROM etf_holdings
                 WHERE update_date = {ph}
-                  AND stock_code NOT LIKE '%\_%' ESCAPE '\'
-                  AND stock_code NOT LIKE '%TX'
                 GROUP BY stock_code
                 HAVING COUNT(DISTINCT etf_code) > 1
                 ORDER BY total_shares DESC
