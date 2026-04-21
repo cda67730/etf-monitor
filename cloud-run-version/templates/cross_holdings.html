@@ -279,30 +279,37 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function sortTable(column, type, direction) {
         const tbody = table.querySelector('tbody');
-        const rows = Array.from(tbody.querySelectorAll('tr'));
-        
-        rows.sort((a, b) => {
-            let aVal = a.dataset[column];
-            let bVal = b.dataset[column];
-            
-            // 處理數字類型
+        const allRows = Array.from(tbody.querySelectorAll('tr'));
+
+        // 將主列和其對應詳情列組成 pair
+        const pairs = [];
+        for (let i = 0; i < allRows.length; i += 2) {
+            pairs.push([allRows[i], allRows[i + 1]]);
+        }
+
+        pairs.sort((a, b) => {
+            let aVal = a[0].dataset[column];
+            let bVal = b[0].dataset[column];
+
             if (type === 'number') {
                 aVal = parseFloat(aVal) || 0;
                 bVal = parseFloat(bVal) || 0;
             } else {
-                aVal = aVal.toString().toLowerCase();
-                bVal = bVal.toString().toLowerCase();
+                aVal = (aVal || '').toLowerCase();
+                bVal = (bVal || '').toLowerCase();
             }
-            
+
             let result = 0;
             if (aVal < bVal) result = -1;
             if (aVal > bVal) result = 1;
-            
             return direction === 'desc' ? -result : result;
         });
-        
-        // 重新插入排序後的行
-        rows.forEach(row => tbody.appendChild(row));
+
+        // 以 pair 為單位重新插入，保持主列和詳情列緊鄰
+        pairs.forEach(pair => {
+            tbody.appendChild(pair[0]);
+            tbody.appendChild(pair[1]);
+        });
     }
     
     // 默認按總持股數降序排序
