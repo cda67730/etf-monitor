@@ -79,7 +79,7 @@
                 </thead>
                 <tbody>
                     {% for holding in cross_holdings %}
-                    <!-- 主列 -->
+                    {% if holding.stock_code and holding.stock_code.strip() and holding.stock_name and holding.stock_name.strip() %}
                     <tr data-stock_code="{{ holding.stock_code }}"
                         data-stock_name="{{ holding.stock_name }}"
                         data-etf_count="{{ holding.etf_count }}"
@@ -157,6 +157,7 @@
                             </div>
                         </td>
                     </tr>
+                    {% endif %}
                     {% endfor %}
                 </tbody>
             </table>
