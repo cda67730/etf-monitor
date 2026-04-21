@@ -641,6 +641,8 @@ class DatabaseQuery:
                     SUM(shares) as total_shares
                 FROM etf_holdings
                 WHERE update_date = {ph}
+                  AND stock_name IS NOT NULL
+                  AND stock_name != ''
                 GROUP BY stock_code
                 HAVING COUNT(DISTINCT etf_code) > 1
                 ORDER BY total_shares DESC
