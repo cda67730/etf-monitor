@@ -642,7 +642,8 @@ class DatabaseQuery:
                 FROM etf_holdings
                 WHERE update_date = {ph}
                   AND stock_name IS NOT NULL
-                  AND stock_name != ''
+                  AND TRIM(stock_name) != ''
+                  AND TRIM(stock_code) != ''
                 GROUP BY stock_code
                 HAVING COUNT(DISTINCT etf_code) > 1
                 ORDER BY total_shares DESC
@@ -668,6 +669,7 @@ class DatabaseQuery:
                         SELECT etf_code, shares, weight
                         FROM etf_holdings
                         WHERE stock_code = {ph} AND update_date = {ph}
+                          AND stock_name IS NOT NULL AND TRIM(stock_name) != ''
                         ORDER BY shares DESC
                     '''
                     details = self.execute_query(detail_query, (stock_code, date), fetch="all")
