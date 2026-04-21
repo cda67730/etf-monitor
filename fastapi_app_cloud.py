@@ -14,7 +14,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from warrant_volume_analyzer import warrant_volume_analyzer
+try:
+    from warrant_volume_analyzer import warrant_volume_analyzer
+except ImportError:
+    warrant_volume_analyzer = None
 
 
 # ============ 環境配置 ============
