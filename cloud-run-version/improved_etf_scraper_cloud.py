@@ -285,7 +285,11 @@ class ETFHoldingsScraper:
                     unit = str(row[5]).strip()
                     
                     # 跳過空白或無效記錄
-                    if not stock_code or not stock_name:
+                    if not stock_code.strip() or not stock_name.strip():
+                        continue
+
+                    # 台灣股票代號必須以數字開頭（過濾「合計」、「現金」等中文標籤行）
+                    if not stock_code[0].isdigit():
                         continue
 
                     # 跳過非股票代號：現金/保證金/_NTD 類、期貨(TX)、債券(B開頭5碼以上)、純數字6碼以上(可轉債/ETF受益憑證)

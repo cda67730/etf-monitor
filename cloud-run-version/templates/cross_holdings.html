@@ -79,6 +79,7 @@
                 </thead>
                 <tbody>
                     {% for holding in cross_holdings %}
+                    <!-- 主列 -->
                     <tr data-stock_code="{{ holding.stock_code }}"
                         data-stock_name="{{ holding.stock_name }}"
                         data-etf_count="{{ holding.etf_count }}"
@@ -121,43 +122,43 @@
                                     {% endif %}
                                 {% endfor %}
                             </div>
-                            
-                            <!-- 詳細信息按鈕 -->
-                            <button class="btn btn-sm btn-outline-info mt-1" type="button" 
-                                    data-bs-toggle="collapse" 
-                                    data-bs-target="#detail-{{ holding.stock_code }}" 
+                            <button class="btn btn-sm btn-outline-info mt-1" type="button"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#detail-{{ holding.stock_code }}"
                                     aria-expanded="false">
                                 <i class="fas fa-info-circle"></i> 詳情
                             </button>
-                            
-                            <!-- 展開的詳細信息 -->
-                            <div class="collapse mt-2" id="detail-{{ holding.stock_code }}">
-                                <div class="card card-body bg-light">
-                                    <small>
-                                        <table class="table table-sm table-borderless mb-0">
-                                            <thead>
-                                                <tr class="text-muted">
-                                                    <th>ETF</th>
-                                                    <th>ETF名稱</th>
-                                                    <th>現持股</th>
-                                                    <th>前持股</th>
-                                                    <th>權重</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {% for etf in holding.etf_details %}
-                                                <tr>
-                                                    <td>{{ etf.etf_code }}</td>
-                                                    <td><small>{{ etf.etf_name }}</small></td>
-                                                    <td>{{ "{:,}".format(etf.shares) }}</td>
-                                                    <td>{{ "{:,}".format(etf.previous_shares) }}</td>
-                                                    <td>{{ "%.2f"|format(etf.weight) }}%</td>
-                                                </tr>
-                                                {% endfor %}
-                                            </tbody>
-                                        </table>
-                                    </small>
+                        </td>
+                    </tr>
+                    <!-- 詳情展開列（獨立一列，不混入主列） -->
+                    <tr class="detail-row">
+                        <td colspan="7" class="p-0">
+                            <div class="collapse" id="detail-{{ holding.stock_code }}">
+                                <div class="detail-header">
+                                    <strong>{{ holding.stock_code }}</strong> {{ holding.stock_name }} — 各ETF持股明細
                                 </div>
+                                <table class="table table-sm mb-0 detail-table">
+                                    <thead>
+                                        <tr class="text-muted">
+                                            <th>ETF</th>
+                                            <th>ETF名稱</th>
+                                            <th>現持股</th>
+                                            <th>前持股</th>
+                                            <th>權重</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for etf in holding.etf_details %}
+                                        <tr>
+                                            <td>{{ etf.etf_code }}</td>
+                                            <td>{{ etf.etf_name }}</td>
+                                            <td>{{ "{:,}".format(etf.shares) }}</td>
+                                            <td>{{ "{:,}".format(etf.previous_shares) }}</td>
+                                            <td>{{ "%.2f"|format(etf.weight) }}%</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
                             </div>
                         </td>
                     </tr>
@@ -226,6 +227,20 @@
 }
 .sortable.sort-desc i:before {
     content: "\f0dd";
+}
+.detail-row td {
+    border-top: none !important;
+    padding: 0 !important;
+}
+.detail-header {
+    background-color: #d1ecf1;
+    padding: 6px 12px;
+    font-size: 0.875rem;
+    border-bottom: 1px solid #bee5eb;
+}
+.detail-table {
+    margin-bottom: 0;
+    background-color: #f8f9fa;
 }
 </style>
 
