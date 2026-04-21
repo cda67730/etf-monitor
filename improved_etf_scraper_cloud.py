@@ -33,7 +33,13 @@ class ETFHoldingsScraper:
         self.dtno = '59449513'
         
         # 支援的ETF代碼清單
-        self.etf_codes = ['00980A', '00981A', '00982A', '00983A', '00984A', '00985A']
+        self.etf_codes = [
+            '00980A', '00981A', '00982A', '00983A', '00984A', '00985A',
+            '00991A', '00992A', '00993A', '00994A', '00995A',
+        ]
+
+        # 股票名稱正規化 registry：stock_code -> 目前已知最佳名稱
+        self._name_registry: dict = {}
         
         # 🔧 關鍵修復：驗證數據庫可用性
         if not db_config:
@@ -42,6 +48,21 @@ class ETFHoldingsScraper:
         logger.info(f"✅ 初始化爬蟲，數據庫類型: {db_config.db_type}")
         self.init_database()
     
+    def _normalize_stock_name(self, stock_code: str, stock_name: str) -> str:
+        """同一股票代號，跨ETF統一使用最完整的中文名稱。
+        規則：去除星號；括號後的截斷內容直接裁掉；較長者勝。"""
+        clean = stock_name.replace('*', '').strip()
+        for bracket in ('(', '（'):
+            if bracket in clean:
+                clean = clean[:clean.index(bracket)].strip()
+        if not self._name_registry.get(stock_code):
+            self._name_registry[stock_code] = clean
+        else:
+            existing = self._name_registry[stock_code]
+            if len(clean) > len(existing):
+                self._name_registry[stock_code] = clean
+        return self._name_registry[stock_code]
+
     def parse_date_from_api(self, date_str):
         """🔧 關鍵修復：解析API返回的日期"""
         try:
@@ -258,7 +279,7 @@ class ETFHoldingsScraper:
                     
                     date_str = str(row[0]).strip()
                     stock_code = str(row[1]).strip()
-                    stock_name = str(row[2]).strip()
+                    stock_name = self._normalize_stock_name(str(row[1]).strip(), str(row[2]).strip())
                     weight_str = str(row[3]).strip()
                     shares_str = str(row[4]).strip()
                     unit = str(row[5]).strip()
