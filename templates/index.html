@@ -46,8 +46,11 @@
                                 <h5 class="card-title text-warning">
                                     <i class="fas fa-sync-alt"></i> 手動更新
                                 </h5>
-                                <button id="manual-scrape-btn" class="btn btn-warning" onclick="manualScrape()">
-                                    <i class="fas fa-download"></i> 立即爬取
+                                <button id="manual-scrape-btn" class="btn btn-warning btn-sm" onclick="manualScrape()">
+                                    <i class="fas fa-download"></i> 爬取ETF
+                                </button>
+                                <button id="manual-scrape-warrants-btn" class="btn btn-info btn-sm mt-1" onclick="manualScrapeWarrants()">
+                                    <i class="fas fa-certificate"></i> 爬取權證
                                 </button>
                                 <p class="card-text mt-2">自動執行：週一至週五 21:30</p>
                             </div>
@@ -76,6 +79,14 @@
                                     <i class="fas fa-minus-circle text-danger"></i> 每日減持表
                                     <small class="text-muted d-block">監控減少或移除的持股</small>
                                 </a>
+                                <a href="/warrant-ranking" class="list-group-item list-group-item-action">
+                                    <i class="fas fa-certificate text-info"></i> 權證排行榜
+                                    <small class="text-muted d-block">查看權證表現和隱含波動率</small>
+                                </a>
+                                <a href="/cross-holdings" class="list-group-item list-group-item-action">
+                                    <i class="fas fa-layer-group text-warning"></i> 跨ETF重複持股
+                                    <small class="text-muted d-block">分析多個ETF共同持有的股票</small>
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -87,7 +98,8 @@
                             <div class="card-body">
                                 <ul class="list-unstyled">
                                     <li><i class="fas fa-check text-success"></i> 自動爬取：週一至週五 21:30</li>
-                                    <li><i class="fas fa-check text-success"></i> 監控5檔ETF持股變化</li>
+                                    <li><i class="fas fa-check text-success"></i> 監控6檔主動式ETF持股變化</li>
+                                    <li><i class="fas fa-check text-success"></i> 權證排行和隱含波動率分析</li>
                                     <li><i class="fas fa-check text-success"></i> 支援歷史數據查詢</li>
                                     <li><i class="fas fa-check text-success"></i> 即時持股變化分析</li>
                                 </ul>
@@ -99,5 +111,33 @@
         </div>
     </div>
 </div>
-{% endblock %}
 
+<script>
+// 權證爬取功能
+async function manualScrapeWarrants() {
+    const button = document.getElementById('manual-scrape-warrants-btn');
+    if (!button) return;
+    
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 爬取中...';
+    button.disabled = true;
+
+    try {
+        const response = await fetch('/manual-scrape-warrants', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            alert('權證爬取成功！頁面將自動刷新。');
+            location.reload();
+        } else {
+            alert('權證爬取失敗：' + result.message);
+        }
+    } catch (error) {
+        alert('權證爬取失敗：' + error.message);
+    } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+</script>
+{% endblock %}
