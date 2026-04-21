@@ -671,13 +671,17 @@ class DatabaseQuery:
                     details = self.execute_query(detail_query, (stock_code, date), fetch="all")
                     
                     prev_query = f'''
-                        SELECT etf_code, shares
-                        FROM etf_holdings
-                        WHERE stock_code = {ph} AND update_date < {ph}
-                        ORDER BY update_date DESC
-                        LIMIT 10
+                        SELECT h.etf_code, h.shares
+                        FROM etf_holdings h
+                        INNER JOIN (
+                            SELECT etf_code, MAX(update_date) as max_date
+                            FROM etf_holdings
+                            WHERE stock_code = {ph} AND update_date < {ph}
+                            GROUP BY etf_code
+                        ) latest ON h.etf_code = latest.etf_code AND h.update_date = latest.max_date
+                        WHERE h.stock_code = {ph}
                     '''
-                    prev_holdings = self.execute_query(prev_query, (stock_code, date), fetch="all")
+                    prev_holdings = self.execute_query(prev_query, (stock_code, date, stock_code), fetch="all")
                     prev_dict = {h['etf_code']: h['shares'] for h in prev_holdings} if prev_holdings else {}
                     
                     etf_details = []
