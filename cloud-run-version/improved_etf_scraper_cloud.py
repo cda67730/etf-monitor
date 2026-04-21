@@ -287,6 +287,12 @@ class ETFHoldingsScraper:
                     # 跳過空白或無效記錄
                     if not stock_code or not stock_name:
                         continue
+
+                    # 跳過非股票代號：現金/保證金/_NTD 類、期貨(TX)、債券(B開頭6碼以上)
+                    if ('_' in stock_code
+                            or stock_code.endswith('TX')
+                            or (stock_code.startswith('B') and len(stock_code) >= 5)):
+                        continue
                     
                     # 處理權重 - 直接轉換為浮點數
                     try:
