@@ -726,8 +726,15 @@ class DatabaseQuery:
                         'etf_details': etf_details
                     })
             
+            # 最終防呆：確保所有回傳項目都有合法股票代碼和名稱
+            cross_holdings = [
+                h for h in cross_holdings
+                if h['stock_code'] and h['stock_code'].strip()
+                and h['stock_name'] and h['stock_name'].strip()
+                and h['stock_code'][0].isdigit()
+            ]
             return cross_holdings
-            
+
         except Exception as e:
             logger.error(f"獲取跨ETF重複持股錯誤: {e}")
             return []

@@ -109,52 +109,20 @@
                         <td>
                             <div class="d-flex flex-wrap gap-1">
                                 {% for etf in holding.etf_details %}
-                                    {% if etf.change != 0 %}
-                                        {% if etf.change > 0 %}
-                                        <span class="badge etf-badge-increase text-white" title="增加 {{ '{:,}'.format(etf.change) }} 股">
-                                            {{ etf.etf_code }} +{{ "{:,}".format(etf.change) }}
-                                        </span>
-                                        {% elif etf.change < 0 %}
-                                        <span class="badge etf-badge-decrease text-white" title="減少 {{ '{:,}'.format(etf.change|abs) }} 股">
-                                            {{ etf.etf_code }} {{ "{:,}".format(etf.change) }}
-                                        </span>
-                                        {% endif %}
+                                    {% if etf.change > 0 %}
+                                    <span class="badge etf-badge-increase text-white" title="{{ etf.etf_name }}">
+                                        {{ etf.etf_code }} +{{ "{:,}".format(etf.change) }}
+                                    </span>
+                                    {% elif etf.change < 0 %}
+                                    <span class="badge etf-badge-decrease text-white" title="{{ etf.etf_name }}">
+                                        {{ etf.etf_code }} {{ "{:,}".format(etf.change) }}
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-secondary text-white" title="{{ etf.etf_name }}">
+                                        {{ etf.etf_code }}
+                                    </span>
                                     {% endif %}
                                 {% endfor %}
-                            </div>
-                            <button class="btn btn-sm btn-outline-info mt-1" type="button"
-                                    data-bs-toggle="collapse"
-                                    data-bs-target="#detail-{{ holding.stock_code }}"
-                                    aria-expanded="false">
-                                <i class="fas fa-info-circle"></i> 詳情
-                            </button>
-                            <div class="collapse mt-2" id="detail-{{ holding.stock_code }}">
-                                <div class="detail-header">
-                                    <strong>{{ holding.stock_code }}</strong> {{ holding.stock_name }}
-                                </div>
-                                <table class="table table-sm mb-0 detail-table">
-                                    <thead>
-                                        <tr class="text-muted">
-                                            <th>ETF</th>
-                                            <th>ETF名稱</th>
-                                            <th>現持股</th>
-                                            <th>前持股</th>
-                                            <th>權重</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for etf in holding.etf_details %}
-                                        <tr>
-                                            <td>{{ etf.etf_code }}</td>
-                                            <td>{{ etf.etf_name }}</td>
-                                            <td>{{ "{:,}".format(etf.shares) }}</td>
-                                            <td>{{ "{:,}".format(etf.previous_shares) }}</td>
-                                            <td>{{ "%.2f"|format(etf.weight) }}%</td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
                         </td>
                     </tr>
                     {% endif %}
