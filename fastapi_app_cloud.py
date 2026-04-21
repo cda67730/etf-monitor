@@ -126,16 +126,17 @@ try:
     scraper = ETFHoldingsScraper() if db_config else None
     if scraper:
         logger.info("ETF爬蟲初始化成功")
-    
-    # 新增：初始化權證爬蟲
+except Exception as e:
+    logger.error(f"ETF爬蟲初始化失敗: {e}")
+    logger.error(traceback.format_exc())
+    scraper = None
+
+try:
     warrant_scraper = WarrantScraper() if db_config else None
     if warrant_scraper:
         logger.info("權證爬蟲初始化成功")
-    
 except Exception as e:
-    logger.error(f"爬蟲初始化失敗: {e}")
-    logger.error(traceback.format_exc())
-    scraper = None
+    logger.error(f"權證爬蟲初始化失敗: {e}")
     warrant_scraper = None
 
 # ============ 會話管理（保持原有代碼不變）============
