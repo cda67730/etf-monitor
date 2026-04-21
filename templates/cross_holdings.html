@@ -128,14 +128,9 @@
                                     aria-expanded="false">
                                 <i class="fas fa-info-circle"></i> 詳情
                             </button>
-                        </td>
-                    </tr>
-                    <!-- 詳情展開列（獨立一列，不混入主列） -->
-                    <tr class="detail-row">
-                        <td colspan="7" class="p-0">
-                            <div class="collapse" id="detail-{{ holding.stock_code }}">
+                            <div class="collapse mt-2" id="detail-{{ holding.stock_code }}">
                                 <div class="detail-header">
-                                    <strong>{{ holding.stock_code }}</strong> {{ holding.stock_name }} — 各ETF持股明細
+                                    <strong>{{ holding.stock_code }}</strong> {{ holding.stock_name }}
                                 </div>
                                 <table class="table table-sm mb-0 detail-table">
                                     <thead>
@@ -231,16 +226,25 @@
 .detail-row td {
     border-top: none !important;
     padding: 0 !important;
+    background-color: #fff !important;
 }
 .detail-header {
-    background-color: #d1ecf1;
-    padding: 6px 12px;
+    background-color: #0d6efd;
+    color: #fff;
+    padding: 6px 14px;
     font-size: 0.875rem;
-    border-bottom: 1px solid #bee5eb;
+    font-weight: bold;
+    border-bottom: 2px solid #0a58ca;
 }
 .detail-table {
     margin-bottom: 0;
-    background-color: #f8f9fa;
+    background-color: #f0f4ff;
+}
+.detail-table tbody tr {
+    background-color: #f0f4ff !important;
+}
+.detail-table tbody tr:nth-child(even) {
+    background-color: #e4ecff !important;
 }
 </style>
 
@@ -279,17 +283,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function sortTable(column, type, direction) {
         const tbody = table.querySelector('tbody');
-        const allRows = Array.from(tbody.querySelectorAll('tr'));
+        const rows = Array.from(tbody.querySelectorAll('tr'));
 
-        // 將主列和其對應詳情列組成 pair
-        const pairs = [];
-        for (let i = 0; i < allRows.length; i += 2) {
-            pairs.push([allRows[i], allRows[i + 1]]);
-        }
-
-        pairs.sort((a, b) => {
-            let aVal = a[0].dataset[column];
-            let bVal = b[0].dataset[column];
+        rows.sort((a, b) => {
+            let aVal = a.dataset[column];
+            let bVal = b.dataset[column];
 
             if (type === 'number') {
                 aVal = parseFloat(aVal) || 0;
@@ -305,11 +303,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return direction === 'desc' ? -result : result;
         });
 
-        // 以 pair 為單位重新插入，保持主列和詳情列緊鄰
-        pairs.forEach(pair => {
-            tbody.appendChild(pair[0]);
-            tbody.appendChild(pair[1]);
-        });
+        rows.forEach(row => tbody.appendChild(row));
     }
     
     // 默認按總持股數降序排序
