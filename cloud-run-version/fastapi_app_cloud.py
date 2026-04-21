@@ -668,6 +668,7 @@ class DatabaseQuery:
                         SELECT etf_code, shares, weight
                         FROM etf_holdings
                         WHERE stock_code = {ph} AND update_date = {ph}
+                          AND stock_name IS NOT NULL AND stock_name != ''
                         ORDER BY shares DESC
                     '''
                     details = self.execute_query(detail_query, (stock_code, date), fetch="all")
