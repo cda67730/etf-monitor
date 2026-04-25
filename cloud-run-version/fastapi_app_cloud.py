@@ -1266,6 +1266,38 @@ db_query = DatabaseQuery()
 
 # ============ 新增權證相關的 API 路由 ============
 
+@app.get("/api/etf-holdings")
+async def api_etf_holdings(
+    etf_code: str = Query(None, description="ETF代碼，例如 00981A"),
+    date: str = Query(None, description="日期 (YYYY-MM-DD)，不填則取最新")
+):
+    """API: 取得指定ETF的持股明細含增減變化（無需登入）"""
+    try:
+        if not date:
+            dates = db_query.get_available_dates()
+            date = dates[0] if dates else None
+        if not date:
+            return {"etf_code": etf_code, "etf_name": "", "date": None, "holdings": []}
+        holdings_raw = db_query.get_holdings_with_changes(date, etf_code)
+        etf_name = db_query.get_etf_name(etf_code) if etf_code else ""
+        holdings = []
+        for h in holdings_raw:
+            holdings.append({
+                "stock_code":      h.get("stock_code", ""),
+                "stock_name":      h.get("stock_name", ""),
+                "weight":          float(h.get("weight") or 0),
+                "shares":          int(h.get("shares") or 0),
+                "change_type":     h.get("change_type"),
+                "shares_increase": int(h.get("shares_increase") or 0),
+                "shares_decrease": int(h.get("shares_decrease") or 0),
+                "unit":            h.get("unit", ""),
+            })
+        return {"etf_code": etf_code, "etf_name": etf_name, "date": date, "holdings": holdings}
+    except Exception as e:
+        logger.error(f"api_etf_holdings 錯誤: {e}")
+        return {"etf_code": etf_code, "etf_name": "", "date": date, "holdings": [], "error": str(e)}
+
+
 @app.get("/api/warrants")
 async def api_get_warrants(
     request: Request,
