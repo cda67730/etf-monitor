@@ -373,8 +373,8 @@ class DatabaseQuery:
             '00991A': '復華未來50主動式ETF',
             '00992A': '群益科技創新主動式ETF',
             '00993A': '安聯台灣主動式ETF',
-            '00994A': '中信台灣卓越主動式ETF',
-            '00995A': '凱基台灣優選主動式ETF',
+            '00994A': '第一金台股趨勢優選主動式ETF',
+            '00995A': '中信台灣卓越主動式ETF',
         }
         self.db_available = db_config is not None
         if self.db_available:
