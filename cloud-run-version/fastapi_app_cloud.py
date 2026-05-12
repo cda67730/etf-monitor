@@ -284,7 +284,7 @@ def apply_holdings_sorting(holdings: List[Dict], sort_by: str) -> List[Dict]:
     """應用持股排序"""
     if not holdings:
         return holdings
-    
+
     if sort_by == 'weight_desc':
         return sorted(holdings, key=lambda x: x.get('weight', 0), reverse=True)
     elif sort_by == 'weight_asc':
@@ -293,6 +293,16 @@ def apply_holdings_sorting(holdings: List[Dict], sort_by: str) -> List[Dict]:
         return sorted(holdings, key=lambda x: x.get('shares', 0), reverse=True)
     elif sort_by == 'shares_asc':
         return sorted(holdings, key=lambda x: x.get('shares', 0), reverse=False)
+    elif sort_by == 'increase_desc':
+        return sorted(holdings, key=lambda x: x.get('shares_increase') or 0, reverse=True)
+    elif sort_by == 'increase_asc':
+        return sorted(holdings, key=lambda x: x.get('shares_increase') or 0, reverse=False)
+    elif sort_by == 'decrease_desc':
+        return sorted(holdings, key=lambda x: x.get('shares_decrease') or 0, reverse=True)
+    elif sort_by == 'decrease_asc':
+        return sorted(holdings, key=lambda x: x.get('shares_decrease') or 0, reverse=False)
+    elif sort_by == 'etf_stock':
+        return sorted(holdings, key=lambda x: (x.get('etf_code', ''), x.get('stock_code', '')))
     elif sort_by == 'stock_code_asc':
         return sorted(holdings, key=lambda x: x.get('stock_code', ''), reverse=False)
     elif sort_by == 'stock_name_asc':
@@ -316,6 +326,11 @@ def get_sort_display(sort_by: str) -> str:
         'weight_asc': '權重升序',
         'shares_desc': '股數降序',
         'shares_asc': '股數升序',
+        'increase_desc': '新增股數 (多→少)',
+        'increase_asc': '新增股數 (少→多)',
+        'decrease_desc': '減少股數 (多→少)',
+        'decrease_asc': '減少股數 (少→多)',
+        'etf_stock': 'ETF+股票代碼',
         'stock_code_asc': '股票代碼升序',
         'stock_name_asc': '股票名稱升序'
     }
@@ -1218,7 +1233,7 @@ class DatabaseQuery:
         """應用持股排序"""
         if not holdings:
             return holdings
-        
+
         if sort_by == 'weight_desc':
             return sorted(holdings, key=lambda x: x.get('weight', 0), reverse=True)
         elif sort_by == 'weight_asc':
@@ -1227,6 +1242,16 @@ class DatabaseQuery:
             return sorted(holdings, key=lambda x: x.get('shares', 0), reverse=True)
         elif sort_by == 'shares_asc':
             return sorted(holdings, key=lambda x: x.get('shares', 0), reverse=False)
+        elif sort_by == 'increase_desc':
+            return sorted(holdings, key=lambda x: x.get('shares_increase') or 0, reverse=True)
+        elif sort_by == 'increase_asc':
+            return sorted(holdings, key=lambda x: x.get('shares_increase') or 0, reverse=False)
+        elif sort_by == 'decrease_desc':
+            return sorted(holdings, key=lambda x: x.get('shares_decrease') or 0, reverse=True)
+        elif sort_by == 'decrease_asc':
+            return sorted(holdings, key=lambda x: x.get('shares_decrease') or 0, reverse=False)
+        elif sort_by == 'etf_stock':
+            return sorted(holdings, key=lambda x: (x.get('etf_code', ''), x.get('stock_code', '')))
         elif sort_by == 'stock_code_asc':
             return sorted(holdings, key=lambda x: x.get('stock_code', ''), reverse=False)
         elif sort_by == 'stock_name_asc':
@@ -1250,10 +1275,15 @@ class DatabaseQuery:
             'weight_asc': '權重升序',
             'shares_desc': '股數降序',
             'shares_asc': '股數升序',
+            'increase_desc': '新增股數 (多→少)',
+            'increase_asc': '新增股數 (少→多)',
+            'decrease_desc': '減少股數 (多→少)',
+            'decrease_asc': '減少股數 (少→多)',
+            'etf_stock': 'ETF+股票代碼',
             'stock_code_asc': '股票代碼升序',
             'stock_name_asc': '股票名稱升序'
         }
-        return sort_names.get(sort_by, sort_by)    
+        return sort_names.get(sort_by, sort_by)
 
 
     
