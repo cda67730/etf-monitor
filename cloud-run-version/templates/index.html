@@ -60,6 +60,51 @@
 
                 <hr class="my-4">
 
+                <!-- ── ETF 當日資料狀態 ── -->
+                {% if etf_status %}
+                <div class="mb-4">
+                    <h5 class="mb-3">
+                        <i class="fas fa-satellite-dish"></i>
+                        ETF 當日資料狀態
+                        <small class="text-muted fs-6 ms-2">{{ etf_status.date }}</small>
+                    </h5>
+                    {% if etf_status.missing %}
+                    <div class="alert alert-warning d-flex align-items-center py-2 mb-3" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <span>尚有 <strong>{{ etf_status.missing|length }}</strong> 支 ETF 未取得當日資料：
+                            {% for m in etf_status.missing %}
+                                <span class="badge bg-danger ms-1">{{ m.code }} {{ m.name }}</span>
+                            {% endfor %}
+                        </span>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-success d-flex align-items-center py-2 mb-3" role="alert">
+                        <i class="fas fa-check-circle me-2"></i>
+                        <span>所有 <strong>{{ etf_status.found|length }}</strong> 支 ETF 均已取得當日資料</span>
+                    </div>
+                    {% endif %}
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for item in etf_status.found %}
+                        <span class="badge d-flex align-items-center gap-1"
+                              style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:13px;padding:6px 10px;border-radius:8px;">
+                            <i class="fas fa-check-circle" style="color:#16a34a"></i>
+                            {{ item.code }}
+                            <span style="opacity:.7;font-size:11px">({{ item.rows }}筆)</span>
+                        </span>
+                        {% endfor %}
+                        {% for item in etf_status.missing %}
+                        <span class="badge d-flex align-items-center gap-1"
+                              style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-size:13px;padding:6px 10px;border-radius:8px;">
+                            <i class="fas fa-times-circle" style="color:#dc2626"></i>
+                            {{ item.code }} {{ item.name }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <hr class="my-4">
+
                 <div class="row">
                     <div class="col-md-6">
                         <div class="card">
@@ -98,7 +143,7 @@
                             <div class="card-body">
                                 <ul class="list-unstyled">
                                     <li><i class="fas fa-check text-success"></i> 自動爬取：週一至週五 21:30</li>
-                                    <li><i class="fas fa-check text-success"></i> 監控12檔主動式ETF持股變化</li>
+                                    <li><i class="fas fa-check text-success"></i> 監控14檔主動式ETF持股變化</li>
                                     <li><i class="fas fa-check text-success"></i> 權證排行和隱含波動率分析</li>
                                     <li><i class="fas fa-check text-success"></i> 支援歷史數據查詢</li>
                                     <li><i class="fas fa-check text-success"></i> 即時持股變化分析</li>

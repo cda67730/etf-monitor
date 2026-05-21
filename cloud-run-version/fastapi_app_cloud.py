@@ -382,7 +382,6 @@ class DatabaseQuery:
             '00980A': '主動野村臺灣優選ETF',
             '00981A': '統一台股增長主動式ETF',
             '00982A': '群益台灣精選強棒主動式ETF',
-            '00983A': '中信ARK創新主動式ETF',
             '00984A': '安聯台灣高股息成長主動式ETF',
             '00985A': '野村台灣增強50主動式ETF',
             '00991A': '復華未來50主動式ETF',
@@ -391,6 +390,9 @@ class DatabaseQuery:
             '00994A': '第一金台股趨勢優選主動式ETF',
             '00995A': '中信台灣卓越主動式ETF',
             '00403A': '統一台股升級50主動式ETF',
+            '00996A': '兆豐台灣豐收主動式ETF',
+            '00998A': '復華金融股息主動式ETF',
+            '00999A': '野村臺灣策略高息主動式ETF',
         }
         self.db_available = db_config is not None
         if self.db_available:
@@ -891,6 +893,37 @@ class DatabaseQuery:
     def get_etf_name(self, etf_code: str) -> str:
         """獲取 ETF 名稱"""
         return self.etf_names.get(etf_code, etf_code)
+
+    def get_etf_data_status(self, date: str = None) -> dict:
+        """
+        檢查指定日期各 ETF 是否有持股資料。
+        回傳 {"date": date, "found": [...], "missing": [...]}
+        """
+        if not self.db_available:
+            return {"date": date, "found": [], "missing": list(self.etf_names.keys())}
+        if not date:
+            dates = self.get_available_dates()
+            date = dates[0] if dates else None
+        if not date:
+            return {"date": None, "found": [], "missing": list(self.etf_names.keys())}
+        try:
+            ph = self._get_placeholder()
+            query = f"""
+                SELECT etf_code, COUNT(*) as cnt
+                FROM etf_holdings
+                WHERE update_date = {ph}
+                GROUP BY etf_code
+            """
+            results = self.execute_query(query, (date,), fetch="all")
+            found_codes = {r["etf_code"]: r["cnt"] for r in results} if results else {}
+            found   = [{"code": c, "name": self.etf_names.get(c, c), "rows": found_codes[c]}
+                       for c in self.etf_names if c in found_codes]
+            missing = [{"code": c, "name": self.etf_names.get(c, c)}
+                       for c in self.etf_names if c not in found_codes]
+            return {"date": date, "found": found, "missing": missing}
+        except Exception as e:
+            logger.error(f"ETF 資料狀態查詢錯誤: {e}")
+            return {"date": date, "found": [], "missing": list(self.etf_names.keys()), "error": str(e)}
 
     def get_available_dates(self) -> List[str]:
         """獲取可用的日期列表"""
@@ -1787,14 +1820,16 @@ async def home(request: Request):
         dates = db_query.get_available_dates()
         etf_codes = db_query.get_etf_codes()
         etf_info = db_query.get_etf_codes_with_names()
-        
+        etf_status = db_query.get_etf_data_status(dates[0] if dates else None)
+
         return templates.TemplateResponse("index.html", {
             "request": request,
             "dates": dates,
             "etf_codes": etf_codes,
             "etf_info": etf_info,
             "current_date": dates[0] if dates else None,
-            "database_type": db_config.db_type if db_config else "unavailable"
+            "database_type": db_config.db_type if db_config else "unavailable",
+            "etf_status": etf_status,
         })
     except Exception as e:
         logger.error(f"首頁錯誤: {e}")
