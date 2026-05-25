@@ -925,6 +925,45 @@ class DatabaseQuery:
             logger.error(f"ETF 資料狀態查詢錯誤: {e}")
             return {"date": date, "found": [], "missing": list(self.etf_names.keys()), "error": str(e)}
 
+    def get_premium_data(self, date: str = None) -> list:
+        """
+        查詢指定日期所有 ETF 的折溢價資料。
+        回傳 [{"code":..., "name":..., "close":..., "nav":..., "premium_pct":...}, ...]
+        依 premium_pct 由高到低排序。
+        """
+        if not self.db_available:
+            return []
+        if not date:
+            dates = self.get_available_dates()
+            date = dates[0] if dates else None
+        if not date:
+            return []
+        try:
+            ph = self._get_placeholder()
+            query = f"""
+                SELECT etf_code, close_price, nav, premium_pct, update_date
+                FROM etf_premium
+                WHERE update_date = {ph}
+                ORDER BY premium_pct DESC
+            """
+            results = self.execute_query(query, (date,), fetch="all")
+            if not results:
+                return []
+            return [
+                {
+                    "code":        r["etf_code"],
+                    "name":        self.etf_names.get(r["etf_code"], r["etf_code"]),
+                    "close":       r["close_price"],
+                    "nav":         r["nav"],
+                    "premium_pct": r["premium_pct"],
+                    "date":        r["update_date"],
+                }
+                for r in results
+            ]
+        except Exception as e:
+            logger.error(f"折溢價查詢錯誤: {e}")
+            return []
+
     def get_available_dates(self) -> List[str]:
         """獲取可用的日期列表"""
         if not self.db_available:
@@ -1821,6 +1860,7 @@ async def home(request: Request):
         etf_codes = db_query.get_etf_codes()
         etf_info = db_query.get_etf_codes_with_names()
         etf_status = db_query.get_etf_data_status(dates[0] if dates else None)
+        premium_data = db_query.get_premium_data(dates[0] if dates else None)
 
         return templates.TemplateResponse("index.html", {
             "request": request,
@@ -1830,6 +1870,7 @@ async def home(request: Request):
             "current_date": dates[0] if dates else None,
             "database_type": db_config.db_type if db_config else "unavailable",
             "etf_status": etf_status,
+            "premium_data": premium_data,
         })
     except Exception as e:
         logger.error(f"首頁錯誤: {e}")

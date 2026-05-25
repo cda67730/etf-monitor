@@ -105,6 +105,58 @@
 
                 <hr class="my-4">
 
+                <!-- ── ETF 折溢價表 ── -->
+                {% if premium_data %}
+                <div class="mb-4">
+                    <h5 class="mb-3">
+                        <i class="fas fa-percentage"></i>
+                        ETF 折溢價
+                        <small class="text-muted fs-6 ms-2">{{ premium_data[0].date }}</small>
+                    </h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0" style="font-size:13px;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>代碼</th>
+                                    <th>名稱</th>
+                                    <th class="text-end">收盤價</th>
+                                    <th class="text-end">NAV 淨值</th>
+                                    <th class="text-end">折溢價</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in premium_data %}
+                                <tr>
+                                    <td><span class="badge bg-secondary">{{ p.code }}</span></td>
+                                    <td>{{ p.name }}</td>
+                                    <td class="text-end">{{ p.close }}</td>
+                                    <td class="text-end">{{ p.nav }}</td>
+                                    <td class="text-end fw-bold
+                                        {% if p.premium_pct > 0.5 %}text-danger
+                                        {% elif p.premium_pct > 0 %}text-success
+                                        {% elif p.premium_pct < -0.5 %}text-danger
+                                        {% else %}text-warning{% endif %}">
+                                        {% if p.premium_pct > 0 %}+{% endif %}{{ "%.2f"|format(p.premium_pct) }}%
+                                        {% if p.premium_pct > 0.5 %}
+                                            <i class="fas fa-arrow-up ms-1" title="高溢價警示"></i>
+                                        {% elif p.premium_pct < -0.5 %}
+                                            <i class="fas fa-arrow-down ms-1" title="高折價警示"></i>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <small class="text-muted mt-1 d-block">
+                        <i class="fas fa-info-circle"></i>
+                        折溢價 = (收盤價 − NAV) / NAV × 100%　｜　<span class="text-danger">紅色</span>：絕對值 &gt; 0.5%　<span class="text-success">綠色</span>：溢價　<span class="text-warning">橘色</span>：微幅折價
+                    </small>
+                </div>
+                {% endif %}
+
+                <hr class="my-4">
+
                 <div class="row">
                     <div class="col-md-6">
                         <div class="card">
