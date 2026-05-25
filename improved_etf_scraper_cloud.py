@@ -702,7 +702,85 @@ class ETFHoldingsScraper:
         except Exception as e:
             logger.warning(f"⚠️ 無法獲取數據摘要: {e}")
         
+        # 爬取完持股後，一併抓折溢價
+        self.scrape_premium_data()
+
         return success_count
+
+    def scrape_premium_data(self):
+        """爬取所有 ETF 當日折溢價（收盤價、NAV、折溢價%）並存入 etf_premium 表"""
+        logger.info("📊 開始爬取ETF折溢價資料...")
+        PREMIUM_DTNO = '61498322'
+        results = []
+
+        for code in self.etf_codes:
+            params = {
+                'action': 'getdtnodata',
+                'DtNo': PREMIUM_DTNO,
+                'ParamStr': f'AssignID={code};MTPeriod=0;DTMode=0;DTRange=1;DTOrder=1;MajorTable=M708;',
+                'FilterNo': '0'
+            }
+            try:
+                r = requests.get(self.base_url, params=params, headers=self.headers, timeout=15)
+                r.raise_for_status()
+                d = r.json()
+                data = d.get('Data', [])
+                if not data:
+                    logger.warning(f"⚠️ {code} 折溢價無資料")
+                    continue
+                row = data[0]
+                # row = ['YYYYMMDD', '收盤價', '淨值', '折溢價(%)']
+                raw_date   = str(row[0]).strip()
+                update_date = self.parse_date_from_api(raw_date)
+                close_price = float(row[1])
+                nav         = float(row[2])
+                premium_pct = float(row[3])
+                results.append({
+                    'etf_code':    code,
+                    'close_price': close_price,
+                    'nav':         nav,
+                    'premium_pct': premium_pct,
+                    'update_date': update_date,
+                })
+                logger.info(f"  {code}: 收盤={close_price}, NAV={nav}, 折溢價={premium_pct}%")
+            except Exception as e:
+                logger.error(f"❌ {code} 折溢價爬取失敗: {e}")
+
+        if not results:
+            logger.warning("⚠️ 折溢價：無任何資料可儲存")
+            return 0
+
+        # 存入資料庫（有則更新，無則插入）
+        saved = 0
+        ph = "%s" if db_config.db_type == "postgresql" else "?"
+
+        if db_config.db_type == "postgresql":
+            upsert_sql = f'''
+                INSERT INTO etf_premium (etf_code, close_price, nav, premium_pct, update_date)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph})
+                ON CONFLICT (etf_code, update_date) DO UPDATE SET
+                    close_price = EXCLUDED.close_price,
+                    nav         = EXCLUDED.nav,
+                    premium_pct = EXCLUDED.premium_pct
+            '''
+        else:
+            upsert_sql = f'''
+                INSERT OR REPLACE INTO etf_premium (etf_code, close_price, nav, premium_pct, update_date)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph})
+            '''
+
+        for rec in results:
+            try:
+                db_config.execute_query(
+                    upsert_sql,
+                    (rec['etf_code'], rec['close_price'], rec['nav'], rec['premium_pct'], rec['update_date'])
+                )
+                saved += 1
+            except Exception as e:
+                logger.error(f"❌ {rec['etf_code']} 折溢價儲存失敗: {e}")
+
+        logger.info(f"✅ 折溢價資料儲存完成：{saved}/{len(results)} 筆")
+        return saved
 
     def test_single_request(self, etf_code='00981A'):
         """🧪 測試單個請求，用於確認程式正確性"""

@@ -324,8 +324,24 @@ class DatabaseConfig:
                 '''
             }
             
+            # ETF 折溢價表格
+            premium_tables = {
+                "etf_premium": f'''
+                    CREATE TABLE IF NOT EXISTS etf_premium (
+                        id {id_type},
+                        etf_code TEXT NOT NULL,
+                        close_price REAL NOT NULL,
+                        nav REAL NOT NULL,
+                        premium_pct REAL NOT NULL,
+                        update_date TEXT NOT NULL,
+                        created_at {timestamp_default},
+                        UNIQUE(etf_code, update_date)
+                    )
+                '''
+            }
+
             # 創建所有表格
-            all_tables = {**etf_tables, **warrant_tables}
+            all_tables = {**etf_tables, **warrant_tables, **premium_tables}
             
             for table_name, create_sql in all_tables.items():
                 try:
@@ -344,7 +360,10 @@ class DatabaseConfig:
                 'CREATE INDEX IF NOT EXISTS idx_warrant_date ON warrant_data(update_date)',
                 'CREATE INDEX IF NOT EXISTS idx_warrant_type ON warrant_data(warrant_type, update_date)',
                 'CREATE INDEX IF NOT EXISTS idx_warrant_underlying ON warrant_data(underlying_name, update_date)',
-                'CREATE INDEX IF NOT EXISTS idx_underlying_summary ON warrant_underlying_summary(underlying_name, warrant_type, update_date)'
+                'CREATE INDEX IF NOT EXISTS idx_underlying_summary ON warrant_underlying_summary(underlying_name, warrant_type, update_date)',
+
+                # 折溢價索引
+                'CREATE INDEX IF NOT EXISTS idx_premium_date ON etf_premium(etf_code, update_date)'
             ]
             
             # PostgreSQL 特有的唯一索引
