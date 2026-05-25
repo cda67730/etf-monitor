@@ -333,12 +333,25 @@ class DatabaseConfig:
                         close_price REAL NOT NULL,
                         nav REAL NOT NULL,
                         premium_pct REAL NOT NULL,
+                        change_amount REAL NOT NULL DEFAULT 0,
+                        change_pct REAL NOT NULL DEFAULT 0,
                         update_date TEXT NOT NULL,
                         created_at {timestamp_default},
                         UNIQUE(etf_code, update_date)
                     )
                 '''
             }
+
+            # 既有資料表欄位遷移（新增 change_amount / change_pct）
+            alter_sqls = [
+                "ALTER TABLE etf_premium ADD COLUMN change_amount REAL NOT NULL DEFAULT 0",
+                "ALTER TABLE etf_premium ADD COLUMN change_pct REAL NOT NULL DEFAULT 0",
+            ]
+            for sql in alter_sqls:
+                try:
+                    self.execute_query(sql)
+                except Exception:
+                    pass  # 欄位已存在時忽略
 
             # 創建所有表格
             all_tables = {**etf_tables, **warrant_tables, **premium_tables}

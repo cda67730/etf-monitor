@@ -941,7 +941,8 @@ class DatabaseQuery:
         try:
             ph = self._get_placeholder()
             query = f"""
-                SELECT etf_code, close_price, nav, premium_pct, update_date
+                SELECT etf_code, close_price, nav, premium_pct,
+                       change_amount, change_pct, update_date
                 FROM etf_premium
                 WHERE update_date = {ph}
                 ORDER BY premium_pct DESC
@@ -951,12 +952,14 @@ class DatabaseQuery:
                 return []
             return [
                 {
-                    "code":        r["etf_code"],
-                    "name":        self.etf_names.get(r["etf_code"], r["etf_code"]),
-                    "close":       r["close_price"],
-                    "nav":         r["nav"],
-                    "premium_pct": r["premium_pct"],
-                    "date":        r["update_date"],
+                    "code":          r["etf_code"],
+                    "name":          self.etf_names.get(r["etf_code"], r["etf_code"]),
+                    "close":         r["close_price"],
+                    "nav":           r["nav"],
+                    "premium_pct":   r["premium_pct"],
+                    "change_amount": r.get("change_amount", 0) or 0,
+                    "change_pct":    r.get("change_pct", 0) or 0,
+                    "date":          r["update_date"],
                 }
                 for r in results
             ]
