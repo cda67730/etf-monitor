@@ -391,7 +391,6 @@ class DatabaseQuery:
             '00995A': '中信台灣卓越主動式ETF',
             '00403A': '統一台股升級50主動式ETF',
             '00996A': '兆豐台灣豐收主動式ETF',
-            '00998A': '復華金融股息主動式ETF',
             '00999A': '野村臺灣策略高息主動式ETF',
         }
         self.db_available = db_config is not None
@@ -941,7 +940,8 @@ class DatabaseQuery:
         try:
             ph = self._get_placeholder()
             query = f"""
-                SELECT etf_code, close_price, nav, premium_pct, update_date
+                SELECT etf_code, close_price, nav, premium_pct,
+                       change_amount, change_pct, update_date
                 FROM etf_premium
                 WHERE update_date = {ph}
                 ORDER BY premium_pct DESC
@@ -951,12 +951,14 @@ class DatabaseQuery:
                 return []
             return [
                 {
-                    "code":        r["etf_code"],
-                    "name":        self.etf_names.get(r["etf_code"], r["etf_code"]),
-                    "close":       r["close_price"],
-                    "nav":         r["nav"],
-                    "premium_pct": r["premium_pct"],
-                    "date":        r["update_date"],
+                    "code":          r["etf_code"],
+                    "name":          self.etf_names.get(r["etf_code"], r["etf_code"]),
+                    "close":         r["close_price"],
+                    "nav":           r["nav"],
+                    "premium_pct":   r["premium_pct"],
+                    "change_amount": r.get("change_amount", 0) or 0,
+                    "change_pct":    r.get("change_pct", 0) or 0,
+                    "date":          r["update_date"],
                 }
                 for r in results
             ]

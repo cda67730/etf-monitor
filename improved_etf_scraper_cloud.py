@@ -36,7 +36,7 @@ class ETFHoldingsScraper:
         self.etf_codes = [
             '00980A', '00981A', '00982A', '00984A', '00985A',
             '00991A', '00992A', '00993A', '00994A', '00995A',
-            '00403A', '00996A', '00998A', '00999A',
+            '00403A', '00996A', '00999A',
         ]
 
         # 股票名稱正規化 registry：stock_code -> 目前已知最佳名稱
@@ -289,14 +289,14 @@ class ETFHoldingsScraper:
                     if not stock_code.strip() or not stock_name.strip():
                         continue
 
-                    # 台灣股票代號必須以數字開頭（過濾「合計」、「現金」等中文標籤行）
-                    if not stock_code[0].isdigit():
+                    # 過濾純中文標籤行（合計、現金等）
+                    if all('一' <= c <= '鿿' for c in stock_code.replace(' ', '')):
                         continue
 
-                    # 跳過非股票代號：現金/保證金/_NTD 類、期貨(TX)、債券(B開頭5碼以上)、純數字6碼以上(可轉債/ETF受益憑證)
+                    # 跳過現金/保證金（_NTD、C_NTD 類）、期貨(TX結尾)、債券(B開頭5碼以上)、純數字6碼以上(可轉債)
                     if ('_' in stock_code
                             or stock_code.endswith('TX')
-                            or (stock_code.startswith('B') and len(stock_code) >= 5)
+                            or (stock_code.startswith('B') and len(stock_code) >= 5 and stock_code[1:].isdigit())
                             or (stock_code.isdigit() and len(stock_code) >= 6)):
                         continue
                     
@@ -708,11 +708,13 @@ class ETFHoldingsScraper:
         return success_count
 
     def scrape_premium_data(self):
-        """爬取所有 ETF 當日折溢價（收盤價、NAV、折溢價%）並存入 etf_premium 表"""
+        """爬取所有 ETF 當日折溢價（收盤價、NAV、折溢價%、漲跌、漲幅）並存入 etf_premium 表"""
         logger.info("📊 開始爬取ETF折溢價資料...")
-        PREMIUM_DTNO = '61498322'
-        results = []
+        PREMIUM_DTNO = '61498322'   # 折溢價：日期、收盤、NAV、折溢價%
+        QUOTE_DTNO   = '60465380'   # 行情：日期、名稱、代號、收盤、漲跌、漲幅%
 
+        # 第一步：抓折溢價
+        premium_map = {}   # code -> {close, nav, premium_pct, update_date}
         for code in self.etf_codes:
             params = {
                 'action': 'getdtnodata',
@@ -723,57 +725,84 @@ class ETFHoldingsScraper:
             try:
                 r = requests.get(self.base_url, params=params, headers=self.headers, timeout=15)
                 r.raise_for_status()
-                d = r.json()
-                data = d.get('Data', [])
+                data = r.json().get('Data', [])
                 if not data:
                     logger.warning(f"⚠️ {code} 折溢價無資料")
                     continue
                 row = data[0]
-                # row = ['YYYYMMDD', '收盤價', '淨值', '折溢價(%)']
-                raw_date   = str(row[0]).strip()
-                update_date = self.parse_date_from_api(raw_date)
-                close_price = float(row[1])
-                nav         = float(row[2])
-                premium_pct = float(row[3])
-                results.append({
-                    'etf_code':    code,
-                    'close_price': close_price,
-                    'nav':         nav,
-                    'premium_pct': premium_pct,
-                    'update_date': update_date,
-                })
-                logger.info(f"  {code}: 收盤={close_price}, NAV={nav}, 折溢價={premium_pct}%")
+                premium_map[code] = {
+                    'close_price': float(row[1]),
+                    'nav':         float(row[2]),
+                    'premium_pct': float(row[3]),
+                    'update_date': self.parse_date_from_api(str(row[0]).strip()),
+                }
             except Exception as e:
                 logger.error(f"❌ {code} 折溢價爬取失敗: {e}")
+
+        # 第二步：抓漲跌（一次抓一支，合併進 premium_map）
+        quote_map = {}  # code -> {change_amount, change_pct}
+        for code in self.etf_codes:
+            params = {
+                'action': 'getdtnodata',
+                'DtNo': QUOTE_DTNO,
+                'ParamStr': f'AssignID={code};MTPeriod=0;DTMode=0;DTRange=1;DTOrder=1;',
+                'FilterNo': '0'
+            }
+            try:
+                r = requests.get(self.base_url, params=params, headers=self.headers, timeout=15)
+                r.raise_for_status()
+                data = r.json().get('Data', [])
+                if data:
+                    row = data[0]
+                    quote_map[code] = {
+                        'change_amount': float(row[4]) if row[4] else 0.0,
+                        'change_pct':    float(row[5]) if row[5] else 0.0,
+                    }
+            except Exception as e:
+                logger.error(f"❌ {code} 漲跌爬取失敗: {e}")
+
+        # 合併
+        results = []
+        for code, pm in premium_map.items():
+            qm = quote_map.get(code, {'change_amount': 0.0, 'change_pct': 0.0})
+            rec = {'etf_code': code, **pm, **qm}
+            results.append(rec)
+            logger.info(f"  {code}: 收盤={rec['close_price']}, NAV={rec['nav']}, "
+                        f"折溢價={rec['premium_pct']}%, 漲跌={rec['change_amount']:+.2f}({rec['change_pct']:+.2f}%)")
 
         if not results:
             logger.warning("⚠️ 折溢價：無任何資料可儲存")
             return 0
 
-        # 存入資料庫（有則更新，無則插入）
+        # 存入資料庫
         saved = 0
         ph = "%s" if db_config.db_type == "postgresql" else "?"
 
         if db_config.db_type == "postgresql":
             upsert_sql = f'''
-                INSERT INTO etf_premium (etf_code, close_price, nav, premium_pct, update_date)
-                VALUES ({ph}, {ph}, {ph}, {ph}, {ph})
+                INSERT INTO etf_premium (etf_code, close_price, nav, premium_pct, change_amount, change_pct, update_date)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
                 ON CONFLICT (etf_code, update_date) DO UPDATE SET
-                    close_price = EXCLUDED.close_price,
-                    nav         = EXCLUDED.nav,
-                    premium_pct = EXCLUDED.premium_pct
+                    close_price   = EXCLUDED.close_price,
+                    nav           = EXCLUDED.nav,
+                    premium_pct   = EXCLUDED.premium_pct,
+                    change_amount = EXCLUDED.change_amount,
+                    change_pct    = EXCLUDED.change_pct
             '''
         else:
             upsert_sql = f'''
-                INSERT OR REPLACE INTO etf_premium (etf_code, close_price, nav, premium_pct, update_date)
-                VALUES ({ph}, {ph}, {ph}, {ph}, {ph})
+                INSERT OR REPLACE INTO etf_premium
+                    (etf_code, close_price, nav, premium_pct, change_amount, change_pct, update_date)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
             '''
 
         for rec in results:
             try:
                 db_config.execute_query(
                     upsert_sql,
-                    (rec['etf_code'], rec['close_price'], rec['nav'], rec['premium_pct'], rec['update_date'])
+                    (rec['etf_code'], rec['close_price'], rec['nav'],
+                     rec['premium_pct'], rec['change_amount'], rec['change_pct'],
+                     rec['update_date'])
                 )
                 saved += 1
             except Exception as e:
