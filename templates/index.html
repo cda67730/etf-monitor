@@ -121,6 +121,7 @@
                                     <th>名稱</th>
                                     <th class="text-end">收盤價</th>
                                     <th class="text-end">NAV 淨值</th>
+                                    <th class="text-end">漲跌</th>
                                     <th class="text-end">折溢價</th>
                                 </tr>
                             </thead>
@@ -131,6 +132,14 @@
                                     <td>{{ p.name }}</td>
                                     <td class="text-end">{{ p.close }}</td>
                                     <td class="text-end">{{ p.nav }}</td>
+                                    <td class="text-end fw-bold
+                                        {% if p.change_amount > 0 %}text-danger
+                                        {% elif p.change_amount < 0 %}text-success
+                                        {% else %}text-muted{% endif %}">
+                                        {% if p.change_amount > 0 %}▲{% elif p.change_amount < 0 %}▼{% endif %}
+                                        {{ "%.2f"|format(p.change_amount|abs) }}
+                                        <small class="text-muted">({{ "%+.2f"|format(p.change_pct) }}%)</small>
+                                    </td>
                                     <td class="text-end fw-bold
                                         {% if p.premium_pct > 0.5 %}text-danger
                                         {% elif p.premium_pct > 0 %}text-success
