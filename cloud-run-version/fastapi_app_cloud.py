@@ -391,7 +391,6 @@ class DatabaseQuery:
             '00995A': '中信台灣卓越主動式ETF',
             '00403A': '統一台股升級50主動式ETF',
             '00996A': '兆豐台灣豐收主動式ETF',
-            '00998A': '復華金融股息主動式ETF',
             '00999A': '野村臺灣策略高息主動式ETF',
         }
         self.db_available = db_config is not None
