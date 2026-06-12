@@ -392,6 +392,9 @@ class DatabaseQuery:
             '00403A': '統一台股升級50主動式ETF',
             '00996A': '兆豐台灣豐收主動式ETF',
             '00999A': '野村臺灣策略高息主動式ETF',
+            '00404A': '聯博台灣動能收益50主動式ETF',
+            '00405A': '富邦台灣龍耀主動式ETF',
+            '00406A': '中信台灣收益主動式ETF',
         }
         self.db_available = db_config is not None
         if self.db_available:
