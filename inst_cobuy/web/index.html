@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>三大法人同買追蹤</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--ink:#1d1d1b;--mute:#6b6b66;--line:#e4e3de;--acc:#b4232a;--acc2:#1f6f43;--hl:#fff4cc;--chip:#efeee9}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--card:#1e1e1c;--ink:#ecebe6;--mute:#9b9a94;--line:#33332f;--acc:#ff6b6b;--acc2:#5fd08f;--hl:#3a3418;--chip:#2a2a27}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif}
+header{padding:20px 16px 8px;max-width:1280px;margin:auto}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--mute);font-size:13px}
+main{max-width:1280px;margin:auto;padding:0 16px 40px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}
+select,input{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+input[type=search]{min-width:160px;flex:1;max-width:260px}
+.tabs{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line);margin-top:8px}
+.tabs button{font:inherit;background:none;border:0;padding:10px 14px;color:var(--mute);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--acc);font-weight:600}
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:120px}
+.stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.stat span{color:var(--mute);font-size:12px}
+.wrap{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:72vh}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{position:sticky;top:0;background:var(--card);font-size:12px;color:var(--mute);cursor:pointer;user-select:none;z-index:1}
+th.sorted{color:var(--ink)}
+td.l,th.l{text-align:left}
+td.name{font-weight:600}
+tr:hover td{background:var(--chip)}
+.pos{color:var(--acc)} .neg{color:var(--acc2)}
+.hot{background:var(--hl);font-weight:700;border-radius:4px;padding:1px 6px}
+.ck{color:var(--acc);font-weight:700}
+.hist td.l{white-space:normal;text-align:left;line-height:1.7}
+.foot{color:var(--mute);font-size:12px;margin-top:14px}
+a{color:inherit}
+</style>
+</head>
+<body>
+<header>
+  <h1>三大法人同買追蹤</h1>
+  <div class="sub" id="sub">載入中…</div>
+</header>
+<main>
+  <div class="bar">
+    <select id="date" aria-label="日期"></select>
+    <select id="mkt" aria-label="市場"><option value="">全部市場</option><option>上市</option><option>上櫃</option></select>
+    <select id="minS" aria-label="最少連買天數"><option value="0">連買天數不限</option><option value="2">連買 ≥2 天</option><option value="3">連買 ≥3 天</option><option value="5">連買 ≥5 天</option><option value="10">連買 ≥10 天</option></select>
+    <input type="search" id="q" placeholder="搜尋代號或名稱">
+    <a href="inst_cobuy_latest.xlsx" class="sub">下載最新 Excel</a>
+  </div>
+  <div class="tabs" id="tabs">
+    <button data-t="co" class="on">今日三大同買</button>
+    <button data-t="foreign">外資買超</button>
+    <button data-t="trust">投信買超</button>
+    <button data-t="dealer">自營商買超</button>
+    <button data-t="hist">每日同買</button>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="wrap"><table id="tbl"></table></div>
+  <div class="foot">資料來源：臺灣證券交易所 T86、證券櫃檯買賣中心三大法人買賣明細。外資＝外資及陸資＋外資自營商；自營商＝自行買賣＋避險。單位：張（四捨五入，≥1 張才算買超）。連買天數＝自該日往回連續買超的天數，最多 20 天。僅含 4 碼普通股。非投資建議。</div>
+</main>
+<script>
+const W={foreign:'外資',trust:'投信',dealer:'自營商'};
+let IDX=null,DAY=null,tab='co',sortK=null,sortD=-1;
+const $=s=>document.querySelector(s);
+const fmt=v=>v==null?'–':v.toLocaleString('zh-TW');
+const fd=d=>`${d.slice(0,4)}/${d.slice(4,6)}/${d.slice(6)}`;
+const cls=v=>v>0?'pos':v<0?'neg':'';
+const st=v=>v>=3?`<span class="hot">${v}</span>`:(v??'–');
+
+async function init(){
+  IDX=await (await fetch('data/index.json',{cache:'no-store'})).json();
+  $('#date').innerHTML=IDX.dates.map(d=>`<option value="${d}">${fd(d)}</option>`).join('');
+  await loadDay(IDX.dates[0]);
+}
+async function loadDay(d){
+  DAY=await (await fetch(`data/${d}.json`,{cache:'no-store'})).json();
+  $('#sub').textContent=`資料日 ${fd(DAY.date)}・統計區間 ${fd(DAY.window[0])}～${fd(DAY.window[1])}（${DAY.n_days} 個交易日）`;
+  render();
+}
+function cols(){
+  if(tab==='co') return [['id','代號','l'],['name','名稱','l'],['market','市場','l'],
+    ['foreign','外資(張)'],['foreign_streak','外資連買'],['trust','投信(張)'],['trust_streak','投信連買'],
+    ['dealer','自營(張)'],['dealer_streak','自營連買'],['total','三大合計'],['co_streak','同買連續'],['co_days','20日同買天數']];
+  const k=tab,z=W[k];
+  return [['rank','#'],['id','代號','l'],['name','名稱','l'],['market','市場','l'],[k,`${z}買超(張)`],[k+'_streak','連買天數'],
+    [k+'_days','20日買超天數'],[k+'_sum','20日累計(張)'],['total','三大合計'],['cobuy','三大同買']];
+}
+function rows(){
+  const q=$('#q').value.trim(),m=$('#mkt').value,ms=+$('#minS').value;
+  let r=DAY.rows;
+  if(tab==='co') r=r.filter(x=>x.cobuy);
+  else r=r.filter(x=>x[tab]>0).sort((a,b)=>b[tab]-a[tab]).slice(0,300).map((x,i)=>({...x,rank:i+1}));
+  if(m) r=r.filter(x=>x.market===m);
+  if(q) r=r.filter(x=>x.id.includes(q)||(x.name||'').includes(q));
+  if(ms) r=r.filter(x=>tab==='co'?Math.max(x.co_streak,x.foreign_streak,x.trust_streak,x.dealer_streak)>=ms:x[tab+'_streak']>=ms);
+  const k=sortK||(tab==='co'?'total':null);
+  if(k) r=[...r].sort((a,b)=>{const A=a[k],B=b[k];return typeof A==='string'?sortD*A.localeCompare(B):sortD*((A??-1e18)-(B??-1e18))});
+  return r;
+}
+function render(){
+  if(tab==='hist') return renderHist();
+  const C=cols(),R=rows();
+  const all=DAY.rows.filter(x=>x.cobuy);
+  $('#stats').innerHTML=[
+    [all.length,'今日三大同買檔數'],
+    [all.filter(x=>x.co_streak>=2).length,'連續同買 ≥2 天'],
+    [DAY.rows.filter(x=>x.trust_streak>=5).length,'投信連買 ≥5 天'],
+    [DAY.rows.filter(x=>x.foreign_streak>=5).length,'外資連買 ≥5 天']
+  ].map(([v,t])=>`<div class="stat"><b>${v}</b><span>${t}</span></div>`).join('');
+  $('#tbl').innerHTML=`<thead><tr>${C.map(([k,t,a])=>`<th data-k="${k}" class="${a||''} ${sortK===k?'sorted':''}">${t}${sortK===k?(sortD>0?' ▲':' ▼'):''}</th>`).join('')}</tr></thead><tbody>${
+    R.map(x=>`<tr>${C.map(([k,,a])=>{const v=x[k];
+      if(k==='name') return `<td class="l name">${v||''}</td>`;
+      if(a==='l') return `<td class="l">${v??''}</td>`;
+      if(k==='cobuy') return `<td>${v?'<span class="ck">✔</span>':''}</td>`;
+      if(k.endsWith('streak')) return `<td>${st(v)}</td>`;
+      if(k==='rank'||k.endsWith('days')) return `<td>${v??''}</td>`;
+      return `<td class="${cls(v)}">${fmt(v)}</td>`}).join('')}</tr>`).join('') || `<tr><td class="l" colspan="${C.length}">沒有符合條件的個股</td></tr>`}</tbody>`;
+  document.querySelectorAll('#tbl th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(k==='rank')return;sortD=sortK===k?-sortD:-1;sortK=k;render()});
+}
+function renderHist(){
+  $('#stats').innerHTML='';
+  $('#tbl').className='hist';
+  $('#tbl').innerHTML=`<thead><tr><th class="l">日期</th><th>同買檔數</th><th class="l">前 15 檔（依三大合計張數）</th></tr></thead><tbody>${
+    IDX.cobuy_history.map(h=>`<tr><td class="l"><a href="#" data-d="${h.date}">${fd(h.date)}</a></td><td>${h.count}</td><td class="l">${h.top.join('、')}</td></tr>`).join('')}</tbody>`;
+  document.querySelectorAll('#tbl a[data-d]').forEach(a=>a.onclick=e=>{e.preventDefault();$('#date').value=a.dataset.d;setTab('co');loadDay(a.dataset.d)});
+}
+function setTab(t){tab=t;sortK=null;sortD=-1;$('#tbl').className='';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t))}
+$('#tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;setTab(b.dataset.t);render()};
+$('#date').onchange=e=>loadDay(e.target.value);
+['#q','#mkt','#minS'].forEach(s=>$(s).addEventListener('input',render));
+init().catch(e=>{$('#sub').textContent='資料載入失敗：'+e});
+</script>
+</body>
+</html>
