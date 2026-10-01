@@ -20,18 +20,21 @@
 | `scheduler.py` | APScheduler 統一排程與手動執行（`runner.run_async`） |
 | `warrant_scraper.py`、`warrant_volume_analyzer.py` | 權證排行與量能分析 |
 | `templates/*.html` | Jinja2 樣板，`base.html` 有導覽列（Bootstrap 5） |
-| `inst_cobuy/` | 三大法人同買／連買（目前為 GitHub Actions + Pages 靜態版，見下） |
+| `inst_flow.py` | 三大法人同買／連買：資料表 `inst_daily`、`inst_no_trading`，頁面與 API |
+| `inst_cobuy/fetch.py` | 證交所／櫃買抓取函式（`twse`、`tpex`）；`inst_cobuy/data/*.csv` 只當首次匯入的種子資料 |
 
 ## 現有頁面
-`/` 首頁、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/admin/etfs` ETF 清單管理＋手動爬取 ETF／權證（首頁原按鈕已移到這裡）、`/login`
+`/` 首頁、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/inst-cobuy` 三大法人同買、`/admin/etfs` ETF 清單管理＋手動爬取 ETF／權證（首頁原按鈕已移到這裡）、`/login`
 
 ## 三大法人同買（inst_cobuy）
 - 資料來源：證交所 T86（上市）、櫃買中心三大法人買賣明細（上櫃），免費免 token
   - T86 欄位：外陸資買賣超股數（不含外資自營商）＋外資自營商買賣超股數＝外資；投信；自營商買賣超股數（合計）
   - 注意：欄位名稱比對時「不含外資自營商」字樣會誤中排除條件（已修正過一次）
 - 定義：張＝股數/1000 四捨五入，≥1 張才算買超；只含 4 碼普通股／KY；連買天數上限 `N=40`；頁面可切換最近 20 個交易日（需 60 個交易日資料）
-- 目前：`.github/workflows/inst-cobuy.yml` 平日 18:20 跑 `inst_cobuy/fetch.py` → `build.py`，資料存 `inst_cobuy/data/YYYYMMDD.csv` 並 commit，網頁發布到 GitHub Pages
-- 已驗證：2026-09-30 外資、自營與 FinMind 一致；投信 22 檔不同（以官方為準）
+- 目前：APScheduler 工作 `inst`（平日 18:20，`SCHED_INST`）寫入 PostgreSQL；啟動時背景匯入 `inst_cobuy/data/*.csv`（只補缺的日期）
+- 頁面 `/inst-cobuy`、API `/api/inst-cobuy/dates`、`/api/inst-cobuy?date=`、`/api/inst-cobuy.csv?date=`；`INST_COBUY_PUBLIC=true` 免登入
+- 2026-10 已移除 GitHub Actions（inst-cobuy.yml、daily-scraper.yml）與靜態網頁；GitHub Pages 需使用者在 repo Settings 關閉
+- 已驗證：2026-09-30 外資、自營與 FinMind 一致；投信 22 檔不同（以官方為準）；資料庫版計算結果與舊靜態版逐欄一致（2026-10-01，1160 檔）
 
 ## 進行中的重構計畫（2026-10 與使用者確認）
 1. ✅ 本檔 CLAUDE.md
@@ -46,7 +49,7 @@
    - 分類：國內主動、國外為主、高股息（可擴充）
    - 首次部署把寫死的代號匯入，預設「國內主動」，由使用者在管理頁調整
    - 爬蟲改讀啟用中的 ETF；新增代號時先試抓
-4. **三大法人改存 PostgreSQL**：`inst_daily`（trade_date, stock_id, name, market, foreign_net, trust_net, dealer_net）、`inst_no_trading`；頁面 `/inst-cobuy`、API `/api/inst-cobuy`、CSV 下載；首次啟動匯入 `inst_cobuy/data/*.csv`；之後移除 GitHub Actions 與 Pages
+4. ✅ **三大法人改存 PostgreSQL**：`inst_daily`（trade_date, stock_id, name, market, foreign_net, trust_net, dealer_net）、`inst_no_trading`；頁面 `/inst-cobuy`、API `/api/inst-cobuy`、CSV 下載；首次啟動匯入 `inst_cobuy/data/*.csv`；之後移除 GitHub Actions 與 Pages
    - 環境變數 `INST_COBUY_PUBLIC=true` 時該頁免登入（為了 AdSense）
 5. **首頁分流** `/`（原首頁移到 `/etf`），四張卡片：
    1. 主動式 ETF 日報（積極型）＝排除「國外為主」「高股息」
@@ -56,6 +59,5 @@
 6. 市場情緒指標
 
 ## 其他備註
-- `.github/workflows/daily-scraper.yml`（ETF Scraper）已被 GitHub 因不活躍停用；它呼叫的 `/manual-scrape` 需要 cookie 登入，排程呼叫一直會 401。改用 APScheduler 後可刪除。
 - 未來可能加 Google AdSense：需公開頁面；github.io 需在根網域放 `ads.txt`，建議用自訂網域。
 - `database_config.py`、`diagnose_password_issue.py` 請確認沒有寫死密碼或連線字串（repo 為公開）。

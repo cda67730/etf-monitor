@@ -51,6 +51,7 @@
       <span class="fw-semibold text-warning me-1"><i class="fas fa-sync-alt"></i> 手動更新</span>
       <button class="btn btn-warning btn-sm run-btn" data-job="etf"><i class="fas fa-download"></i> 爬取ETF</button>
       <button class="btn btn-info btn-sm run-btn" data-job="warrant"><i class="fas fa-certificate"></i> 爬取權證</button>
+      <button class="btn btn-success btn-sm run-btn" data-job="inst"><i class="fas fa-users"></i> 爬取三大法人</button>
     </div>
     <div class="small text-muted mt-2" id="job-status">讀取排程狀態中…</div>
   </div>
@@ -233,7 +234,7 @@ document.getElementById('add-form').addEventListener('submit', async e => {
 });
 
 // ---- 手動更新：在背景執行，與排程共用同一把鎖，不會重複跑 ----
-const JOB_LABEL = { etf: 'ETF', warrant: '權證' };
+const JOB_LABEL = { etf: 'ETF', warrant: '權證', inst: '三大法人' };
 const hhmm = t => t ? t.slice(5, 16).replace('T', ' ') : '';
 let pollTimer = null;
 async function refreshJobs() {

@@ -126,6 +126,10 @@ app.add_middleware(
 import etf_registry
 etf_registry.init(db_config)
 
+# ============ 三大法人同買（inst_daily）============
+import inst_flow
+inst_flow.init(db_config)
+
 # ============ 初始化爬蟲 ============
 try:
     scraper = ETFHoldingsScraper() if db_config else None
@@ -150,7 +154,10 @@ import scheduler as app_scheduler
 @app.on_event("startup")
 async def start_scheduler():
     try:
-        app_scheduler.setup(scraper=scraper, warrant_scraper=warrant_scraper)
+        extra = []
+        if inst_flow.flow:
+            extra.append(("inst", "三大法人買賣超", inst_flow.flow.scrape, "SCHED_INST", "20 18 * * 1-5"))
+        app_scheduler.setup(scraper=scraper, warrant_scraper=warrant_scraper, extra_jobs=extra)
     except Exception as e:
         logger.error(f"排程啟動失敗: {e}")
         logger.error(traceback.format_exc())
@@ -1972,6 +1979,8 @@ async def admin_etf_delete(request: Request, code: str):
     code = _check_code(code)
     await run_in_threadpool(etf_registry.registry.delete, code)
     return {"status": "ok"}
+
+app.include_router(inst_flow.create_router(templates, check_authentication))
 
 # ============ 主要頁面路由 ============
 @app.get("/", response_class=HTMLResponse)
