@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}ETF 清單管理 - ETF持股明細監控系統{% endblock %}
+
+{% block content %}
+<style>
+  .reg-table td, .reg-table th { vertical-align: middle; }
+  .reg-table { min-width: 860px; }
+  .reg-table .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
+  .reg-table tr.disabled td { color: #adb5bd; }
+  .reg-table tr.disabled .form-select, .reg-table tr.disabled .form-control { color: #adb5bd; }
+  .cat-badge { font-weight: 500; }
+  .cat-國內主動 { background: #e7f1ff; color: #0b5ed7; }
+  .cat-國外為主 { background: #fff3cd; color: #997404; }
+  .cat-高股息 { background: #e8f5e9; color: #1e7b34; }
+  .cat-other { background: #f1f3f5; color: #495057; }
+  .summary .badge { font-size: .9rem; padding: .5em .8em; margin: 0 .35rem .35rem 0; }
+  .move-btn { padding: 0 .35rem; line-height: 1.2; }
+  .saved-flash { transition: background-color .8s; background-color: #d1e7dd !important; }
+  #toast-box { position: fixed; right: 16px; bottom: 16px; z-index: 1080; }
+</style>
+
+<div class="d-flex flex-wrap justify-content-between align-items-end mb-3">
+  <div>
+    <h3 class="mb-1"><i class="fas fa-list-check"></i> ETF 清單管理</h3>
+    <div class="text-muted small">決定爬蟲要抓哪些 ETF，以及每檔屬於哪一類。修改後自動儲存，下次排程就會生效。</div>
+  </div>
+</div>
+
+<!-- 新增 -->
+<div class="filter-section">
+  <form id="add-form" class="row g-2 align-items-end" autocomplete="off">
+    <div class="col-6 col-md-2">
+      <label class="form-label small mb-1">ETF 代號</label>
+      <input id="add-code" class="form-control text-uppercase" placeholder="例：00981A" maxlength="10" required>
+    </div>
+    <div class="col-6 col-md-4">
+      <label class="form-label small mb-1">名稱（可留空，試抓後自動帶入）</label>
+      <input id="add-name" class="form-control" placeholder="例：統一台股增長主動式ETF">
+    </div>
+    <div class="col-6 col-md-3">
+      <label class="form-label small mb-1">分類</label>
+      <select id="add-cat" class="form-select">
+        {% for c in categories %}<option>{{ c }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-md-3 d-grid">
+      <button class="btn btn-primary" type="submit"><i class="fas fa-plus"></i> 試抓並新增</button>
+    </div>
+  </form>
+  <div class="small text-muted mt-2">新增時會先實際抓一次持股，抓得到才加入；抓不到會提示原因。</div>
+</div>
+
+<!-- 摘要 -->
+<div class="summary mb-2" id="summary"></div>
+<div class="alert alert-light border small py-2">
+  <i class="fas fa-circle-info text-primary"></i>
+  <b>積極型日報</b>＝啟用中、且分類不是「國外為主」或「高股息」的 ETF；<b>不分類日報</b>＝全部啟用中的 ETF。
+</div>
+
+<!-- 清單 -->
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover reg-table mb-0">
+      <thead class="table-light">
+        <tr>
+          <th style="width:70px">排序</th>
+          <th style="width:100px">代號</th>
+          <th>名稱</th>
+          <th style="width:150px">分類</th>
+          <th style="width:80px" class="text-center">啟用</th>
+          <th style="width:120px">最新資料</th>
+          <th style="width:80px" class="text-end">持股數</th>
+          <th style="width:110px" class="text-end">操作</th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        {% for e in etfs %}
+        <tr data-code="{{ e.etf_code }}" class="{{ '' if e.enabled else 'disabled' }}">
+          <td>
+            <button class="btn btn-sm btn-outline-secondary move-btn" data-move="-1" title="上移"><i class="fas fa-chevron-up"></i></button>
+            <button class="btn btn-sm btn-outline-secondary move-btn" data-move="1" title="下移"><i class="fas fa-chevron-down"></i></button>
+          </td>
+          <td class="code">{{ e.etf_code }}</td>
+          <td><input class="form-control form-control-sm" data-field="etf_name" value="{{ e.etf_name or '' }}"></td>
+          <td>
+            <select class="form-select form-select-sm" data-field="category">
+              {% for c in categories %}<option {{ 'selected' if c == e.category else '' }}>{{ c }}</option>{% endfor %}
+            </select>
+          </td>
+          <td class="text-center">
+            <div class="form-check form-switch d-inline-block m-0">
+              <input class="form-check-input" type="checkbox" data-field="enabled" {{ 'checked' if e.enabled else '' }}>
+            </div>
+          </td>
+          <td class="small">{{ e.latest_date or '—' }}</td>
+          <td class="small text-end">{{ e.latest_rows or '—' }}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-primary" data-act="test" title="立即試抓"><i class="fas fa-flask"></i></button>
+            <button class="btn btn-sm btn-outline-danger" data-act="delete" title="從清單移除（歷史資料保留）"><i class="fas fa-trash"></i></button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="small text-muted mt-2">停用：不再抓取，但歷史持股資料保留。移除：從清單刪除，歷史資料同樣保留。</div>
+
+<div id="toast-box"></div>
+
+<script>
+const CATS = {{ categories | tojson }};
+const ROWS = document.getElementById('rows');
+
+function toast(msg, ok = true) {
+  const el = document.createElement('div');
+  el.className = `alert ${ok ? 'alert-success' : 'alert-danger'} shadow-sm py-2 px-3 mb-2`;
+  el.textContent = msg;
+  document.getElementById('toast-box').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+function catClass(c) { return ['國內主動', '國外為主', '高股息'].includes(c) ? `cat-${c}` : 'cat-other'; }
+
+function renderSummary() {
+  const trs = [...ROWS.querySelectorAll('tr')];
+  const on = trs.filter(tr => tr.querySelector('[data-field=enabled]').checked);
+  const count = {};
+  on.forEach(tr => { const c = tr.querySelector('[data-field=category]').value; count[c] = (count[c] || 0) + 1; });
+  const aggressive = on.filter(tr => !['國外為主', '高股息'].includes(tr.querySelector('[data-field=category]').value)).length;
+  document.getElementById('summary').innerHTML =
+    `<span class="badge bg-dark">啟用 ${on.length} / ${trs.length} 檔</span>` +
+    `<span class="badge bg-primary">積極型 ${aggressive} 檔</span>` +
+    Object.entries(count).map(([c, n]) => `<span class="badge cat-badge ${catClass(c)}">${c} ${n}</span>`).join('');
+}
+
+async function api(method, url, body) {
+  const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || r.statusText);
+  return j;
+}
+
+async function save(tr, patch) {
+  try {
+    await api('PATCH', `/api/admin/etfs/${tr.dataset.code}`, patch);
+    tr.classList.add('saved-flash'); setTimeout(() => tr.classList.remove('saved-flash'), 800);
+  } catch (e) { toast(`儲存失敗：${e.message}`, false); }
+}
+
+ROWS.addEventListener('change', e => {
+  const tr = e.target.closest('tr'), f = e.target.dataset.field;
+  if (!f) return;
+  const v = f === 'enabled' ? e.target.checked : e.target.value;
+  if (f === 'enabled') tr.classList.toggle('disabled', !v);
+  save(tr, { [f]: v }); renderSummary();
+});
+
+ROWS.addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const tr = b.closest('tr'), code = tr.dataset.code;
+  if (b.dataset.move) {
+    const sib = b.dataset.move === '-1' ? tr.previousElementSibling : tr.nextElementSibling;
+    if (!sib) return;
+    b.dataset.move === '-1' ? ROWS.insertBefore(tr, sib) : ROWS.insertBefore(sib, tr);
+    try { await api('PUT', '/api/admin/etfs/order', { codes: [...ROWS.children].map(x => x.dataset.code) }); }
+    catch (err) { toast(`排序儲存失敗：${err.message}`, false); }
+  } else if (b.dataset.act === 'test') {
+    b.disabled = true; b.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    try { const j = await api('POST', `/api/admin/etfs/${code}/test`); toast(`${code} 抓到 ${j.rows} 檔持股（${j.date}）`); }
+    catch (err) { toast(`${code} 試抓失敗：${err.message}`, false); }
+    b.disabled = false; b.innerHTML = '<i class="fas fa-flask"></i>';
+  } else if (b.dataset.act === 'delete') {
+    // 不用 confirm()：直接按第二次才刪除，避免瀏覽器對話框
+    if (!b.dataset.armed) { b.dataset.armed = 1; b.classList.replace('btn-outline-danger', 'btn-danger'); b.title = '再按一次確認移除'; setTimeout(() => { delete b.dataset.armed; b.classList.replace('btn-danger', 'btn-outline-danger'); }, 3000); return; }
+    try { await api('DELETE', `/api/admin/etfs/${code}`); tr.remove(); renderSummary(); toast(`已移除 ${code}`); }
+    catch (err) { toast(`移除失敗：${err.message}`, false); }
+  }
+});
+
+document.getElementById('add-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button'); btn.disabled = true;
+  const code = document.getElementById('add-code').value.trim().toUpperCase();
+  try {
+    const j = await api('POST', '/api/admin/etfs', { etf_code: code, etf_name: document.getElementById('add-name').value.trim(), category: document.getElementById('add-cat').value });
+    toast(`已新增 ${code}，抓到 ${j.rows} 檔持股`); setTimeout(() => location.reload(), 800);
+  } catch (err) { toast(`新增失敗：${err.message}`, false); }
+  btn.disabled = false;
+});
+
+renderSummary();
+</script>
+{% endblock %}
