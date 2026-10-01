@@ -7,7 +7,7 @@ on:
     inputs:
       backfill:
         description: '往回補幾個交易日'
-        default: '45'
+        default: '60'
 
 permissions:
   contents: write
@@ -34,7 +34,7 @@ jobs:
           cache-dependency-path: inst_cobuy/requirements.txt
       - run: pip install -r requirements.txt
       - name: 抓三大法人資料
-        run: python fetch.py ${{ github.event.inputs.backfill || '45' }}
+        run: python fetch.py ${{ github.event.inputs.backfill || '60' }}
       - name: 計算並產生網頁
         run: python build.py
       - name: 存回每日資料

@@ -5,7 +5,7 @@ import numpy as np, pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA, SITE = os.path.join(HERE, 'data'), os.path.join(HERE, 'site')
-N = 20          # 連買最多回溯天數 / 統計區間
+N = 40          # 連買最多回溯天數 / 統計區間
 KEEP = 20       # 網頁可切換的日期數
 W = {'foreign': '外資', 'trust': '投信', 'dealer': '自營商'}
 
@@ -68,15 +68,15 @@ def excel(res, last, path):
     t = res.rename(columns={'name': '名稱', 'market': '市場'})
     cols = ['名稱', '市場']
     for k, z in W.items():
-        t = t.rename(columns={k: f'{z}買超(張)', k + '_streak': f'{z}連買天數', k + '_sum': f'{z}20日累計(張)', k + '_days': f'{z}20日買超天數'})
-    t = t.rename(columns={'co_streak': '三大同買連續天數', 'co_days': '20日內同買天數', 'total': '三大合計(張)'})
+        t = t.rename(columns={k: f'{z}買超(張)', k + '_streak': f'{z}連買天數', k + '_sum': f'{z}{N}日累計(張)', k + '_days': f'{z}{N}日買超天數'})
+    t = t.rename(columns={'co_streak': '三大同買連續天數', 'co_days': f'{N}日內同買天數', 'total': '三大合計(張)'})
     t.index.name = '代號'
-    co = t[res.cobuy].sort_values('三大合計(張)', ascending=False)[cols + [c for z in W.values() for c in (f'{z}買超(張)', f'{z}連買天數')] + ['三大合計(張)', '三大同買連續天數', '20日內同買天數']]
+    co = t[res.cobuy].sort_values('三大合計(張)', ascending=False)[cols + [c for z in W.values() for c in (f'{z}買超(張)', f'{z}連買天數')] + ['三大合計(張)', '三大同買連續天數', f'{N}日內同買天數']]
     with pd.ExcelWriter(path) as xw:
         co.to_excel(xw, sheet_name='今日三大同買')
         for z in W.values():
             r = t[t[f'{z}買超(張)'] > 0].sort_values(f'{z}買超(張)', ascending=False).head(100)
-            r[cols + [f'{z}買超(張)', f'{z}連買天數', f'{z}20日買超天數', f'{z}20日累計(張)', '三大合計(張)']].to_excel(xw, sheet_name=f'{z}買超排行')
+            r[cols + [f'{z}買超(張)', f'{z}連買天數', f'{z}{N}日買超天數', f'{z}{N}日累計(張)', '三大合計(張)']].to_excel(xw, sheet_name=f'{z}買超排行')
 
 
 def main():

@@ -61,7 +61,7 @@ a{color:inherit}
   </div>
   <div class="stats" id="stats"></div>
   <div class="wrap"><table id="tbl"></table></div>
-  <div class="foot">資料來源：臺灣證券交易所 T86、證券櫃檯買賣中心三大法人買賣明細。外資＝外資及陸資＋外資自營商；自營商＝自行買賣＋避險。單位：張（四捨五入，≥1 張才算買超）。連買天數＝自該日往回連續買超的天數，最多 20 天。僅含 4 碼普通股。非投資建議。</div>
+  <div class="foot">資料來源：臺灣證券交易所 T86、證券櫃檯買賣中心三大法人買賣明細。外資＝外資及陸資＋外資自營商；自營商＝自行買賣＋避險。單位：張（四捨五入，≥1 張才算買超）。連買天數＝自該日往回連續買超的天數，最多 40 天。僅含 4 碼普通股。非投資建議。</div>
 </main>
 <script>
 const W={foreign:'外資',trust:'投信',dealer:'自營商'};
@@ -85,10 +85,10 @@ async function loadDay(d){
 function cols(){
   if(tab==='co') return [['id','代號','l'],['name','名稱','l'],['market','市場','l'],
     ['foreign','外資(張)'],['foreign_streak','外資連買'],['trust','投信(張)'],['trust_streak','投信連買'],
-    ['dealer','自營(張)'],['dealer_streak','自營連買'],['total','三大合計'],['co_streak','同買連續'],['co_days','20日同買天數']];
+    ['dealer','自營(張)'],['dealer_streak','自營連買'],['total','三大合計'],['co_streak','同買連續'],['co_days',`${DAY.n_days}日同買天數`]];
   const k=tab,z=W[k];
   return [['rank','#'],['id','代號','l'],['name','名稱','l'],['market','市場','l'],[k,`${z}買超(張)`],[k+'_streak','連買天數'],
-    [k+'_days','20日買超天數'],[k+'_sum','20日累計(張)'],['total','三大合計'],['cobuy','三大同買']];
+    [k+'_days',`${DAY.n_days}日買超天數`],[k+'_sum',`${DAY.n_days}日累計(張)`],['total','三大合計'],['cobuy','三大同買']];
 }
 function rows(){
   const q=$('#q').value.trim(),m=$('#mkt').value,ms=+$('#minS').value;
