@@ -139,6 +139,17 @@ except Exception as e:
     logger.error(f"權證爬蟲初始化失敗: {e}")
     warrant_scraper = None
 
+# ============ 統一排程（APScheduler）============
+import scheduler as app_scheduler
+
+@app.on_event("startup")
+async def start_scheduler():
+    try:
+        app_scheduler.setup(scraper=scraper, warrant_scraper=warrant_scraper)
+    except Exception as e:
+        logger.error(f"排程啟動失敗: {e}")
+        logger.error(traceback.format_exc())
+
 # ============ 會話管理（保持原有代碼不變）============
 class SessionManager:
     def __init__(self):
@@ -1842,11 +1853,36 @@ async def simple_db_status():
 async def shutdown_event():
     """應用程序關閉時的清理工作"""
     try:
+        app_scheduler.shutdown()
         if db_config:
             db_config.close()
             logger.info("應用程序關閉，數據庫連接已清理")
     except Exception as e:
         logger.error(f"關閉應用程序時出錯: {e}")
+
+# ============ 排程狀態與手動執行 ============
+async def _scheduler_authorized(request: Request) -> bool:
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    return token == settings.scheduler_token or await check_authentication(request)
+
+@app.get("/api/scheduler/status")
+async def scheduler_status(request: Request):
+    """排程狀態：每個工作的排程時間、下次執行、上次結果"""
+    if not await _scheduler_authorized(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return app_scheduler.status()
+
+@app.post("/api/scheduler/run/{job_id}")
+async def scheduler_run(request: Request, job_id: str):
+    """立即在背景執行某個工作（etf / warrant / ...）"""
+    if not await _scheduler_authorized(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if job_id not in app_scheduler.runner.jobs:
+        raise HTTPException(status_code=404, detail=f"未知工作：{job_id}")
+    if app_scheduler.runner.state[job_id]["running"]:
+        return {"status": "running", "message": f"{job_id} 執行中"}
+    app_scheduler.runner.run_async(job_id)
+    return {"status": "started", "job": job_id}
 
 # ============ 主要頁面路由 ============
 @app.get("/", response_class=HTMLResponse)
