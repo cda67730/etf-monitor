@@ -125,7 +125,7 @@
             
             <!-- 簡單的ETF列表 -->
             <div class="row">
-                {% for etf_code in ['00981A', '00982A', '00983A', '00984A', '00985A'] %}
+                {% for etf_code in etf_codes %}
                     {% set etf_holdings = decreased_holdings|selectattr("etf_code", "equalto", etf_code)|list %}
                     {% if etf_holdings %}
                     <div class="col-md-6 col-lg-4 mb-3">

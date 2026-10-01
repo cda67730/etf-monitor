@@ -37,13 +37,7 @@ class ETFHoldingsScraper:
         # 統一的DtNo，所有ETF都使用相同的
         self.dtno = '59449513'
         
-        # 支援的ETF代碼清單
-        self.etf_codes = [
-            '00980A', '00981A', '00982A', '00984A', '00985A',
-            '00991A', '00992A', '00993A', '00994A', '00995A',
-            '00403A', '00996A', '00999A',
-            '00404A', '00405A', '00406A',
-        ]
+        # ETF 代號改由 etf_registry 資料表管理（/admin/etfs），見 etf_codes 屬性
 
         # 股票名稱正規化 registry：stock_code -> 目前已知最佳名稱
         self._name_registry: dict = {}
@@ -205,6 +199,34 @@ class ETFHoldingsScraper:
             logger.error(f"❌ 檢查現有數據時出錯: {e}")
             return False
     
+    @property
+    def etf_codes(self):
+        """啟用中的 ETF 代號（來自 etf_registry；資料庫不可用時用內建清單）"""
+        try:
+            import etf_registry
+            if etf_registry.registry:
+                return etf_registry.registry.enabled_codes()
+        except Exception as e:
+            logger.error(f"❌ 讀取 ETF 清單失敗，改用內建清單: {e}")
+        from etf_registry import DEFAULT_ETFS
+        return list(DEFAULT_ETFS)
+
+    def test_etf(self, etf_code):
+        """試抓單一 ETF（不寫入資料庫）：回傳 {rows, date, name}，抓不到時丟出例外"""
+        data = self.get_holdings_data(etf_code, check=False)
+        rows = (data or {}).get('Data') or []
+        if not rows:
+            raise ValueError(f"pocket.tw 查無 {etf_code} 持股資料，請確認代號")
+        name = None
+        try:
+            q = {'action': 'getdtnodata', 'DtNo': '60465380',
+                 'ParamStr': f'AssignID={etf_code};MTPeriod=0;DTMode=0;DTRange=1;DTOrder=1;', 'FilterNo': '0'}
+            d = self._api_get(q, timeout=15).json().get('Data') or []
+            name = d[0][1] if d else None
+        except Exception as e:
+            logger.warning(f"⚠️ 取得 {etf_code} 名稱失敗: {e}")
+        return {'rows': len(rows), 'date': self.parse_date_from_api(str(rows[0][0]).strip()), 'name': name}
+
     def _get_token(self, force=False):
         """取得 pocket.tw guest token（快取到過期前 10 分鐘）"""
         if not force and self._token and time.time() < self._token_expire:
@@ -240,9 +262,9 @@ class ETFHoldingsScraper:
             return r
         return r
 
-    def get_holdings_data(self, etf_code):
+    def get_holdings_data(self, etf_code, check=True):
         """獲取指定ETF的持股明細"""
-        if etf_code not in self.etf_codes:
+        if check and etf_code not in self.etf_codes:
             logger.error(f"❌ 不支持的ETF代碼: {etf_code}")
             return None
         
