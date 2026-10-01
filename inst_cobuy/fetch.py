@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """抓證交所 T86（上市）+ 櫃買中心（上櫃）三大法人買賣超，存成 data/YYYYMMDD.csv（單位：股）
-用法：python fetch.py [往回補幾個交易日，預設 45]
+用法：python fetch.py [往回補幾個交易日，預設 60]
 """
 import csv, datetime as dt, json, os, re, sys, time
 import requests
@@ -112,7 +112,7 @@ def tpex(day):
 
 
 def main():
-    want = int(sys.argv[1]) if len(sys.argv) > 1 else 45
+    want = int(sys.argv[1]) if len(sys.argv) > 1 else 60
     os.makedirs(DATA, exist_ok=True)
     no_trade = set(open(HOLI).read().split()) if os.path.exists(HOLI) else set()
     have = {f[:8] for f in os.listdir(DATA) if re.fullmatch(r'\d{8}\.csv', f)}
