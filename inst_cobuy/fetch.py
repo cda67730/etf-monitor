@@ -13,6 +13,25 @@ TW = dt.timezone(dt.timedelta(hours=8))
 SLEEP = 4
 
 
+def get_json(url, params):
+    """GET 並解析 JSON；失敗時重試，最後把狀態碼與內容開頭印出來方便除錯"""
+    last = None
+    for i in range(3):
+        try:
+            r = requests.get(url, params=params, headers=UA, timeout=30)
+            if r.status_code == 200:
+                try:
+                    return r.json()
+                except ValueError:
+                    last = f'非 JSON 回應：{r.text[:200]!r}'
+            else:
+                last = f'HTTP {r.status_code}：{r.text[:200]!r}'
+        except requests.RequestException as e:
+            last = f'連線錯誤：{e}'
+        time.sleep(SLEEP * (i + 2))
+    raise RuntimeError(f'{url} {params} 失敗 → {last}')
+
+
 def num(s):
     s = str(s).replace(',', '').strip()
     try:
@@ -32,15 +51,12 @@ def pick(fields, *keys, exclude=()):
 
 def twse(day):
     url = 'https://www.twse.com.tw/rwd/zh/fund/T86'
-    r = requests.get(url, params={'date': day.strftime('%Y%m%d'), 'selectType': 'ALLBUT0999', 'response': 'json'},
-                     headers=UA, timeout=30)
-    r.raise_for_status()
-    j = r.json()
+    j = get_json(url, {'date': day.strftime('%Y%m%d'), 'selectType': 'ALLBUT0999', 'response': 'json'})
     if j.get('stat') != 'OK' or not j.get('data'):
         return None
     f = j['fields']
     i_code, i_name = 0, 1
-    i_fx = pick(f, '外陸資買賣超', exclude=('外資自營商',))
+    i_fx = pick(f, '外陸資買賣超')
     i_fxd = pick(f, '外資自營商買賣超')
     i_it = pick(f, '投信買賣超')
     i_dl = pick(f, '自營商買賣超股數', exclude=('自行', '避險', '外資'))
@@ -55,10 +71,7 @@ def twse(day):
 
 def _tpex_rows_new(day):
     url = 'https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade'
-    r = requests.get(url, params={'type': 'Daily', 'sect': 'EW', 'date': day.strftime('%Y/%m/%d'), 'response': 'json'},
-                     headers=UA, timeout=30)
-    r.raise_for_status()
-    j = r.json()
+    j = get_json(url, {'type': 'Daily', 'sect': 'EW', 'date': day.strftime('%Y/%m/%d'), 'response': 'json'})
     t = (j.get('tables') or [{}])[0]
     return t.get('fields'), t.get('data')
 
@@ -66,16 +79,15 @@ def _tpex_rows_new(day):
 def _tpex_rows_old(day):
     roc = f'{day.year - 1911}/{day:%m/%d}'
     url = 'https://www.tpex.org.tw/web/stock/3insti/daily_trade/3itrade_hedge_result.php'
-    r = requests.get(url, params={'l': 'zh-tw', 'se': 'EW', 't': 'D', 'd': roc, 'o': 'json'}, headers=UA, timeout=30)
-    r.raise_for_status()
-    j = r.json()
+    j = get_json(url, {'l': 'zh-tw', 'se': 'EW', 't': 'D', 'd': roc, 'o': 'json'})
     return None, j.get('aaData') or j.get('tables', [{}])[0].get('data')
 
 
 def tpex(day):
     try:
         f, data = _tpex_rows_new(day)
-    except Exception:
+    except Exception as e:
+        print(f'  櫃買新版 API 失敗，改用舊版：{e}')
         f, data = None, None
     if not data:
         time.sleep(SLEEP)
@@ -106,7 +118,7 @@ def main():
     have = {f[:8] for f in os.listdir(DATA) if re.fullmatch(r'\d{8}\.csv', f)}
     now = dt.datetime.now(TW)
     day = now.date() if now.hour >= 17 else now.date() - dt.timedelta(days=1)   # 17:00 後才抓當天
-    tried = 0
+    tried, fails = 0, 0
     trading_seen = 0
     while trading_seen < want and tried < want * 2 + 30:
         tried += 1
@@ -115,13 +127,23 @@ def main():
             day -= dt.timedelta(days=1); continue
         if key in have:
             trading_seen += 1; day -= dt.timedelta(days=1); continue
-        a = twse(day); time.sleep(SLEEP)
+        try:
+            a = twse(day)
+        except Exception as e:
+            print(f'✖ {key} 證交所抓取失敗：{e}'); fails += 1
+            if fails >= 3: break
+            day -= dt.timedelta(days=1); continue
+        time.sleep(SLEEP)
         if a is None:
             print(f'{key} 無資料（休市或尚未公布）')
             if day < now.date():
                 no_trade.add(key)
             day -= dt.timedelta(days=1); continue
-        b = tpex(day) or []; time.sleep(SLEEP)
+        try:
+            b = tpex(day) or []
+        except Exception as e:
+            print(f'✖ {key} 櫃買抓取失敗：{e}'); b = []
+        time.sleep(SLEEP)
         if not b:
             if (now.date() - day).days <= 3:
                 print(f'⚠ {key} 櫃買尚未公布，下次再補'); day -= dt.timedelta(days=1); continue
@@ -135,6 +157,10 @@ def main():
         day -= dt.timedelta(days=1)
     with open(HOLI, 'w') as fp:
         fp.write('\n'.join(sorted(no_trade)))
+    n = len([f for f in os.listdir(DATA) if f.endswith('.csv')])
+    print(f'目前共有 {n} 個交易日資料')
+    if n == 0:
+        sys.exit('沒有抓到任何資料，請看上面的錯誤訊息')
 
 
 if __name__ == '__main__':
