@@ -78,6 +78,24 @@ class JobRunner:
                       last_seconds=round(time.time() - t0, 1))
             lock.release()
 
+    def run_or_wait(self, job_id, fresh_sec=600, timeout=1200):
+        """給外部同步呼叫（例如 BookReview 的 /manual-scrape）：
+        - 正在跑：等它跑完，回傳那次結果，不重複執行
+        - fresh_sec 秒內剛成功跑完：直接回傳上次結果
+        - 否則：立即執行一次並回傳結果"""
+        st = self.state[job_id]
+        lock = self.locks[job_id]
+        if st["running"] or lock.locked():
+            if lock.acquire(timeout=timeout):
+                lock.release()
+            return dict(st, reused=True)
+        if st["last_status"] == "success" and st["last_end"]:
+            age = (datetime.now(_TZ) - datetime.fromisoformat(st["last_end"])).total_seconds()
+            if age < fresh_sec:
+                return dict(st, reused=True)
+        self.run(job_id)
+        return dict(st, reused=False)
+
     def run_async(self, job_id):
         threading.Thread(target=self.run, args=(job_id,), daemon=True).start()
 

@@ -575,9 +575,11 @@ class DatabaseQuery:
                 where_conditions.append(f"h.update_date = (SELECT MAX(update_date) FROM etf_holdings)")
             
             if etf_code:
+                # 指定了 ETF 就照查（停用的 ETF 歷史資料也查得到，例如外部 API 呼叫）
                 where_conditions.append(f"h.etf_code = {ph}")
                 params.append(etf_code)
-            where_conditions.append(self._scope_sql("h.etf_code"))
+            else:
+                where_conditions.append(self._scope_sql("h.etf_code"))
             
             where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
             
@@ -1604,32 +1606,21 @@ async def warrant_ranking_page(
 # ============ 爬蟲相關路由 ============
 @app.post("/manual-scrape")
 async def manual_scrape(request: Request):
-    """手動爬取功能"""
-    try:
-        if not await check_authentication(request):
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        
-        if not scraper:
-            raise HTTPException(status_code=503, detail="Scraper unavailable")
-        
-        # 執行爬蟲
-        success_count = scraper.scrape_all_etfs()
-        
-        return {
-            "status": "success",
-            "message": f"成功爬取 {success_count} 個ETF的數據",
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"手動爬取錯誤: {e}")
-        return {
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
+    """手動爬取（BookReview 會呼叫）：與排程共用同一把鎖，排程正在跑就等它跑完；
+    10 分鐘內剛成功跑過就直接回傳上次結果，不重複爬"""
+    if not await check_authentication(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if "etf" not in app_scheduler.runner.jobs:
+        raise HTTPException(status_code=503, detail="Scraper unavailable")
+    from starlette.concurrency import run_in_threadpool
+    st = await run_in_threadpool(app_scheduler.runner.run_or_wait, "etf")
+    ok = st.get("last_status") == "success"
+    return {
+        "status": "success" if ok else "error",
+        "message": (("沿用剛完成的爬取：" if st.get("reused") else "") + (st.get("last_message") or "")),
+        "finished_at": st.get("last_end"),
+        "timestamp": datetime.now().isoformat()
+    }
 
 @app.post("/manual-scrape-warrants")
 async def manual_scrape_warrants(request: Request):

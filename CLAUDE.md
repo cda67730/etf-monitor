@@ -64,6 +64,16 @@
    4. 市場情緒指標（待使用者提供資料）
 6. 市場情緒指標
 
+## 外部依賴：BookReview（使用者電腦上的 n8n + FastAPI，`C:\Users\david\pyrag\BookReview\scripts\etf_report.py`）
+每天約 20:07 由 n8n 觸發，**直接解析本站 HTML**，改樣板或路由前務必確認不會壞：
+- `POST /login`（form `password`，跟隨轉址）→ 用 cookie session
+- `POST /manual-scrape`（需登入；n8n 逾時 100 秒）→ 現在走 `scheduler.runner.run_or_wait`：排程在跑就等、10 分鐘內剛跑完就沿用
+- `GET /new-holdings`：解析 `select[name='date'] option` 取最新日期；`/new-holdings?date=&etf_code=` 解析 `tbody tr` 前 6 欄
+- `GET /cross-holdings?date=`：解析 `tbody tr[data-stock_code]` 的 data-* 屬性與 `span.badge[title]`
+- `GET /holdings?etf_code=00981A&date=&sort_by=shares_desc`：解析 `tbody tr` 前 7 欄（「新股票」「已移除」字樣）
+- `GET /api/etf-holdings?etf_code=&date=`（免登入，指定 etf_code 時不受日報範圍影響）
+- BookReview 自己有一份寫死的 `KNOWN_ACTIVE_ETFS`，本站新增 ETF 不會自動同步過去
+
 ## 其他備註
 - 未來可能加 Google AdSense：需公開頁面；github.io 需在根網域放 `ads.txt`，建議用自訂網域。
 - `database_config.py`、`diagnose_password_issue.py` 請確認沒有寫死密碼或連線字串（repo 為公開）。
