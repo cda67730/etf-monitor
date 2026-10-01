@@ -381,6 +381,45 @@ def get_sort_display(sort_by: str) -> str:
 
 
 
+def aggregate_holdings_by_stock(holdings: List[Dict], removed: List[Dict]) -> List[Dict]:
+    """全部 ETF 檢視：把「ETF × 股票」逐筆資料合併成「每檔股票一列」
+    etf_count＝當日持有的 ETF 數；新增／減少股數為各 ETF 加總；出清（REMOVED）也算進減少股數"""
+    groups: Dict[tuple, Dict] = {}
+    def row(code, name, unit):
+        return groups.setdefault((code, unit or "股"), {
+            "stock_code": code, "stock_name": name, "unit": unit or "股", "etf_count": 0, "etfs": [],
+            "shares": 0, "shares_increase": 0, "shares_decrease": 0,
+            "n_new": 0, "n_inc": 0, "n_dec": 0, "n_removed": 0})
+    for h in holdings:
+        a = row(h["stock_code"], h["stock_name"], h.get("unit"))
+        a["etf_count"] += 1
+        a["etfs"].append(h["etf_code"])
+        a["shares"] += h.get("shares") or 0
+        a["shares_increase"] += h.get("shares_increase") or 0
+        a["shares_decrease"] += h.get("shares_decrease") or 0
+        ct = h.get("change_type")
+        if ct == "NEW": a["n_new"] += 1
+        elif ct == "INCREASED": a["n_inc"] += 1
+        elif ct == "DECREASED": a["n_dec"] += 1
+    for r in removed:
+        a = row(r["stock_code"], r["stock_name"], "股")
+        a["shares_decrease"] += r.get("old_shares") or 0
+        a["n_removed"] += 1
+    return list(groups.values())
+
+
+AGG_SORTS = {
+    "etf_count_desc": ("ETF 數量 (多→少)", lambda r: (-r["etf_count"], -r["shares"])),
+    "etf_count_asc":  ("ETF 數量 (少→多)", lambda r: (r["etf_count"], -r["shares"])),
+    "increase_desc":  ("新增股數 (多→少)", lambda r: (-r["shares_increase"], -r["etf_count"])),
+    "increase_asc":   ("新增股數 (少→多)", lambda r: (r["shares_increase"], -r["etf_count"])),
+    "decrease_desc":  ("減少股數 (多→少)", lambda r: (-r["shares_decrease"], -r["etf_count"])),
+    "decrease_asc":   ("減少股數 (少→多)", lambda r: (r["shares_decrease"], -r["etf_count"])),
+    "shares_desc":    ("合計持股 (多→少)", lambda r: (-r["shares"],)),
+    "stock_code_asc": ("股票代碼", lambda r: (r["stock_code"],)),
+}
+
+
 # ============ 安全檢查函數（保持原有代碼不變）============
 def verify_password(input_password: str) -> bool:
     """驗證密碼"""
@@ -646,6 +685,20 @@ class DatabaseQuery:
             
         except Exception as e:
             logger.error(f"獲取持股變化資料錯誤: {e}")
+            return []
+
+    def get_removed_holdings(self, date: str) -> List[Dict[str, Any]]:
+        """當日被出清（REMOVED）的持股，限目前日報範圍"""
+        if not self.db_available or not date:
+            return []
+        try:
+            ph = self._get_placeholder()
+            return self.execute_query(
+                f"SELECT etf_code, stock_code, stock_name, old_shares FROM holdings_changes "
+                f"WHERE change_type = 'REMOVED' AND change_date = {ph} AND {self._scope_sql('etf_code')}",
+                (date,), fetch="all") or []
+        except Exception as e:
+            logger.error(f"查詢出清持股錯誤: {e}")
             return []
 
     def get_decreased_holdings(self, date: str = None, etf_code: str = None) -> List[Dict[str, Any]]:
@@ -2246,13 +2299,20 @@ async def holdings_page(
             if holdings:
                 logger.info(f"原始資料筆數: {len(holdings)}")
                 
-                # 應用排序
-                holdings = apply_holdings_sorting(holdings, sort_by)
-                logger.info(f"排序後資料筆數: {len(holdings)}, 排序方式: {sort_by}")
-                
-                # 計算變化統計
+                # 計算變化統計（逐筆 ETF × 股票）
                 change_stats = db_query.get_holdings_change_stats(holdings)
                 logger.info(f"變化統計: {change_stats}")
+
+                if etf_code:
+                    holdings = apply_holdings_sorting(holdings, sort_by)
+                else:
+                    # 全部 ETF：改以股票為主，一檔股票一列
+                    removed = db_query.get_removed_holdings(date)
+                    holdings = aggregate_holdings_by_stock(holdings, removed)
+                    if sort_by not in AGG_SORTS:
+                        sort_by = "etf_count_desc"
+                    holdings.sort(key=AGG_SORTS[sort_by][1])
+                logger.info(f"排序後資料筆數: {len(holdings)}, 排序方式: {sort_by}")
             else:
                 logger.warning(f"沒有找到日期 {date} 的持股資料")
         
@@ -2266,7 +2326,9 @@ async def holdings_page(
             "sort_by": sort_by,
             "change_stats": change_stats,
             "get_sort_icon": get_sort_icon,
-            "get_sort_display": get_sort_display
+            "get_sort_display": get_sort_display,
+            "aggregated": not etf_code,
+            "agg_sorts": {k: v[0] for k, v in AGG_SORTS.items()},
         }
         
         logger.info(f"返回模板，資料筆數: {len(holdings)}")
