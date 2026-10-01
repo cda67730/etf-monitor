@@ -7,6 +7,7 @@
 - 入口：`Dockerfile` → `uvicorn fastapi_app_cloud:app`
 - 資料庫：Railway PostgreSQL（`DATABASE_URL`）；連不上時 `database_config.py` 退回 SQLite `etf_holdings.db`
 - 登入：單一密碼 `WEB_PASSWORD`，session 存記憶體（重新部署後需重新登入）
+- **2026-10 起只有管理功能需要登入**：`/admin/etfs`、`/api/admin/*`、`/manual-scrape*`、`/test-scrape`、`/api/scheduler/*`、`/diagnostic`、`/debug/db-status`；其他瀏覽頁全部公開。登入後依 `next` 參數返回（預設 `/admin/etfs`）
 - 排程呼叫用 token：`SCHEDULER_TOKEN`（`/trigger-scrape*` 端點以 `Authorization: Bearer <token>` 驗證；未設時預設值不安全，務必在 Railway 設定）
 - ⚠ 每次 push 到 main 都會觸發 Railway 重新部署 → 不要讓排程每天 commit 資料回 repo
 
@@ -24,7 +25,12 @@
 | `inst_cobuy/fetch.py` | 證交所／櫃買抓取函式（`twse`、`tpex`）；`inst_cobuy/data/*.csv` 只當首次匯入的種子資料 |
 
 ## 現有頁面
-`/` 首頁、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/inst-cobuy` 三大法人同買、`/admin/etfs` ETF 清單管理＋手動爬取 ETF／權證（首頁原按鈕已移到這裡）、`/login`
+`/` 首頁分流（`hub.html`，四張卡片）、`/etf` ETF 日報（原首頁）、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/inst-cobuy` 三大法人同買、`/admin/etfs` ETF 清單管理＋手動爬取 ETF／權證（首頁原按鈕已移到這裡）、`/login`
+
+## ETF 日報範圍（積極型／不分類）
+- `?scope=aggr|all` 切換，記在 cookie `etf_scope`；`etf_scope_middleware` 設 contextvar `_etf_scope`
+- `DatabaseQuery.scope_codes()`、`_scope_sql(col)` 把查詢限縮在範圍內的啟用 ETF；`etf_names`／`get_etf_codes()` 也依範圍
+- ETF 相關頁面上方有切換鈕（`base.html`）
 
 ## 三大法人同買（inst_cobuy）
 - 資料來源：證交所 T86（上市）、櫃買中心三大法人買賣明細（上櫃），免費免 token
@@ -32,7 +38,7 @@
   - 注意：欄位名稱比對時「不含外資自營商」字樣會誤中排除條件（已修正過一次）
 - 定義：張＝股數/1000 四捨五入，≥1 張才算買超；只含 4 碼普通股／KY；連買天數上限 `N=40`；頁面可切換最近 20 個交易日（需 60 個交易日資料）
 - 目前：APScheduler 工作 `inst`（平日 18:20，`SCHED_INST`）寫入 PostgreSQL；啟動時背景匯入 `inst_cobuy/data/*.csv`（只補缺的日期）
-- 頁面 `/inst-cobuy`、API `/api/inst-cobuy/dates`、`/api/inst-cobuy?date=`、`/api/inst-cobuy.csv?date=`；`INST_COBUY_PUBLIC=true` 免登入
+- 頁面 `/inst-cobuy`、API `/api/inst-cobuy/dates`、`/api/inst-cobuy?date=`、`/api/inst-cobuy.csv?date=`；預設公開，`INST_COBUY_PUBLIC=false` 改為需登入
 - 2026-10 已移除 GitHub Actions（inst-cobuy.yml、daily-scraper.yml）與靜態網頁；GitHub Pages 需使用者在 repo Settings 關閉
 - 已驗證：2026-09-30 外資、自營與 FinMind 一致；投信 22 檔不同（以官方為準）；資料庫版計算結果與舊靜態版逐欄一致（2026-10-01，1160 檔）
 
@@ -51,12 +57,22 @@
    - 爬蟲改讀啟用中的 ETF；新增代號時先試抓
 4. ✅ **三大法人改存 PostgreSQL**：`inst_daily`（trade_date, stock_id, name, market, foreign_net, trust_net, dealer_net）、`inst_no_trading`；頁面 `/inst-cobuy`、API `/api/inst-cobuy`、CSV 下載；首次啟動匯入 `inst_cobuy/data/*.csv`；之後移除 GitHub Actions 與 Pages
    - 環境變數 `INST_COBUY_PUBLIC=true` 時該頁免登入（為了 AdSense）
-5. **首頁分流** `/`（原首頁移到 `/etf`），四張卡片：
+5. ✅ **首頁分流** `/`（原首頁移到 `/etf`），四張卡片：
    1. 主動式 ETF 日報（積極型）＝排除「國外為主」「高股息」
    2. 主動式 ETF 日報（不分類）＝全部啟用 ETF
    3. 三大法人買賣超及連買
    4. 市場情緒指標（待使用者提供資料）
 6. 市場情緒指標
+
+## 外部依賴：BookReview（使用者電腦上的 n8n + FastAPI，`C:\Users\david\pyrag\BookReview\scripts\etf_report.py`）
+每天約 20:07 由 n8n 觸發，**直接解析本站 HTML**，改樣板或路由前務必確認不會壞：
+- `POST /login`（form `password`，跟隨轉址）→ 用 cookie session
+- `POST /manual-scrape`（需登入；n8n 逾時 100 秒）→ 現在走 `scheduler.runner.run_or_wait`：排程在跑就等、10 分鐘內剛跑完就沿用
+- `GET /new-holdings`：解析 `select[name='date'] option` 取最新日期；`/new-holdings?date=&etf_code=` 解析 `tbody tr` 前 6 欄
+- `GET /cross-holdings?date=`：解析 `tbody tr[data-stock_code]` 的 data-* 屬性與 `span.badge[title]`
+- `GET /holdings?etf_code=00981A&date=&sort_by=shares_desc`：解析 `tbody tr` 前 7 欄（「新股票」「已移除」字樣）
+- `GET /api/etf-holdings?etf_code=&date=`（免登入，指定 etf_code 時不受日報範圍影響）
+- `GET /api/etfs?scope=all|aggr|every`（免登入）：ETF 清單（code、name、short_name、category、enabled）。BookReview 的 `_active_etfs()` 讀這支，失敗時退回它內建的 `KNOWN_ACTIVE_ETFS`
 
 ## 其他備註
 - 未來可能加 Google AdSense：需公開頁面；github.io 需在根網域放 `ads.txt`，建議用自訂網域。

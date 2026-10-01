@@ -52,8 +52,15 @@
             background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.85%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
         }
         
+        /* 選單項目不換行；1200–1399px 時縮小間距以放得下全部項目 */
+        .navbar-nav .nav-link { white-space: nowrap; }
+        @media (min-width: 1200px) and (max-width: 1399.98px) {
+            .navbar-expand-xl .navbar-nav .nav-link { padding-left: .45rem; padding-right: .45rem; font-size: .92rem; }
+            .navbar-brand { font-size: 1.1rem; }
+        }
+
         /* 移動端菜單樣式 */
-        @media (max-width: 991.98px) {
+        @media (max-width: 1199.98px) {
             .navbar-collapse {
                 margin-top: 1rem;
                 border-top: 1px solid rgba(255, 255, 255, 0.2);
@@ -85,7 +92,7 @@
         }
         
         /* 桌面端樣式保持不變 */
-        @media (min-width: 992px) {
+        @media (min-width: 1200px) {
             .navbar-nav {
                 margin-left: auto !important;
             }
@@ -104,7 +111,7 @@
 </head>
 <body>
     <!-- 響應式導航列 -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <nav class="navbar navbar-expand-xl navbar-dark bg-primary">
         <div class="container">
             <!-- 品牌標誌 -->
             <a class="navbar-brand" href="/">
@@ -124,6 +131,11 @@
             <!-- 可折疊的導航選單 -->
             <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav ms-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="/etf">
+                        <i class="fas fa-newspaper"></i> ETF日報
+                    </a>
+                </li>
                 <li class="nav-item">
                     <a class="nav-link" href="/holdings">
                         <i class="fas fa-chart-pie"></i> 每日持股
@@ -173,6 +185,18 @@
 
     <!-- 主要內容區域 -->
     <div class="container mt-4">
+        {% set _p = request.url.path %}
+        {% if _p == '/etf' or _p.startswith('/holdings') or _p in ['/new-holdings', '/decreased-holdings', '/cross-holdings', '/changes'] %}
+        {% set _sc = request.state.etf_scope if request.state.etf_scope is defined else 'all' %}
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3 small">
+            <span class="text-muted">日報範圍</span>
+            <div class="btn-group btn-group-sm" role="group" aria-label="日報範圍">
+                <a href="{{ request.url.include_query_params(scope='aggr') }}" class="btn {{ 'btn-primary' if _sc == 'aggr' else 'btn-outline-primary' }}">積極型</a>
+                <a href="{{ request.url.include_query_params(scope='all') }}" class="btn {{ 'btn-primary' if _sc == 'all' else 'btn-outline-primary' }}">不分類</a>
+            </div>
+            <span class="text-muted">{{ '積極型＝排除「國外為主」「高股息」' if _sc == 'aggr' else '全部啟用中的主動式 ETF' }}</span>
+        </div>
+        {% endif %}
         {% block content %}{% endblock %}
     </div>
 

@@ -63,7 +63,6 @@ try:
     
     logger.info(f"database_config 模組導入成功")
     logger.info(f"初始檢測數據庫類型: {db_config.db_type}")
-    logger.info(f"使用的數據庫 URL: {db_config.database_url[:50] if hasattr(db_config, 'database_url') else 'Unknown'}...")
     
     # 測試數據庫連接
     try:
@@ -109,6 +108,22 @@ if os.path.exists("static"):
     logger.info("靜態文件目錄掛載成功")
 
 # ============ 中間件配置 ============
+@app.middleware("http")
+async def etf_scope_middleware(request: Request, call_next):
+    """?scope=aggr|all 切換日報範圍，記在 cookie，之後各頁沿用"""
+    q = request.query_params.get("scope")
+    scope = q if q in ETF_SCOPES else request.cookies.get("etf_scope")
+    scope = scope if scope in ETF_SCOPES else "all"
+    token = _etf_scope.set(scope)
+    request.state.etf_scope = scope
+    try:
+        response = await call_next(request)
+    finally:
+        _etf_scope.reset(token)
+    if q in ETF_SCOPES:
+        response.set_cookie("etf_scope", q, max_age=365 * 86400, samesite="lax")
+    return response
+
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=settings.allowed_hosts if settings.environment == "production" else ["*"]
@@ -125,6 +140,11 @@ app.add_middleware(
 # ============ ETF 清單（etf_registry）============
 import etf_registry
 etf_registry.init(db_config)
+
+# 日報範圍：aggr＝積極型（排除國外為主、高股息），all＝不分類（全部啟用）
+import contextvars
+ETF_SCOPES = {"aggr": "積極型", "all": "不分類"}
+_etf_scope = contextvars.ContextVar("etf_scope", default="all")
 
 # ============ 三大法人同買（inst_daily）============
 import inst_flow
@@ -361,6 +381,45 @@ def get_sort_display(sort_by: str) -> str:
 
 
 
+def aggregate_holdings_by_stock(holdings: List[Dict], removed: List[Dict]) -> List[Dict]:
+    """全部 ETF 檢視：把「ETF × 股票」逐筆資料合併成「每檔股票一列」
+    etf_count＝當日持有的 ETF 數；新增／減少股數為各 ETF 加總；出清（REMOVED）也算進減少股數"""
+    groups: Dict[tuple, Dict] = {}
+    def row(code, name, unit):
+        return groups.setdefault((code, unit or "股"), {
+            "stock_code": code, "stock_name": name, "unit": unit or "股", "etf_count": 0, "etfs": [],
+            "shares": 0, "shares_increase": 0, "shares_decrease": 0,
+            "n_new": 0, "n_inc": 0, "n_dec": 0, "n_removed": 0})
+    for h in holdings:
+        a = row(h["stock_code"], h["stock_name"], h.get("unit"))
+        a["etf_count"] += 1
+        a["etfs"].append(h["etf_code"])
+        a["shares"] += h.get("shares") or 0
+        a["shares_increase"] += h.get("shares_increase") or 0
+        a["shares_decrease"] += h.get("shares_decrease") or 0
+        ct = h.get("change_type")
+        if ct == "NEW": a["n_new"] += 1
+        elif ct == "INCREASED": a["n_inc"] += 1
+        elif ct == "DECREASED": a["n_dec"] += 1
+    for r in removed:
+        a = row(r["stock_code"], r["stock_name"], "股")
+        a["shares_decrease"] += r.get("old_shares") or 0
+        a["n_removed"] += 1
+    return list(groups.values())
+
+
+AGG_SORTS = {
+    "etf_count_desc": ("ETF 數量 (多→少)", lambda r: (-r["etf_count"], -r["shares"])),
+    "etf_count_asc":  ("ETF 數量 (少→多)", lambda r: (r["etf_count"], -r["shares"])),
+    "increase_desc":  ("新增股數 (多→少)", lambda r: (-r["shares_increase"], -r["etf_count"])),
+    "increase_asc":   ("新增股數 (少→多)", lambda r: (r["shares_increase"], -r["etf_count"])),
+    "decrease_desc":  ("減少股數 (多→少)", lambda r: (-r["shares_decrease"], -r["etf_count"])),
+    "decrease_asc":   ("減少股數 (少→多)", lambda r: (r["shares_decrease"], -r["etf_count"])),
+    "shares_desc":    ("合計持股 (多→少)", lambda r: (-r["shares"],)),
+    "stock_code_asc": ("股票代碼", lambda r: (r["stock_code"],)),
+}
+
+
 # ============ 安全檢查函數（保持原有代碼不變）============
 def verify_password(input_password: str) -> bool:
     """驗證密碼"""
@@ -405,10 +464,22 @@ class DatabaseQuery:
         if self.db_available:
             self.ensure_tables_exist()
 
+    @staticmethod
+    def scope_codes(scope: str = None) -> List[str]:
+        """目前日報範圍內的 ETF 代號（啟用中；積極型再排除國外為主、高股息）"""
+        scope = scope or _etf_scope.get()
+        return etf_registry.registry.enabled_codes(aggressive_only=(scope == "aggr"))
+
+    def _scope_sql(self, col: str, scope: str = None) -> str:
+        """SQL 片段：col IN ('00980A', ...)；代號都經過格式檢查，可安全內嵌"""
+        codes = [c for c in self.scope_codes(scope) if re.fullmatch(r"[0-9A-Z]{4,8}", c)]
+        return f"{col} IN ({', '.join(repr(c) for c in codes)})" if codes else "1 = 0"
+
     @property
     def etf_names(self) -> Dict[str, str]:
-        """啟用中的 ETF（代號 -> 名稱），依管理頁排序"""
-        return etf_registry.registry.names()
+        """目前範圍內啟用中的 ETF（代號 -> 名稱），依管理頁排序"""
+        names = etf_registry.registry.names()
+        return {c: names.get(c, c) for c in self.scope_codes()}
 
     @property
     def all_etf_names(self) -> Dict[str, str]:
@@ -439,7 +510,7 @@ class DatabaseQuery:
                 logger.info(f"使用最新日期: {date}")
             
             ph = self._get_placeholder()
-            conditions = [f"hc.change_type = {ph}", f"hc.change_date = {ph}"]
+            conditions = [f"hc.change_type = {ph}", f"hc.change_date = {ph}", self._scope_sql("hc.etf_code")]
             params = ['NEW', date]
             
             if etf_code:
@@ -543,8 +614,11 @@ class DatabaseQuery:
                 where_conditions.append(f"h.update_date = (SELECT MAX(update_date) FROM etf_holdings)")
             
             if etf_code:
+                # 指定了 ETF 就照查（停用的 ETF 歷史資料也查得到，例如外部 API 呼叫）
                 where_conditions.append(f"h.etf_code = {ph}")
                 params.append(etf_code)
+            else:
+                where_conditions.append(self._scope_sql("h.etf_code"))
             
             where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
             
@@ -613,6 +687,20 @@ class DatabaseQuery:
             logger.error(f"獲取持股變化資料錯誤: {e}")
             return []
 
+    def get_removed_holdings(self, date: str) -> List[Dict[str, Any]]:
+        """當日被出清（REMOVED）的持股，限目前日報範圍"""
+        if not self.db_available or not date:
+            return []
+        try:
+            ph = self._get_placeholder()
+            return self.execute_query(
+                f"SELECT etf_code, stock_code, stock_name, old_shares FROM holdings_changes "
+                f"WHERE change_type = 'REMOVED' AND change_date = {ph} AND {self._scope_sql('etf_code')}",
+                (date,), fetch="all") or []
+        except Exception as e:
+            logger.error(f"查詢出清持股錯誤: {e}")
+            return []
+
     def get_decreased_holdings(self, date: str = None, etf_code: str = None) -> List[Dict[str, Any]]:
         """獲取減持股票 - 修正版本"""
         if not self.db_available:
@@ -627,7 +715,7 @@ class DatabaseQuery:
                 WHERE change_type IN ('DECREASED', 'REMOVED')
             '''
             
-            conditions = []
+            conditions = [self._scope_sql("etf_code")]
             params = []
             
             if date:
@@ -678,6 +766,7 @@ class DatabaseQuery:
                     SUM(shares) as total_shares
                 FROM etf_holdings
                 WHERE update_date = {ph}
+                  AND {self._scope_sql("etf_code")}
                   AND stock_name IS NOT NULL
                   AND TRIM(stock_name) != ''
                   AND TRIM(stock_code) != ''
@@ -706,6 +795,7 @@ class DatabaseQuery:
                         SELECT etf_code, shares, weight
                         FROM etf_holdings
                         WHERE stock_code = {ph} AND update_date = {ph}
+                          AND {self._scope_sql("etf_code")}
                           AND stock_name IS NOT NULL AND TRIM(stock_name) != ''
                         ORDER BY shares DESC
                     '''
@@ -963,7 +1053,7 @@ class DatabaseQuery:
                 SELECT etf_code, close_price, nav, premium_pct,
                        change_amount, change_pct, update_date
                 FROM etf_premium
-                WHERE update_date = {ph}
+                WHERE update_date = {ph} AND {self._scope_sql("etf_code")}
                 ORDER BY premium_pct DESC
             """
             results = self.execute_query(query, (date,), fetch="all")
@@ -985,6 +1075,33 @@ class DatabaseQuery:
         except Exception as e:
             logger.error(f"折溢價查詢錯誤: {e}")
             return []
+
+    def hub_summary(self, scope: str) -> Dict[str, Any]:
+        """首頁卡片：最新資料日、ETF 檔數、當日新增／加碼／減碼筆數、最多 ETF 同步加碼的個股"""
+        out = {"scope": scope, "n_etf": len(self.scope_codes(scope)), "date": None,
+               "new": 0, "inc": 0, "dec": 0, "top": []}
+        if not self.db_available:
+            return out
+        try:
+            ph = self._get_placeholder()
+            sc = self._scope_sql("etf_code", scope)
+            r = self.execute_query(f"SELECT MAX(update_date) AS d FROM etf_holdings WHERE {sc}", (), fetch="one")
+            out["date"] = r and r.get("d")
+            if not out["date"]:
+                return out
+            for r in self.execute_query(
+                    f"SELECT change_type, COUNT(*) AS n FROM holdings_changes WHERE change_date = {ph} AND {sc} "
+                    f"GROUP BY change_type", (out["date"],), fetch="all") or []:
+                key = {"NEW": "new", "INCREASED": "inc", "DECREASED": "dec", "REMOVED": "dec"}.get(r["change_type"])
+                if key:
+                    out[key] += r["n"]
+            out["top"] = self.execute_query(
+                f"SELECT stock_code, MAX(stock_name) AS stock_name, COUNT(DISTINCT etf_code) AS n "
+                f"FROM holdings_changes WHERE change_date = {ph} AND {sc} AND change_type IN ('NEW', 'INCREASED') "
+                f"GROUP BY stock_code ORDER BY n DESC, stock_code LIMIT 3", (out["date"],), fetch="all") or []
+        except Exception as e:
+            logger.error(f"首頁摘要錯誤: {e}")
+        return out
 
     def get_available_dates(self) -> List[str]:
         """獲取可用的日期列表"""
@@ -1423,6 +1540,22 @@ async def api_etf_holdings(
         return {"etf_code": etf_code, "etf_name": "", "date": date, "holdings": [], "error": str(e)}
 
 
+@app.get("/api/etfs")
+async def api_etfs(scope: str = Query("all", description="all＝全部啟用；aggr＝積極型；every＝含停用")):
+    """API：追蹤中的 ETF 清單（免登入，給 BookReview 等外部程式用）"""
+    rows = etf_registry.registry.all()
+    if scope != "every":
+        rows = [r for r in rows if r["enabled"]]
+    if scope == "aggr":
+        rows = [r for r in rows if r["category"] not in etf_registry.NON_AGGRESSIVE]
+    def short(name, code):
+        n = re.sub(r"主動式\s*ETF$|ETF$", "", (name or code).strip())
+        n = re.sub(r"^主動", "", n).strip()
+        return n or code
+    return {"scope": scope, "count": len(rows), "etfs": [
+        {"code": r["etf_code"], "name": r["etf_name"] or r["etf_code"], "short_name": short(r["etf_name"], r["etf_code"]),
+         "category": r["category"], "enabled": r["enabled"]} for r in rows]}
+
 @app.get("/api/warrants")
 async def api_get_warrants(
     request: Request,
@@ -1434,8 +1567,6 @@ async def api_get_warrants(
     """API: 獲取權證排行資料"""
     try:
         # 檢查認證
-        if not await check_authentication(request):
-            raise HTTPException(status_code=401, detail="Unauthorized")
         
         if not db_query.db_available:
             raise HTTPException(status_code=503, detail="Database unavailable")
@@ -1466,8 +1597,6 @@ async def api_get_warrant_summary(
 ):
     """API: 獲取權證標的統計資料"""
     try:
-        if not await check_authentication(request):
-            raise HTTPException(status_code=401, detail="Unauthorized")
         
         if not db_query.db_available:
             raise HTTPException(status_code=503, detail="Database unavailable")
@@ -1499,8 +1628,6 @@ async def warrant_ranking_page(
     summary_sort: str = Query("total_volume")
 ):
     """權證排行頁面"""
-    if not await check_authentication(request):
-        return RedirectResponse(url="/login", status_code=302)
     try:
         if not templates:
             raise HTTPException(status_code=503, detail="Templates unavailable")
@@ -1548,32 +1675,21 @@ async def warrant_ranking_page(
 # ============ 爬蟲相關路由 ============
 @app.post("/manual-scrape")
 async def manual_scrape(request: Request):
-    """手動爬取功能"""
-    try:
-        if not await check_authentication(request):
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        
-        if not scraper:
-            raise HTTPException(status_code=503, detail="Scraper unavailable")
-        
-        # 執行爬蟲
-        success_count = scraper.scrape_all_etfs()
-        
-        return {
-            "status": "success",
-            "message": f"成功爬取 {success_count} 個ETF的數據",
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"手動爬取錯誤: {e}")
-        return {
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
+    """手動爬取（BookReview 會呼叫）：與排程共用同一把鎖，排程正在跑就等它跑完；
+    10 分鐘內剛成功跑過就直接回傳上次結果，不重複爬"""
+    if not await check_authentication(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if "etf" not in app_scheduler.runner.jobs:
+        raise HTTPException(status_code=503, detail="Scraper unavailable")
+    from starlette.concurrency import run_in_threadpool
+    st = await run_in_threadpool(app_scheduler.runner.run_or_wait, "etf")
+    ok = st.get("last_status") == "success"
+    return {
+        "status": "success" if ok else "error",
+        "message": (("沿用剛完成的爬取：" if st.get("reused") else "") + (st.get("last_message") or "")),
+        "finished_at": st.get("last_end"),
+        "timestamp": datetime.now().isoformat()
+    }
 
 @app.post("/manual-scrape-warrants")
 async def manual_scrape_warrants(request: Request):
@@ -1716,7 +1832,9 @@ async def test_scrape(request: Request, etf_code: str = Form(...)):
 # ============ 診斷路由 ============
 @app.get("/diagnostic")
 async def diagnostic_database(request: Request):
-    """線上數據庫診斷端點"""
+    """線上數據庫診斷端點（需登入）"""
+    if not await check_authentication(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
     try:
         diagnostic_info = {
             "timestamp": datetime.now().isoformat(),
@@ -1732,7 +1850,6 @@ async def diagnostic_database(request: Request):
         diagnostic_info["environment_variables"] = {
             "DATABASE_URL_exists": database_url is not None,
             "DATABASE_URL_length": len(database_url) if database_url else 0,
-            "DATABASE_URL_prefix": database_url[:50] if database_url else None,
             "DATABASE_URL_scheme": database_url.split("://")[0] if database_url and "://" in database_url else None
         }
         
@@ -1843,11 +1960,12 @@ async def diagnostic_database(request: Request):
         }
 
 @app.get("/debug/db-status")
-async def simple_db_status():
-    """簡單的數據庫狀態檢查（無需認證）"""
+async def simple_db_status(request: Request):
+    """簡單的數據庫狀態檢查（需登入）"""
+    if not await check_authentication(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
     return {
         "database_url_exists": os.getenv("DATABASE_URL") is not None,
-        "database_url_prefix": os.getenv("DATABASE_URL", "")[:50],
         "db_config_available": db_config is not None,
         "db_type": db_config.db_type if db_config else "unknown",
         "railway_env": os.getenv("RAILWAY_ENVIRONMENT"),
@@ -1908,7 +2026,7 @@ def _check_code(code: str) -> str:
 @app.get("/admin/etfs", response_class=HTMLResponse)
 async def admin_etfs_page(request: Request):
     if not await check_authentication(request):
-        return RedirectResponse(url="/login", status_code=302)
+        return RedirectResponse(url="/login?next=/admin/etfs", status_code=302)
     reg = etf_registry.registry
     stats = await run_in_threadpool(reg.latest_stats)
     etfs = [dict(e, **{k: stats.get(e["etf_code"], {}).get(k) for k in ("latest_date", "latest_rows")})
@@ -1984,10 +2102,25 @@ app.include_router(inst_flow.create_router(templates, check_authentication))
 
 # ============ 主要頁面路由 ============
 @app.get("/", response_class=HTMLResponse)
+async def hub(request: Request):
+    """首頁分流：四張卡片"""
+    from starlette.concurrency import run_in_threadpool
+    aggr = await run_in_threadpool(db_query.hub_summary, "aggr")
+    full = await run_in_threadpool(db_query.hub_summary, "all")
+    inst = None
+    if inst_flow.flow:
+        try:
+            h = await run_in_threadpool(inst_flow.flow.history)
+            if h["cobuy_history"]:
+                inst = h["cobuy_history"][0]
+        except Exception as e:
+            logger.error(f"首頁三大法人摘要錯誤: {e}")
+    return templates.TemplateResponse("hub.html", {
+        "request": request, "aggr": aggr, "full": full, "inst": inst})
+
+@app.get("/etf", response_class=HTMLResponse)
 async def home(request: Request):
-    """首頁"""
-    if not await check_authentication(request):
-        return RedirectResponse(url="/login", status_code=302)
+    """主動式 ETF 日報（原首頁）；範圍由 ?scope=aggr|all 決定"""
     try:
         if not templates:
             return HTMLResponse(
@@ -2010,6 +2143,7 @@ async def home(request: Request):
             "database_type": db_config.db_type if db_config else "unavailable",
             "etf_status": etf_status,
             "premium_data": premium_data,
+            "scope_label": ETF_SCOPES[_etf_scope.get()],
         })
     except Exception as e:
         logger.error(f"首頁錯誤: {e}")
@@ -2020,45 +2154,15 @@ async def home(request: Request):
 
 @app.get("/holdings/{etf_code}")
 async def holdings_detail(request: Request, etf_code: str, date: str = Query(None)):
-    """持股明細頁面"""
-    if not await check_authentication(request):
-        return RedirectResponse(url="/login", status_code=302)
-    try:
-        if not templates:
-            raise HTTPException(status_code=503, detail="Templates unavailable")
-        
-        if etf_code not in db_query.get_etf_codes():
-            raise HTTPException(status_code=404, detail="ETF not found")
-        
-        if not date:
-            dates = db_query.get_available_dates()
-            date = dates[0] if dates else None
-        
-        holdings = db_query.get_holdings_by_etf(etf_code, date)
-        etf_name = db_query.get_etf_name(etf_code)
-        available_dates = db_query.get_available_dates()
-        
-        return templates.TemplateResponse("holdings.html", {
-            "request": request,
-            "etf_code": etf_code,
-            "etf_name": etf_name,
-            "holdings": holdings,
-            "current_date": date,
-            "available_dates": available_dates,
-            "database_type": db_config.db_type if db_config else "unavailable"
-        })
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"持股明細頁面錯誤: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """單一 ETF 持股：導向每日持股頁並帶入篩選（舊版此頁的樣板參數不符，會 500）"""
+    if not date:
+        dates = db_query.get_available_dates()
+        date = dates[0] if dates else ""
+    return RedirectResponse(url=f"/holdings?date={date}&etf_code={etf_code}", status_code=302)
 
 @app.get("/changes")
 async def changes_page(request: Request, etf_code: str = Query(None), date: str = Query(None)):
     """持股變化頁面"""
-    if not await check_authentication(request):
-        return RedirectResponse(url="/login", status_code=302)
     try:
         if not templates:
             raise HTTPException(status_code=503, detail="Templates unavailable")
@@ -2086,8 +2190,6 @@ async def changes_page(request: Request, etf_code: str = Query(None), date: str 
 @app.get("/new-holdings", response_class=HTMLResponse)
 async def new_holdings_page(request: Request, date: str = Query(None), etf_code: str = Query(None)):
     """新增持股頁面"""
-    if not await check_authentication(request):
-        return RedirectResponse(url="/login", status_code=302)
     
     try:
         if not templates:
@@ -2118,8 +2220,6 @@ async def new_holdings_page(request: Request, date: str = Query(None), etf_code:
 @app.get("/decreased-holdings", response_class=HTMLResponse)
 async def decreased_holdings_page(request: Request, date: str = Query(None), etf_code: str = Query(None)):
     """減持表頁面"""
-    if not await check_authentication(request):
-        return RedirectResponse(url="/login", status_code=302)
     try:
         if not templates:
             raise HTTPException(status_code=503, detail="Templates unavailable")
@@ -2149,8 +2249,6 @@ async def decreased_holdings_page(request: Request, date: str = Query(None), etf
 @app.get("/cross-holdings", response_class=HTMLResponse)
 async def cross_holdings_page(request: Request, date: str = Query(None)):
     """跨ETF重複持股頁面"""
-    if not await check_authentication(request):
-        return RedirectResponse(url="/login", status_code=302)
     try:
         if not templates:
             raise HTTPException(status_code=503, detail="Templates unavailable")
@@ -2201,13 +2299,20 @@ async def holdings_page(
             if holdings:
                 logger.info(f"原始資料筆數: {len(holdings)}")
                 
-                # 應用排序
-                holdings = apply_holdings_sorting(holdings, sort_by)
-                logger.info(f"排序後資料筆數: {len(holdings)}, 排序方式: {sort_by}")
-                
-                # 計算變化統計
+                # 計算變化統計（逐筆 ETF × 股票）
                 change_stats = db_query.get_holdings_change_stats(holdings)
                 logger.info(f"變化統計: {change_stats}")
+
+                if etf_code:
+                    holdings = apply_holdings_sorting(holdings, sort_by)
+                else:
+                    # 全部 ETF：改以股票為主，一檔股票一列
+                    removed = db_query.get_removed_holdings(date)
+                    holdings = aggregate_holdings_by_stock(holdings, removed)
+                    if sort_by not in AGG_SORTS:
+                        sort_by = "etf_count_desc"
+                    holdings.sort(key=AGG_SORTS[sort_by][1])
+                logger.info(f"排序後資料筆數: {len(holdings)}, 排序方式: {sort_by}")
             else:
                 logger.warning(f"沒有找到日期 {date} 的持股資料")
         
@@ -2221,7 +2326,9 @@ async def holdings_page(
             "sort_by": sort_by,
             "change_stats": change_stats,
             "get_sort_icon": get_sort_icon,
-            "get_sort_display": get_sort_display
+            "get_sort_display": get_sort_display,
+            "aggregated": not etf_code,
+            "agg_sorts": {k: v[0] for k, v in AGG_SORTS.items()},
         }
         
         logger.info(f"返回模板，資料筆數: {len(holdings)}")
@@ -2238,22 +2345,27 @@ async def holdings_page(
 
 
 # ============ 登入/登出路由 ============
+def _safe_next(url: str) -> str:
+    """登入後要回去的頁面，只允許站內路徑"""
+    return url if url and url.startswith("/") and not url.startswith("//") else "/admin/etfs"
+
 @app.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request, error: str = Query(None)):
+async def login_page(request: Request, error: str = Query(None), next: str = Query(None)):
     """顯示登入頁面"""
     if not templates:
         raise HTTPException(status_code=503, detail="Templates unavailable")
-    return templates.TemplateResponse("login.html", {"request": request, "error": error})
+    return templates.TemplateResponse("login.html", {"request": request, "error": error, "next": _safe_next(next)})
 
 @app.post("/login")
-async def login_process(request: Request, password: str = Form(...)):
+async def login_process(request: Request, password: str = Form(...), next: str = Form(None)):
     """處理登入請求"""
+    nxt = _safe_next(next)
     if not verify_password(password):
         logger.warning(f"❌ 密碼錯誤，登入失敗，IP: {session_manager.get_client_ip(request)}")
-        return RedirectResponse(url="/login?error=Invalid password", status_code=302)
+        return RedirectResponse(url=f"/login?error=密碼錯誤&next={nxt}", status_code=302)
     
     session_id = session_manager.create_session(request)
-    response = RedirectResponse(url="/", status_code=302)
+    response = RedirectResponse(url=nxt, status_code=302)
     response.set_cookie(
         key="session_id",
         value=session_id,
@@ -2272,7 +2384,7 @@ async def logout(request: Request):
         del session_manager.sessions[session_id]
         logger.info(f"🧹 用戶登出，會話已刪除: {session_id[:8]}...")
     
-    response = RedirectResponse(url="/login", status_code=302)
+    response = RedirectResponse(url="/", status_code=302)
     response.delete_cookie("session_id")
     return response
 @app.get("/warrant-volume-comparison", response_class=HTMLResponse)
@@ -2285,8 +2397,6 @@ async def warrant_volume_comparison_page(
     put_asc: bool = Query(False, description="認售升序排序")
 ):
     """權證標的成交量比對分析頁面"""
-    if not await check_authentication(request):
-        return RedirectResponse(url="/login", status_code=302)
     
     try:
         # 檢查流量限制
@@ -2343,8 +2453,6 @@ async def api_warrant_volume_comparison(
 ):
     """API: 權證標的成交量比對分析"""
     try:
-        if not await check_authentication(request):
-            raise HTTPException(status_code=401, detail="Unauthorized")
         
         # 檢查API流量限制
         if not rate_limiter.check_rate_limit(request, "api"):
