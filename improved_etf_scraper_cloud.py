@@ -29,6 +29,11 @@ class ETFHoldingsScraper:
             'X-Requested-With': 'XMLHttpRequest'
         }
         
+        # pocket.tw 自 2026-10-01 起 API 需要 guest token（匿名，有效 24 小時）
+        self.token_url = 'https://www.pocket.tw/api/cm/identity/token'
+        self._token = None
+        self._token_expire = 0
+
         # 統一的DtNo，所有ETF都使用相同的
         self.dtno = '59449513'
         
@@ -200,6 +205,41 @@ class ETFHoldingsScraper:
             logger.error(f"❌ 檢查現有數據時出錯: {e}")
             return False
     
+    def _get_token(self, force=False):
+        """取得 pocket.tw guest token（快取到過期前 10 分鐘）"""
+        if not force and self._token and time.time() < self._token_expire:
+            return self._token
+        r = requests.post(self.token_url,
+                          data={'grant_type': 'guest', 'client_id': 'cm-etf-web'},
+                          headers={'User-Agent': self.headers['User-Agent'],
+                                   'Referer': self.headers['Referer']},
+                          timeout=15)
+        r.raise_for_status()
+        j = r.json()
+        self._token = j['access_token']
+        self._token_expire = time.time() + int(j.get('expires_in', 3600)) - 600
+        logger.info("🔑 已取得 pocket.tw guest token")
+        return self._token
+
+    def _api_get(self, params, timeout=30):
+        """呼叫 pocket.tw API（自動帶 token；認證失敗時換新 token 重試一次）"""
+        for attempt in range(2):
+            headers = dict(self.headers)
+            headers['Authorization'] = f'Bearer {self._get_token(force=attempt > 0)}'
+            r = requests.get(self.base_url, params=params, headers=headers, timeout=timeout)
+            auth_failed = r.status_code in (401, 403)
+            if not auth_failed and r.ok:
+                try:
+                    j = r.json()
+                    auth_failed = isinstance(j, dict) and 'Data' not in j and 'auth' in r.text.lower()
+                except ValueError:
+                    pass
+            if auth_failed and attempt == 0:
+                logger.warning("⚠️ pocket.tw 認證失敗，重新取得 token 後重試")
+                continue
+            return r
+        return r
+
     def get_holdings_data(self, etf_code):
         """獲取指定ETF的持股明細"""
         if etf_code not in self.etf_codes:
@@ -215,7 +255,7 @@ class ETFHoldingsScraper:
         
         try:
             logger.info(f"🔄 開始獲取 {etf_code} 數據...")
-            response = requests.get(self.base_url, params=params, headers=self.headers, timeout=30)
+            response = self._api_get(params, timeout=30)
             response.raise_for_status()
             
             data = response.json()
@@ -724,7 +764,7 @@ class ETFHoldingsScraper:
                 'FilterNo': '0'
             }
             try:
-                r = requests.get(self.base_url, params=params, headers=self.headers, timeout=15)
+                r = self._api_get(params, timeout=15)
                 r.raise_for_status()
                 data = r.json().get('Data', [])
                 if not data:
@@ -750,7 +790,7 @@ class ETFHoldingsScraper:
                 'FilterNo': '0'
             }
             try:
-                r = requests.get(self.base_url, params=params, headers=self.headers, timeout=15)
+                r = self._api_get(params, timeout=15)
                 r.raise_for_status()
                 data = r.json().get('Data', [])
                 if data:
