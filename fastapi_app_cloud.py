@@ -1487,6 +1487,22 @@ async def api_etf_holdings(
         return {"etf_code": etf_code, "etf_name": "", "date": date, "holdings": [], "error": str(e)}
 
 
+@app.get("/api/etfs")
+async def api_etfs(scope: str = Query("all", description="all＝全部啟用；aggr＝積極型；every＝含停用")):
+    """API：追蹤中的 ETF 清單（免登入，給 BookReview 等外部程式用）"""
+    rows = etf_registry.registry.all()
+    if scope != "every":
+        rows = [r for r in rows if r["enabled"]]
+    if scope == "aggr":
+        rows = [r for r in rows if r["category"] not in etf_registry.NON_AGGRESSIVE]
+    def short(name, code):
+        n = re.sub(r"主動式\s*ETF$|ETF$", "", (name or code).strip())
+        n = re.sub(r"^主動", "", n).strip()
+        return n or code
+    return {"scope": scope, "count": len(rows), "etfs": [
+        {"code": r["etf_code"], "name": r["etf_name"] or r["etf_code"], "short_name": short(r["etf_name"], r["etf_code"]),
+         "category": r["category"], "enabled": r["enabled"]} for r in rows]}
+
 @app.get("/api/warrants")
 async def api_get_warrants(
     request: Request,

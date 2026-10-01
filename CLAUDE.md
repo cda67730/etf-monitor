@@ -72,7 +72,7 @@
 - `GET /cross-holdings?date=`：解析 `tbody tr[data-stock_code]` 的 data-* 屬性與 `span.badge[title]`
 - `GET /holdings?etf_code=00981A&date=&sort_by=shares_desc`：解析 `tbody tr` 前 7 欄（「新股票」「已移除」字樣）
 - `GET /api/etf-holdings?etf_code=&date=`（免登入，指定 etf_code 時不受日報範圍影響）
-- BookReview 自己有一份寫死的 `KNOWN_ACTIVE_ETFS`，本站新增 ETF 不會自動同步過去
+- `GET /api/etfs?scope=all|aggr|every`（免登入）：ETF 清單（code、name、short_name、category、enabled）。BookReview 的 `_active_etfs()` 讀這支，失敗時退回它內建的 `KNOWN_ACTIVE_ETFS`
 
 ## 其他備註
 - 未來可能加 Google AdSense：需公開頁面；github.io 需在根網域放 `ads.txt`，建議用自訂網域。
