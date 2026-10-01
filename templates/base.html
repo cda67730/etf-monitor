@@ -125,6 +125,11 @@
             <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav ms-auto">
                 <li class="nav-item">
+                    <a class="nav-link" href="/etf">
+                        <i class="fas fa-newspaper"></i> ETF日報
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" href="/holdings">
                         <i class="fas fa-chart-pie"></i> 每日持股
                     </a>
@@ -173,6 +178,18 @@
 
     <!-- 主要內容區域 -->
     <div class="container mt-4">
+        {% set _p = request.url.path %}
+        {% if _p == '/etf' or _p.startswith('/holdings') or _p in ['/new-holdings', '/decreased-holdings', '/cross-holdings', '/changes'] %}
+        {% set _sc = request.state.etf_scope if request.state.etf_scope is defined else 'all' %}
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3 small">
+            <span class="text-muted">日報範圍</span>
+            <div class="btn-group btn-group-sm" role="group" aria-label="日報範圍">
+                <a href="{{ request.url.include_query_params(scope='aggr') }}" class="btn {{ 'btn-primary' if _sc == 'aggr' else 'btn-outline-primary' }}">積極型</a>
+                <a href="{{ request.url.include_query_params(scope='all') }}" class="btn {{ 'btn-primary' if _sc == 'all' else 'btn-outline-primary' }}">不分類</a>
+            </div>
+            <span class="text-muted">{{ '積極型＝排除「國外為主」「高股息」' if _sc == 'aggr' else '全部啟用中的主動式 ETF' }}</span>
+        </div>
+        {% endif %}
         {% block content %}{% endblock %}
     </div>
 

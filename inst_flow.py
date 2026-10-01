@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 N = int(os.getenv("INST_STREAK_DAYS", "40"))      # 連買最多回溯天數／統計區間
 KEEP = 20                                         # 頁面可切換的日期數
 BACKFILL = N + KEEP                               # 資料庫要保有的交易日數
-PUBLIC = os.getenv("INST_COBUY_PUBLIC", "false").lower() == "true"
+PUBLIC = os.getenv("INST_COBUY_PUBLIC", "true").lower() == "true"   # 預設公開；設 false 改為需登入
 SEED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inst_cobuy", "data")
 KINDS = ("foreign", "trust", "dealer")
 STOCK_RE = re.compile(r"[1-9]\d{3}")
