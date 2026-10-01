@@ -1,5 +1,6 @@
 # fastapi_app_cloud.py - 添加權證功能，保持所有原有端點不變
 import os
+import re
 import logging
 import traceback
 import hashlib
@@ -120,6 +121,10 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+# ============ ETF 清單（etf_registry）============
+import etf_registry
+etf_registry.init(db_config)
 
 # ============ 初始化爬蟲 ============
 try:
@@ -389,27 +394,21 @@ class DatabaseQuery:
     """最終完善版本 - 包含所有原有ETF功能和新增權證功能"""
     
     def __init__(self):
-        self.etf_names = {
-            '00980A': '主動野村臺灣優選ETF',
-            '00981A': '統一台股增長主動式ETF',
-            '00982A': '群益台灣精選強棒主動式ETF',
-            '00984A': '安聯台灣高股息成長主動式ETF',
-            '00985A': '野村台灣增強50主動式ETF',
-            '00991A': '復華未來50主動式ETF',
-            '00992A': '群益科技創新主動式ETF',
-            '00993A': '安聯台灣主動式ETF',
-            '00994A': '第一金台股趨勢優選主動式ETF',
-            '00995A': '中信台灣卓越主動式ETF',
-            '00403A': '統一台股升級50主動式ETF',
-            '00996A': '兆豐台灣豐收主動式ETF',
-            '00999A': '野村臺灣策略高息主動式ETF',
-            '00404A': '聯博台灣動能收益50主動式ETF',
-            '00405A': '富邦台灣龍耀主動式ETF',
-            '00406A': '中信台灣收益主動式ETF',
-        }
         self.db_available = db_config is not None
         if self.db_available:
             self.ensure_tables_exist()
+
+    @property
+    def etf_names(self) -> Dict[str, str]:
+        """啟用中的 ETF（代號 -> 名稱），依管理頁排序"""
+        return etf_registry.registry.names()
+
+    @property
+    def all_etf_names(self) -> Dict[str, str]:
+        """含停用的 ETF，用於顯示歷史資料的名稱"""
+        names = dict(etf_registry.DEFAULT_ETFS)
+        names.update(etf_registry.registry.names(enabled_only=False))
+        return names
     
     
     
@@ -905,7 +904,7 @@ class DatabaseQuery:
 
     def get_etf_name(self, etf_code: str) -> str:
         """獲取 ETF 名稱"""
-        return self.etf_names.get(etf_code, etf_code)
+        return self.all_etf_names.get(etf_code, etf_code)
 
     def get_etf_data_status(self, date: str = None) -> dict:
         """
@@ -966,7 +965,7 @@ class DatabaseQuery:
             return [
                 {
                     "code":          r["etf_code"],
-                    "name":          self.etf_names.get(r["etf_code"], r["etf_code"]),
+                    "name":          self.all_etf_names.get(r["etf_code"], r["etf_code"]),
                     "close":         r["close_price"],
                     "nav":           r["nav"],
                     "premium_pct":   r["premium_pct"],
@@ -1883,6 +1882,96 @@ async def scheduler_run(request: Request, job_id: str):
         return {"status": "running", "message": f"{job_id} 執行中"}
     app_scheduler.runner.run_async(job_id)
     return {"status": "started", "job": job_id}
+
+# ============ ETF 清單管理（/admin/etfs）============
+from starlette.concurrency import run_in_threadpool
+
+_ETF_CODE_RE = re.compile(r"^[0-9]{4,6}[A-Z]?$")
+
+async def _require_login(request: Request):
+    if not await check_authentication(request):
+        raise HTTPException(status_code=401, detail="請先登入")
+
+def _check_code(code: str) -> str:
+    code = (code or "").strip().upper()
+    if not _ETF_CODE_RE.match(code):
+        raise HTTPException(status_code=400, detail=f"代號格式不正確：{code}")
+    return code
+
+@app.get("/admin/etfs", response_class=HTMLResponse)
+async def admin_etfs_page(request: Request):
+    if not await check_authentication(request):
+        return RedirectResponse(url="/login", status_code=302)
+    reg = etf_registry.registry
+    stats = await run_in_threadpool(reg.latest_stats)
+    etfs = [dict(e, **{k: stats.get(e["etf_code"], {}).get(k) for k in ("latest_date", "latest_rows")})
+            for e in reg.all()]
+    return templates.TemplateResponse("admin_etfs.html", {
+        "request": request, "etfs": etfs, "categories": etf_registry.CATEGORIES,
+        "db_ready": reg.ready,
+    })
+
+@app.post("/api/admin/etfs")
+async def admin_etf_add(request: Request):
+    await _require_login(request)
+    body = await request.json()
+    code = _check_code(body.get("etf_code"))
+    category = body.get("category") or etf_registry.CATEGORIES[0]
+    if category not in etf_registry.CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"未知分類：{category}")
+    if etf_registry.registry.get(code):
+        raise HTTPException(status_code=409, detail=f"{code} 已在清單中")
+    if not scraper:
+        raise HTTPException(status_code=503, detail="爬蟲無法使用")
+    try:
+        t = await run_in_threadpool(scraper.test_etf, code)   # 先試抓，抓不到就不加
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    name = (body.get("etf_name") or "").strip() or t.get("name") or code
+    try:
+        await run_in_threadpool(etf_registry.registry.add, code, name, category)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"status": "ok", "etf_code": code, "etf_name": name, **t}
+
+@app.post("/api/admin/etfs/{code}/test")
+async def admin_etf_test(request: Request, code: str):
+    await _require_login(request)
+    code = _check_code(code)
+    if not scraper:
+        raise HTTPException(status_code=503, detail="爬蟲無法使用")
+    try:
+        return await run_in_threadpool(scraper.test_etf, code)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.put("/api/admin/etfs/order")
+async def admin_etf_order(request: Request):
+    await _require_login(request)
+    codes = [_check_code(c) for c in (await request.json()).get("codes", [])]
+    await run_in_threadpool(etf_registry.registry.reorder, codes)
+    return {"status": "ok"}
+
+@app.patch("/api/admin/etfs/{code}")
+async def admin_etf_update(request: Request, code: str):
+    await _require_login(request)
+    code = _check_code(code)
+    if not etf_registry.registry.get(code):
+        raise HTTPException(status_code=404, detail=f"清單中沒有 {code}")
+    body = await request.json()
+    if "category" in body and body["category"] not in etf_registry.CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"未知分類：{body['category']}")
+    if "etf_name" in body:
+        body["etf_name"] = str(body["etf_name"]).strip() or code
+    await run_in_threadpool(lambda: etf_registry.registry.update(code, **body))
+    return {"status": "ok"}
+
+@app.delete("/api/admin/etfs/{code}")
+async def admin_etf_delete(request: Request, code: str):
+    await _require_login(request)
+    code = _check_code(code)
+    await run_in_threadpool(etf_registry.registry.delete, code)
+    return {"status": "ok"}
 
 # ============ 主要頁面路由 ============
 @app.get("/", response_class=HTMLResponse)

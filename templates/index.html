@@ -44,15 +44,12 @@
                         <div class="card stat-card border-warning">
                             <div class="card-body">
                                 <h5 class="card-title text-warning">
-                                    <i class="fas fa-sync-alt"></i> 手動更新
+                                    <i class="fas fa-list-check"></i> ETF 清單與更新
                                 </h5>
-                                <button id="manual-scrape-btn" class="btn btn-warning btn-sm" onclick="manualScrape()">
-                                    <i class="fas fa-download"></i> 爬取ETF
-                                </button>
-                                <button id="manual-scrape-warrants-btn" class="btn btn-info btn-sm mt-1" onclick="manualScrapeWarrants()">
-                                    <i class="fas fa-certificate"></i> 爬取權證
-                                </button>
-                                <p class="card-text mt-2">自動執行：週一至週五 21:30</p>
+                                <a href="/admin/etfs" class="btn btn-warning btn-sm">
+                                    <i class="fas fa-gear"></i> 前往管理頁
+                                </a>
+                                <p class="card-text mt-2">新增／分類 ETF、手動爬取 ETF 與權證</p>
                             </div>
                         </div>
                     </div>
@@ -203,8 +200,8 @@
                             </div>
                             <div class="card-body">
                                 <ul class="list-unstyled">
-                                    <li><i class="fas fa-check text-success"></i> 自動爬取：週一至週五 21:30</li>
-                                    <li><i class="fas fa-check text-success"></i> 監控17檔主動式ETF持股變化</li>
+                                    <li><i class="fas fa-check text-success"></i> 自動爬取：週一至週五 18:00、19:00、20:00</li>
+                                    <li><i class="fas fa-check text-success"></i> 監控 {{ etf_codes|length }} 檔主動式ETF持股變化</li>
                                     <li><i class="fas fa-check text-success"></i> 權證排行和隱含波動率分析</li>
                                     <li><i class="fas fa-check text-success"></i> 支援歷史數據查詢</li>
                                     <li><i class="fas fa-check text-success"></i> 即時持股變化分析</li>

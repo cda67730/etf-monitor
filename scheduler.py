@@ -89,7 +89,13 @@ def setup(scraper=None, warrant_scraper=None, extra_jobs=()):
     """在 FastAPI 啟動時呼叫。extra_jobs: [(job_id, name, func, env_name, default_cron), ...]"""
     global _scheduler
     if scraper:
-        runner.add("etf", "ETF 持股＋折溢價", scraper.scrape_all_etfs,
+        def etf_job():
+            n = scraper.scrape_all_etfs()
+            total = len(scraper.etf_codes)
+            if not n:
+                raise RuntimeError(f"0/{total} 檔成功")
+            return f"{n}/{total} 檔成功"
+        runner.add("etf", "ETF 持股＋折溢價", etf_job,
                    os.getenv("SCHED_ETF", "0 18,19,20 * * 1-5"))
     if warrant_scraper:
         runner.add("warrant", "權證排行", lambda: warrant_scraper.scrape_warrants(pages=5, sort_type=3),

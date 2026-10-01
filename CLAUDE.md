@@ -15,13 +15,15 @@
 |---|---|
 | `fastapi_app_cloud.py` | FastAPI 主程式，所有路由、登入、流量限制 |
 | `database_config.py` | DB 連線（PostgreSQL / SQLite）、建表 |
-| `improved_etf_scraper_cloud.py` | 主動式 ETF 持股爬蟲；ETF 代號目前寫死在 `self.etf_codes`（約第 36 行） |
+| `improved_etf_scraper_cloud.py` | 主動式 ETF 持股爬蟲；`etf_codes` 屬性讀 `etf_registry`。pocket.tw 自 2026-10-01 起需 guest token（`_get_token`／`_api_get`） |
+| `etf_registry.py` | ETF 清單（資料表 `etf_registry`）：分類、啟用、排序；`enabled_codes(aggressive_only=)` |
+| `scheduler.py` | APScheduler 統一排程與手動執行（`runner.run_async`） |
 | `warrant_scraper.py`、`warrant_volume_analyzer.py` | 權證排行與量能分析 |
 | `templates/*.html` | Jinja2 樣板，`base.html` 有導覽列（Bootstrap 5） |
 | `inst_cobuy/` | 三大法人同買／連買（目前為 GitHub Actions + Pages 靜態版，見下） |
 
 ## 現有頁面
-`/` 首頁、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/login`
+`/` 首頁、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/admin/etfs` ETF 清單管理＋手動爬取 ETF／權證（首頁原按鈕已移到這裡）、`/login`
 
 ## 三大法人同買（inst_cobuy）
 - 資料來源：證交所 T86（上市）、櫃買中心三大法人買賣明細（上櫃），免費免 token
@@ -40,7 +42,7 @@
    - 工作：ETF 持股（`scrape_all_etfs` + `scrape_premium_data`）、權證（`scrape_warrants`）、三大法人（平日 18:20）
    - 加 `/api/scheduler/status`；切換完成後才關掉 Railway 原排程（避免重複執行）
    - 待使用者提供：Railway 原本 ETF / 權證排程時間；確認沒有 App Sleeping、單一 replica
-3. **ETF 清單改存資料庫 `etf_registry`**（代號、名稱、分類、啟用、排序）＋管理頁 `/admin/etfs`（需登入）
+3. ✅ **ETF 清單改存資料庫 `etf_registry`**（代號、名稱、分類、啟用、排序）＋管理頁 `/admin/etfs`（需登入）
    - 分類：國內主動、國外為主、高股息（可擴充）
    - 首次部署把寫死的代號匯入，預設「國內主動」，由使用者在管理頁調整
    - 爬蟲改讀啟用中的 ETF；新增代號時先試抓
