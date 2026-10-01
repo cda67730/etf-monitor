@@ -5,7 +5,6 @@
 {% block content %}
 <style>
   .reg-table td, .reg-table th { vertical-align: middle; }
-  .reg-table { min-width: 860px; }
   .reg-table .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
   .reg-table tr.disabled td { color: #adb5bd; }
   .reg-table tr.disabled .form-select, .reg-table tr.disabled .form-control { color: #adb5bd; }
@@ -17,6 +16,20 @@
   .summary .badge { font-size: .9rem; padding: .5em .8em; margin: 0 .35rem .35rem 0; }
   .move-btn { padding: 0 .35rem; line-height: 1.2; }
   .saved-flash { transition: background-color .8s; background-color: #d1e7dd !important; }
+  /* 手機：每檔 ETF 兩行，不左右捲動；隱藏排序與持股數 */
+  @media (max-width: 767.98px) {
+    .reg-table thead { display: none; }
+    .reg-table, .reg-table tbody { display: block; }
+    .reg-table tr { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "code name" "ctl ctl";
+                    gap: 6px 10px; padding: 10px 12px; border-bottom: 1px solid #dee2e6; }
+    .reg-table td { display: block; border: 0; padding: 0; }
+    .reg-table td.col-sort, .reg-table td.col-rows { display: none; }
+    .reg-table td.code { grid-area: code; align-self: center; }
+    .reg-table td.col-name { grid-area: name; }
+    .reg-table td.col-ctl { grid-area: ctl; display: flex; align-items: center; gap: 10px; }
+    .reg-table td.col-ctl .form-select { flex: 1 1 auto; min-width: 0; }
+    .reg-table td.col-ctl .small { white-space: nowrap; }
+  }
   #toast-box { position: fixed; right: 16px; bottom: 16px; z-index: 1080; }
 </style>
 
@@ -77,25 +90,34 @@
       <tbody id="rows">
         {% for e in etfs %}
         <tr data-code="{{ e.etf_code }}" class="{{ '' if e.enabled else 'disabled' }}">
-          <td>
+          <td class="col-sort">
             <button class="btn btn-sm btn-outline-secondary move-btn" data-move="-1" title="上移"><i class="fas fa-chevron-up"></i></button>
             <button class="btn btn-sm btn-outline-secondary move-btn" data-move="1" title="下移"><i class="fas fa-chevron-down"></i></button>
           </td>
           <td class="code">{{ e.etf_code }}</td>
-          <td><input class="form-control form-control-sm" data-field="etf_name" value="{{ e.etf_name or '' }}"></td>
-          <td>
+          <td class="col-name"><input class="form-control form-control-sm" data-field="etf_name" value="{{ e.etf_name or '' }}"></td>
+          <td class="col-ctl d-md-none">
+            <select class="form-select form-select-sm" data-field="category" data-mirror>
+              {% for c in categories %}<option {{ 'selected' if c == e.category else '' }}>{{ c }}</option>{% endfor %}
+            </select>
+            <div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" data-field="enabled" data-mirror {{ 'checked' if e.enabled else '' }}></div>
+            <span class="small text-muted">{{ (e.latest_date or '—')[5:] if e.latest_date else '—' }}</span>
+            <button class="btn btn-sm btn-outline-primary" data-act="test" title="立即試抓"><i class="fas fa-flask"></i></button>
+            <button class="btn btn-sm btn-outline-danger" data-act="delete" title="從清單移除"><i class="fas fa-trash"></i></button>
+          </td>
+          <td class="d-none d-md-table-cell">
             <select class="form-select form-select-sm" data-field="category">
               {% for c in categories %}<option {{ 'selected' if c == e.category else '' }}>{{ c }}</option>{% endfor %}
             </select>
           </td>
-          <td class="text-center">
+          <td class="text-center d-none d-md-table-cell">
             <div class="form-check form-switch d-inline-block m-0">
               <input class="form-check-input" type="checkbox" data-field="enabled" {{ 'checked' if e.enabled else '' }}>
             </div>
           </td>
-          <td class="small">{{ e.latest_date or '—' }}</td>
-          <td class="small text-end">{{ e.latest_rows or '—' }}</td>
-          <td class="text-end">
+          <td class="small d-none d-md-table-cell">{{ e.latest_date or '—' }}</td>
+          <td class="small text-end col-rows">{{ e.latest_rows or '—' }}</td>
+          <td class="text-end d-none d-md-table-cell">
             <button class="btn btn-sm btn-outline-primary" data-act="test" title="立即試抓"><i class="fas fa-flask"></i></button>
             <button class="btn btn-sm btn-outline-danger" data-act="delete" title="從清單移除（歷史資料保留）"><i class="fas fa-trash"></i></button>
           </td>
@@ -123,12 +145,14 @@ function toast(msg, ok = true) {
 
 function catClass(c) { return ['國內主動', '國外為主', '高股息'].includes(c) ? `cat-${c}` : 'cat-other'; }
 
+const val = (tr, f) => { const el = tr.querySelector(`[data-field=${f}]:not([data-mirror])`); return f === 'enabled' ? el.checked : el.value; };
+
 function renderSummary() {
   const trs = [...ROWS.querySelectorAll('tr')];
-  const on = trs.filter(tr => tr.querySelector('[data-field=enabled]').checked);
+  const on = trs.filter(tr => val(tr, 'enabled'));
   const count = {};
-  on.forEach(tr => { const c = tr.querySelector('[data-field=category]').value; count[c] = (count[c] || 0) + 1; });
-  const aggressive = on.filter(tr => !['國外為主', '高股息'].includes(tr.querySelector('[data-field=category]').value)).length;
+  on.forEach(tr => { const c = val(tr, 'category'); count[c] = (count[c] || 0) + 1; });
+  const aggressive = on.filter(tr => !['國外為主', '高股息'].includes(val(tr, 'category'))).length;
   document.getElementById('summary').innerHTML =
     `<span class="badge bg-dark">啟用 ${on.length} / ${trs.length} 檔</span>` +
     `<span class="badge bg-primary">積極型 ${aggressive} 檔</span>` +
@@ -153,6 +177,8 @@ ROWS.addEventListener('change', e => {
   const tr = e.target.closest('tr'), f = e.target.dataset.field;
   if (!f) return;
   const v = f === 'enabled' ? e.target.checked : e.target.value;
+  // 手機版與電腦版各有一組控制項，彼此同步
+  tr.querySelectorAll(`[data-field=${f}]`).forEach(el => { if (el !== e.target) { if (f === 'enabled') el.checked = v; else el.value = v; } });
   if (f === 'enabled') tr.classList.toggle('disabled', !v);
   save(tr, { [f]: v }); renderSummary();
 });
