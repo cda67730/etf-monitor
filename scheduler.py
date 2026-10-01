@@ -3,7 +3,7 @@
 
 環境變數（Railway Variables）
   SCHEDULER_ENABLED   true 才會啟動排程（預設 false，確認後再打開，避免與舊排程重複執行）
-  SCHED_ETF           ETF 持股＋折溢價，cron 格式（台灣時間），預設 "30 20 * * 1-5"
+  SCHED_ETF           ETF 持股＋折溢價，cron 格式（台灣時間），預設 "0 18,19,20 * * 1-5"
   SCHED_WARRANT       權證排行，預設 "40 16 * * 1-5"
   SCHED_MISFIRE_SEC   錯過排程的補跑寬限秒數，預設 3600（重新部署時仍會補跑）
 
@@ -27,6 +27,19 @@ def _now():
     return datetime.now(_TZ).isoformat(timespec="seconds")
 ENABLED = os.getenv("SCHEDULER_ENABLED", "false").lower() == "true"
 MISFIRE = int(os.getenv("SCHED_MISFIRE_SEC", "3600"))
+
+
+_DOW = ["sun", "mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+
+def cron_trigger(expr):
+    """標準 cron（分 時 日 月 週；週 0/7=日、1=一）→ APScheduler CronTrigger。
+    APScheduler 3 的數字星期是 0=週一，直接用 from_crontab 會整個錯一天，所以先轉成英文縮寫。"""
+    import re
+    from apscheduler.triggers.cron import CronTrigger
+    m, h, d, mo, w = expr.split()
+    w = re.sub(r"\d", lambda x: _DOW[int(x.group())], w)
+    return CronTrigger(minute=m, hour=h, day=d, month=mo, day_of_week=w, timezone=TZ)
 
 
 class JobRunner:
@@ -77,7 +90,7 @@ def setup(scraper=None, warrant_scraper=None, extra_jobs=()):
     global _scheduler
     if scraper:
         runner.add("etf", "ETF 持股＋折溢價", scraper.scrape_all_etfs,
-                   os.getenv("SCHED_ETF", "30 20 * * 1-5"))
+                   os.getenv("SCHED_ETF", "0 18,19,20 * * 1-5"))
     if warrant_scraper:
         runner.add("warrant", "權證排行", lambda: warrant_scraper.scrape_warrants(pages=5, sort_type=3),
                    os.getenv("SCHED_WARRANT", "40 16 * * 1-5"))
@@ -89,12 +102,11 @@ def setup(scraper=None, warrant_scraper=None, extra_jobs=()):
         return None
 
     from apscheduler.schedulers.background import BackgroundScheduler
-    from apscheduler.triggers.cron import CronTrigger
 
     _scheduler = BackgroundScheduler(timezone=TZ, job_defaults={
         "coalesce": True, "max_instances": 1, "misfire_grace_time": MISFIRE})
     for job_id, j in runner.jobs.items():
-        _scheduler.add_job(runner.run, CronTrigger.from_crontab(j["cron"], timezone=TZ),
+        _scheduler.add_job(runner.run, cron_trigger(j["cron"]),
                            args=[job_id], id=job_id, name=j["name"], replace_existing=True)
     _scheduler.start()
     for job in _scheduler.get_jobs():

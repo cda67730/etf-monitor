@@ -34,7 +34,7 @@
 ## 進行中的重構計畫（2026-10 與使用者確認）
 1. ✅ 本檔 CLAUDE.md
 2. ✅ **APScheduler 統一排程**（`scheduler.py`；取代 Railway 外部排程與 GitHub Actions）
-   - 預設關閉：Railway 設 `SCHEDULER_ENABLED=true` 才啟動；時間用 `SCHED_ETF`（預設 `30 20 * * 1-5`）、`SCHED_WARRANT`（預設 `40 16 * * 1-5`）覆寫
+   - 預設關閉：Railway 設 `SCHEDULER_ENABLED=true` 才啟動；時間用 `SCHED_ETF`（預設 `0 18,19,20 * * 1-5`）、`SCHED_WARRANT`（預設 `40 16 * * 1-5`）覆寫
    - `GET /api/scheduler/status`、`POST /api/scheduler/run/{etf|warrant}`（登入或 Bearer SCHEDULER_TOKEN）
    - 時區 `Asia/Taipei`、設 misfire 寬限、同一工作不重疊
    - 工作：ETF 持股（`scrape_all_etfs` + `scrape_premium_data`）、權證（`scrape_warrants`）、三大法人（平日 18:20）
