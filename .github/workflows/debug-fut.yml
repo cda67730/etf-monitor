@@ -1,0 +1,17 @@
+name: debug fut
+on:
+  push:
+    branches: [debug-report]
+    paths: ['debug/fut_test.py', '.github/workflows/debug-fut.yml']
+permissions:
+  contents: write
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install requests && python debug/fut_test.py || true
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add debug/fut_result.txt && git commit -m "fut result" && git push
