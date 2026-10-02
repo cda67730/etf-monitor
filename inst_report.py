@@ -74,9 +74,11 @@ class InstReport(ER.Report):
 
         K3 = [("total", "三大合計張"), ("foreign", "外資張"), ("trust", "投信張"), ("dealer", "自營張"), ("co_streak", "同買連續天數"),
               ("co_days", f"{nd}日內同買天數"), ("foreign_streak", "外資連買天數"), ("trust_streak", "投信連買天數")]
+        KFT = [("ft_total", "外資加投信張"), ("foreign", "外資張"), ("trust", "投信張"), ("dealer", "自營張"), ("ft_streak", "外資投信同買連續天數")]
         size = lambda r: min(abs(r["trust"] or 0), abs(r["foreign"] or 0))
         co = sorted([r for r in rows if r["cobuy"]], key=lambda r: -r["total"])
         ft = sorted([r for r in rows if r.get("ft_cobuy")], key=lambda r: -r["ft_total"])
+        ft_only = [r for r in ft if not r["cobuy"]]          # 外資投信同買但自營沒一起買（三大同買另列）
         dt_ = sorted([r for r in rows if r.get("duel") == 1], key=lambda r: -size(r))
         df_ = sorted([r for r in rows if r.get("duel") == -1], key=lambda r: -size(r))
         sec = {}
@@ -97,13 +99,14 @@ class InstReport(ER.Report):
                      "外資連買5天以上": sum(1 for r in rows if r["foreign_streak"] >= 5)},
             "三大同買前15": [card(r, K3) for r in co[:15]],
             "_三大同買清單": [card(r, K3) for r in co[:LIST_MAX]],      # PDF 表格用（底線開頭不送 AI）
+            "_外資投信同買清單": [card(r, KFT) for r in ft_only[:LIST_MAX]],
+            "_外資投信同買檔數": len(ft_only),
             "連續同買2天以上": [card(r, K3) for r in sorted([r for r in co if r["co_streak"] >= 2], key=lambda r: (-r["co_streak"], -r["total"]))[:10]],
             "三大同買族群彙總": sec,
             "三大同買股價表現": {"有股價的檔數": sum(1 for r in co if price.get(r["id"]) is not None),
                          "上漲檔數": sum(1 for r in co if (price.get(r["id"]) or 0) > 0),
                          "下跌檔數": sum(1 for r in co if (price.get(r["id"]) or 0) < 0)},
-            "外資投信同買前10（不含三大同買）": [card(r, [("ft_total", "外資加投信張"), ("foreign", "外資張"), ("trust", "投信張"), ("dealer", "自營張"),
-                                              ("ft_streak", "外資投信同買連續天數")]) for r in ft if not r["cobuy"]][:10],
+            "外資投信同買前10（不含三大同買）": [card(r, KFT) for r in ft_only[:10]],
             "土洋對作_投信買外資賣前8": [card(r, [("trust", "投信張"), ("foreign", "外資張"), ("duel_streak", "對作連續天數"), ("trust_streak", "投信連買天數")]) for r in dt_[:8]],
             "土洋對作_外資買投信賣前8": [card(r, [("foreign", "外資張"), ("trust", "投信張"), ("duel_streak", "對作連續天數"), ("foreign_streak", "外資連買天數")]) for r in df_[:8]],
             "投信連買最久前8": [card(r, [("trust_streak", "投信連買天數"), ("trust", "投信當日張"), ("trust_sum", f"投信{nd}日累計張")])
@@ -149,9 +152,10 @@ class InstReport(ER.Report):
         env.filters.setdefault("n", lambda v: "—" if v is None else f"{v:,.0f}")
         env.filters.setdefault("pct", lambda v: "—" if v is None else f"{v:+.2f}%")
         f = rep["facts"]
-        if "_三大同買清單" not in f:                    # 舊版報告只存前 15 檔：只重算事實補清單，不重呼叫 AI
+        if "_外資投信同買清單" not in f:                # 舊版報告只存前 15／10 檔：只重算事實補清單，不重呼叫 AI
             try:
-                f = {**f, "_三大同買清單": self.build_facts(f["資料日"])["_三大同買清單"]}
+                new = self.build_facts(f["資料日"])
+                f = {**f, **{k: new[k] for k in ("_三大同買清單", "_外資投信同買清單", "_外資投信同買檔數")}}
             except Exception as e:
                 logger.warning(f"[{self.TAG}] 補三大同買清單失敗：{e}")
         stock = {}

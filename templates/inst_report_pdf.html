@@ -131,10 +131,12 @@
   <p class="mute" style="font-size:7.8pt;margin-top:5px">族群彙總：{% for name, s in f['三大同買族群彙總'].items() %}{{ name }} {{ s['檔數'] }} 檔（{{ s['三大合計張']|n }} 張）{{ '、' if not loop.last }}{% endfor %}</p>
 </section>
 
+{% set ftlist = f.get('_外資投信同買清單') or f['外資投信同買前10（不含三大同買）'] %}{% set ftn = f.get('_外資投信同買檔數', ftlist|length) %}
 <section><h2>外資投信同買<small>不含三大同買，自營商可能賣超</small></h2>
-  <table><thead><tr><th class="l">股票</th><th>外資＋投信</th><th>外資</th><th>投信</th><th>自營</th><th>連續天數</th><th>股價</th></tr></thead><tbody>
-  {% for r in f['外資投信同買前10（不含三大同買）'] %}
-    <tr><td class="l nm"><b>{{ r['簡稱'] }}</b><span class="c">{{ r['代號'] }}</span>{% if r.get('主動ETF當日淨加碼張') %}<span class="etfmark">ETF 加碼</span>{% endif %}</td>
+  <p class="mute" style="font-size:7.8pt;margin-top:2px">共 {{ ftn }} 檔{% if ftn > ftlist|length %}，列出外資＋投信張數前 {{ ftlist|length }} 檔{% endif %}</p>
+  <table><thead><tr><th class="l">#</th><th class="l">股票</th><th>外資＋投信</th><th>外資</th><th>投信</th><th>自營</th><th>連續天數</th><th>股價</th></tr></thead><tbody>
+  {% for r in ftlist %}
+    <tr><td class="l"><span class="no">{{ loop.index }}</span></td><td class="l nm"><b>{{ r['簡稱'] }}</b><span class="c">{{ r['代號'] }}</span>{% if r.get('主動ETF當日淨加碼張') %}<span class="etfmark">ETF 加碼</span>{% endif %}</td>
       <td class="up"><b>{{ r['外資加投信張']|n }}</b></td><td class="up">{{ r['外資張']|n }}</td><td class="up">{{ r['投信張']|n }}</td>
       <td class="{{ 'up' if r['自營張'] > 0 else 'down' }}">{{ '%+d'|format(r['自營張']) }}</td><td>{{ r['外資投信同買連續天數'] }}</td>
       <td>{% if r['股價漲跌幅%'] is not none %}<span class="pill sm {{ 'up' if r['股價漲跌幅%'] > 0 else 'down' if r['股價漲跌幅%'] < 0 else 'flat' }}">{{ r['股價漲跌幅%']|pct }}</span>{% else %}<span class="mute">—</span>{% endif %}</td></tr>
