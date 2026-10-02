@@ -76,12 +76,18 @@
   .rank li::before { content: ""; position: absolute; z-index: -1; right: 0; top: 4px; bottom: 4px; width: var(--w, 0%);
                      background: var(--t); border-radius: 3px; }
   .rank .no { font-family: var(--num); color: var(--mute); font-size: .78rem; text-align: center; }
-  .rank li:nth-child(-n+3) .no { color: #fff; background: var(--c); border-radius: 4px; height: 1.5em; line-height: 1.5em; font-weight: 700; }
+  .rank li.top .no { color: #fff; background: var(--c); border-radius: 4px; height: 1.5em; line-height: 1.5em; font-weight: 700; }
   .rank .stk { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rank .stk b { font-weight: 600; color: var(--ink); } .rank .stk .code { font-family: var(--num); color: var(--mute); font-size: .8rem; margin-left: 6px; }
   .rank .meta { grid-column: 2 / -1; font-size: .74rem; color: var(--mute); }
   .rank .amt { font-family: var(--num); font-variant-numeric: tabular-nums; font-weight: 700; color: var(--c); text-align: right; white-space: nowrap; }
   .rank .amt small { font-weight: 400; color: var(--mute); margin-left: 2px; font-size: .75rem; }
+  .rank li.click { cursor: pointer; } .rank li.click:hover, .rank li.open { background: var(--hover); }
+  .rank li.click:focus-visible { outline: 2px solid var(--steel); outline-offset: -2px; }
+  .rank .stk b::after { content: "\f201"; font-family: "Font Awesome 6 Free"; font-weight: 900; font-size: .72rem; color: var(--steel); margin-left: 6px; opacity: .55; }
+  .rank li.trend-li { display: block; padding: 6px 0 10px; border-bottom: 1px solid #f1f4f8; }
+  .rank li.trend-li::before { display: none; }
+  .rank li.trend-li .trend-cv { height: 220px; }
   .rank-switch { display: none; }
   /* 依排行區塊本身的寬度決定：夠寬就並列，太窄才改成切換 */
   #rank { container-type: inline-size; container-name: rank; }
@@ -230,7 +236,7 @@
         <ol>
           {% set mx = rankings[side][0].shares or 1 %}
           {% for r in rankings[side] %}
-          <li style="--w: {{ (r.shares / mx * 100)|round(1) }}%">
+          <li class="click{{ ' top' if loop.index <= 3 }}" style="--w: {{ (r.shares / mx * 100)|round(1) }}%" tabindex="0" data-stock="{{ r.stock_code }}" data-name="{{ r.stock_name }}" aria-expanded="false">
             <span class="no">{{ loop.index }}</span>
             <span class="stk"><b>{{ r.stock_name }}</b><span class="code">{{ r.stock_code }}</span></span>
             <span class="amt">{{ sign }}{{ fmt_zhang.format(r.shares / 1000) }}<small>張</small></span>
@@ -365,18 +371,19 @@
   let chart = null;
   function closeTrend() {
     if (chart) { chart.destroy(); chart = null; }
-    crossBox.querySelectorAll('tr.trend').forEach(x => x.remove());
-    crossBox.querySelectorAll('tr.open').forEach(x => { x.classList.remove('open'); x.setAttribute('aria-expanded', 'false'); });
+    document.querySelectorAll('.ed .trend, .ed .trend-li').forEach(x => x.remove());
+    document.querySelectorAll('.ed .open').forEach(x => { x.classList.remove('open'); x.setAttribute('aria-expanded', 'false'); });
   }
   async function toggleTrend(tr) {
     const wasOpen = tr.classList.contains('open');
     closeTrend();
     if (wasOpen) return;
     tr.classList.add('open'); tr.setAttribute('aria-expanded', 'true');
-    const row = document.createElement('tr'); row.className = 'trend';
-    row.innerHTML = `<td colspan="5"><div class="trend-box"><div class="trend-head"><span><b>${esc(tr.dataset.name)} ${esc(tr.dataset.stock)}</b>　近 30 個資料日</span>
+    const isRow = tr.tagName === 'TR';
+    const row = document.createElement(isRow ? 'tr' : 'li'); row.className = isRow ? 'trend' : 'trend-li';
+    row.innerHTML = `${isRow ? '<td colspan="5">' : ''}<div class="trend-box"><div class="trend-head"><span><b>${esc(tr.dataset.name)} ${esc(tr.dataset.stock)}</b>　近 30 個資料日</span>
       <span><span class="lg"><i></i>ETF 合計持股（左軸）</span><span class="lg"><i class="bar"></i>當日淨進出（右軸）</span></span></div>
-      <div class="trend-cv"><div class="loading">載入中…</div></div></div></td>`;
+      <div class="trend-cv"><div class="loading">載入中…</div></div></div>${isRow ? '</td>' : ''}`;
     tr.after(row);
     const box = row.querySelector('.trend-cv');
     try {
@@ -412,7 +419,7 @@
                 : ` 淨${(c.raw || 0) >= 0 ? '進' : '出'} ${Math.abs(c.raw || 0).toLocaleString('zh-TW')} 張` } } },
           scales: {
             x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 10, font: { size: 11 } } },
-            y: { position: 'left', grace: '8%', ticks: { font: { size: 11 }, callback: v => v.toLocaleString('zh-TW') }, grid: { color: '#eef1f5' } },
+            y: { position: 'left', grace: '8%', ...(Math.min(...held.map(v => v || 0)) === 0 ? { min: 0 } : {}), ticks: { font: { size: 11 }, callback: v => v.toLocaleString('zh-TW') }, grid: { color: '#eef1f5' } },
             y1: { position: 'right', min: -m * 1.15, max: m * 1.15, grid: { display: false },
                   ticks: { font: { size: 11 }, maxTicksLimit: 5, callback: v => Math.round(v).toLocaleString('zh-TW') } },
           },
@@ -426,7 +433,7 @@
       const r = await fetch(`/api/cross-holdings?date=${encodeURIComponent(crossSel.value)}&scope=${SCOPE}`);
       if (!r.ok) throw new Error(r.status);
       crossRows = ((await r.json()).rows || []).sort((a, b) => b.etf_count - a.etf_count || b.total_shares - a.total_shares);
-      crossAll = false; closeTrend(); renderCross();
+      crossAll = false; if (crossBox.querySelector('.open')) closeTrend(); renderCross();
     } catch (e) { crossBox.innerHTML = '<div class="empty">讀取失敗，請重新整理頁面再試一次。</div>'; }
   }
   crossSel.addEventListener('change', loadCross);
@@ -467,6 +474,12 @@
   selDate.addEventListener('change', loadDetail);
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
   document.querySelectorAll('#nav .ico[data-etf]').forEach(b => b.addEventListener('click', () => openDetail(b.dataset.etf, {{ (etf_status.date or '') | tojson }})));
+
+  // ---- 排行榜點個股：同樣展開趨勢圖 ----
+  document.querySelectorAll('.rank li[data-stock]').forEach(li => {
+    li.addEventListener('click', () => toggleTrend(li));
+    li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTrend(li); } });
+  });
 
   // ---- 首次買進 ----
   const firstBox = document.getElementById('first-box'), firstSel = document.getElementById('first-date');

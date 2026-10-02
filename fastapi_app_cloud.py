@@ -694,27 +694,30 @@ class DatabaseQuery:
             return []
 
     def get_stock_trend(self, stock_code: str, days: int = 30) -> List[Dict[str, Any]]:
-        """單一股票近 N 個資料日：範圍內 ETF 合計持股、持有 ETF 數、當日淨進出（股）"""
+        """單一股票近 N 個資料日：範圍內 ETF 合計持股、持有 ETF 數、當日淨進出（股）。
+        日期軸用範圍內最近 N 個資料日，沒持有的日子記 0（剛新進的股票也看得出從 0 開始）"""
         if not self.db_available or not stock_code:
             return []
         ph = self._get_placeholder()
         sc = self._scope_sql("etf_code")
-        held = self.execute_query(
-            f"SELECT update_date AS d, SUM(shares) AS shares, COUNT(DISTINCT etf_code) AS n FROM etf_holdings "
-            f"WHERE stock_code = {ph} AND {sc} GROUP BY update_date ORDER BY update_date DESC LIMIT {int(days)}",
-            (stock_code,), fetch="all") or []
-        if not held:
+        dates = [r["d"] for r in (self.execute_query(
+            f"SELECT DISTINCT update_date AS d FROM etf_holdings WHERE {sc} ORDER BY update_date DESC LIMIT {int(days)}",
+            fetch="all") or [])][::-1]
+        if not dates:
             return []
-        since = min(r["d"] for r in held)
-        flow = self.execute_query(
+        since = dates[0]
+        held = {r["d"]: r for r in (self.execute_query(
+            f"SELECT update_date AS d, SUM(shares) AS shares, COUNT(DISTINCT etf_code) AS n FROM etf_holdings "
+            f"WHERE stock_code = {ph} AND update_date >= {ph} AND {sc} GROUP BY update_date",
+            (stock_code, since), fetch="all") or [])}
+        net = {r["d"]: r["net"] or 0 for r in (self.execute_query(
             f"SELECT change_date AS d, SUM(new_shares - old_shares) AS net FROM holdings_changes "
             f"WHERE stock_code = {ph} AND change_date >= {ph} AND {sc} GROUP BY change_date",
-            (stock_code, since), fetch="all") or []
-        net = {r["d"]: r["net"] or 0 for r in flow}
-        dates = sorted({r["d"] for r in held} | set(net))
-        hmap = {r["d"]: r for r in held}
-        return [{"date": d, "shares": (hmap.get(d) or {}).get("shares"), "etf_count": (hmap.get(d) or {}).get("n", 0),
-                 "net": net.get(d, 0)} for d in dates if d >= since]
+            (stock_code, since), fetch="all") or [])}
+        if not held and not net:
+            return []
+        return [{"date": d, "shares": (held.get(d) or {}).get("shares") or 0, "etf_count": (held.get(d) or {}).get("n", 0),
+                 "net": net.get(d, 0)} for d in dates]
 
     def get_etf_day(self, date: str) -> List[Dict[str, Any]]:
         """指定日期各 ETF 綜合：收盤、淨值、折溢價、漲跌、持股檔數、新進／加碼／減碼／出清檔數"""
