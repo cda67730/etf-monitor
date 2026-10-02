@@ -150,6 +150,10 @@ _etf_scope = contextvars.ContextVar("etf_scope", default="all")
 import inst_flow
 inst_flow.init(db_config)
 
+# ============ 市場情緒指標（mood_obs）============
+import market_mood
+market_mood.init(db_config)
+
 # ============ 初始化爬蟲 ============
 try:
     scraper = ETFHoldingsScraper() if db_config else None
@@ -177,6 +181,8 @@ async def start_scheduler():
         extra = []
         if inst_flow.flow:
             extra.append(("inst", "三大法人買賣超", inst_flow.flow.scrape, "SCHED_INST", "20 18 * * 1-5"))
+        if market_mood.store:
+            extra.append(("mood", "市場情緒指標", market_mood.store.update, "SCHED_MOOD", "30 7 * * 2-6"))
         app_scheduler.setup(scraper=scraper, warrant_scraper=warrant_scraper, extra_jobs=extra)
     except Exception as e:
         logger.error(f"排程啟動失敗: {e}")
@@ -2099,6 +2105,7 @@ async def admin_etf_delete(request: Request, code: str):
     return {"status": "ok"}
 
 app.include_router(inst_flow.create_router(templates, check_authentication))
+app.include_router(market_mood.create_router(templates))
 
 # ============ 主要頁面路由 ============
 @app.get("/", response_class=HTMLResponse)
@@ -2115,8 +2122,14 @@ async def hub(request: Request):
                 inst = h["cobuy_history"][0]
         except Exception as e:
             logger.error(f"首頁三大法人摘要錯誤: {e}")
+    mood = None
+    if market_mood.store:
+        try:
+            mood = await run_in_threadpool(market_mood.store.report)
+        except Exception as e:
+            logger.error(f"首頁市場情緒摘要錯誤: {e}")
     return templates.TemplateResponse("hub.html", {
-        "request": request, "aggr": aggr, "full": full, "inst": inst})
+        "request": request, "aggr": aggr, "full": full, "inst": inst, "mood": mood})
 
 @app.get("/etf", response_class=HTMLResponse)
 async def home(request: Request):

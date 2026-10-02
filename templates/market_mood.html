@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}市場情緒指標 - ETF持股明細監控系統{% endblock %}
+
+{% block content %}
+<style>
+  .mood { max-width: 860px; margin: 0 auto 48px; color: #212529; }
+  .mood .eyebrow { font-size: .8rem; letter-spacing: .08em; color: #6c757d; text-transform: uppercase; }
+  .mood h1 { font-size: 2rem; font-weight: 800; margin: .2rem 0 .4rem; }
+  .mood .byline { color: #6c757d; font-size: .9rem; }
+  .mood .byline b { color: #212529; font-variant-numeric: tabular-nums; }
+  .mood .lede { font-size: 1.12rem; line-height: 1.75; margin: 1.2rem 0; }
+  .mood h2 { font-size: 1.45rem; font-weight: 800; margin: 2.6rem 0 .3rem; padding-top: .4rem; border-top: 3px solid #212529; }
+  .mood h2 small { font-size: .9rem; font-weight: 500; color: #6c757d; margin-left: .4rem; }
+  .mood .section-desc { color: #6c757d; margin-bottom: .8rem; }
+  .mood p { line-height: 1.8; }
+
+  /* 頂部統計 */
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 1.2rem 0; }
+  @media (max-width: 767.98px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .tile { border: 1px solid #dee2e6; border-radius: 10px; padding: 12px 14px; background: #fff; text-decoration: none; color: inherit; display: block; }
+  a.tile:hover { border-color: #adb5bd; color: inherit; }
+  .tile .k { font-size: .8rem; color: #6c757d; }
+  .tile .v { font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .tile .v small { font-size: .95rem; font-weight: 600; color: #6c757d; }
+  .tile .s { font-size: .82rem; margin-top: 4px; }
+  .dots { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+  .sig-red { background: #d63939; } .sig-yellow { background: #f59f00; } .sig-green { background: #2fb344; } .sig-gray { background: #adb5bd; }
+  .t-red { color: #c92a2a; } .t-yellow { color: #b35c00; } .t-green { color: #2b8a3e; } .t-gray { color: #6c757d; }
+
+  .toc { font-size: .9rem; display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 0; border-bottom: 1px solid #e9ecef; }
+  .toc a { color: #495057; text-decoration: none; } .toc a:hover { text-decoration: underline; }
+
+  .callout { background: #f8f9fa; border-left: 4px solid #adb5bd; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: .6rem 0 1.4rem; line-height: 1.75; }
+  .callout.c-red { border-left-color: #d63939; } .callout.c-yellow { border-left-color: #f59f00; } .callout.c-green { border-left-color: #2fb344; }
+
+  /* 指標條目 */
+  .entry { padding: 1.3rem 0 1.1rem; border-bottom: 1px solid #e9ecef; }
+  .entry-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .entry h3 { font-size: 1.15rem; font-weight: 700; margin: 0; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; font-weight: 600; padding: 2px 10px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+  .figure { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: .5rem 0 .2rem; }
+  .figure .big { font-size: 1.9rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .figure .chg { font-variant-numeric: tabular-nums; color: #495057; }
+  .figure .sub { color: #6c757d; font-size: .92rem; }
+  .meta { font-size: .82rem; color: #6c757d; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  .meta a { color: #6c757d; }
+  .chart-box { position: relative; height: 190px; margin: .7rem 0 .4rem; }
+  .entry p.note { margin: .3rem 0 0; }
+  .stale-tag { font-size: .75rem; background: #fff3bf; color: #8a5a00; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
+
+  table.sells { width: 100%; font-size: .92rem; }
+  table.sells td, table.sells th { padding: 8px 6px; border-bottom: 1px solid #e9ecef; vertical-align: top; }
+  table.sells th { font-size: .8rem; color: #6c757d; font-weight: 600; }
+  .fine { font-size: .82rem; color: #6c757d; line-height: 1.7; }
+</style>
+
+<article class="mood">
+{% if not rep %}
+  <h1>市場情緒指標</h1>
+  <p class="lede">資料庫目前無法使用，請稍後再試。</p>
+{% else %}
+  {% set sig_text = {'red': '紅燈', 'yellow': '黃燈', 'green': '綠燈', 'gray': '資料不足'} %}
+  <div class="eyebrow">美股市場情緒 · 短中長期 13 項指標</div>
+  <h1>市場情緒指標</h1>
+  <div class="byline">
+    最新資料日 <b>{{ rep.latest }}</b> ・ 更新於 {{ rep.generated }}
+    {% if rep.spx %} ・ S&amp;P 500 收 <b>{{ "{:,.2f}".format(rep.spx.close) }}</b>
+      （{{ "%+.2f"|format(rep.spx.chg) }}%，距一年高點 {{ "%.1f"|format(rep.spx.off_high) }}%）{% endif %}
+  </div>
+
+  <!-- 頂部統計 -->
+  <div class="tiles">
+    <a class="tile" href="#sells">
+      <div class="k">賣出條件</div>
+      <div class="v t-{{ rep.level.signal }}">{{ rep.n_met }}<small> / {{ rep.sells|length }} 成立</small></div>
+      <div class="s t-{{ rep.level.signal }}">{{ rep.level.label }}</div>
+    </a>
+    {% for t in rep.terms %}
+    <a class="tile" href="#{{ t.key }}">
+      <div class="k">{{ t.name }}（{{ t.span }}）</div>
+      <div class="v {{ 't-red' if t.red else 't-green' }}">{{ t.red|length }}<small> / {{ t.n_valid }} 紅燈</small></div>
+      <div class="dots" aria-hidden="true">{% for x in t['items'] %}<span class="dot sig-{{ x.signal }}" title="{{ x.name }}：{{ x.label }}"></span>{% endfor %}</div>
+      <div class="s text-muted">{% if t.yellow %}黃燈 {{ t.yellow|length }}・{% endif %}綠燈 {{ t.green }}</div>
+    </a>
+    {% endfor %}
+  </div>
+
+  <p class="lede">{{ rep.headline }}{{ rep.level.desc }}</p>
+
+  <nav class="toc" aria-label="目錄">
+    {% for t in rep.terms %}<a href="#{{ t.key }}">{{ t.name }}指標</a>{% endfor %}
+    <a href="#sells">賣出條件</a><a href="#notes">資料說明</a>
+  </nav>
+
+  {% for t in rep.terms %}
+  <section id="{{ t.key }}">
+    <h2>{{ t.name }}指標<small>{{ t.span }}・{{ t.desc }}</small></h2>
+    <div class="callout c-{{ 'red' if t.red|length * 2 >= t.n_valid and t.red else 'yellow' if t.red or t.yellow else 'green' }}">{{ t.summary }}</div>
+
+    {% for x in t['items'] %}
+    <div class="entry" id="ind-{{ x.id }}">
+      <div class="entry-head">
+        <h3>{{ x.name }}</h3>
+        <span class="pill t-{{ x.signal }}"><span class="dot sig-{{ x.signal }}"></span>{{ sig_text[x.signal] }}・{{ x.label }}</span>
+      </div>
+      <div class="figure">
+        <span class="big">{{ x.display }}</span>
+        {% if x.change is defined and x.change is not none %}
+        <span class="chg">{{ x.arrow }} {{ "%+.2f"|format(x.change) if (x.change|abs) < 1000 else "{:+,.0f}".format(x.change) }}（較前一期）</span>
+        {% endif %}
+        {% if x.sub %}<span class="sub">{{ x.sub }}</span>{% endif %}
+      </div>
+      <div class="meta">
+        <span>資料日期 {{ x.date or '—' }}（{{ x.freq }}更）{% if x.stale %}<span class="stale-tag">資料較舊</span>{% endif %}</span>
+        <span>警戒門檻：{{ x.threshold }}</span>
+        <span>來源：<a href="{{ x.source_url }}" target="_blank" rel="noopener">{{ x.source }}</a></span>
+      </div>
+      {% if x.chart|length > 1 %}<div class="chart-box"><canvas data-chart="{{ x.id }}" aria-label="{{ x.name }}走勢圖" role="img"></canvas></div>{% endif %}
+      <p class="note">{{ x.note }}</p>
+    </div>
+    {% endfor %}
+  </section>
+  {% endfor %}
+
+  <section id="sells">
+    <h2>賣出條件追蹤<small>同時成立 3 項以上 → 開始分批出脫；2 項 → 警戒升級</small></h2>
+    <table class="sells">
+      <thead><tr><th>賣出條件</th><th>成立門檻</th><th>目前狀況</th><th style="width:80px">是否成立</th></tr></thead>
+      <tbody>
+      {% for s in rep.sells %}
+        <tr>
+          <td>{{ s.name }}</td><td>{{ s.rule }}</td><td>{{ s.now }}</td>
+          <td class="{{ 't-red' if s.met else 't-yellow' if s.partial else 't-green' }}"><b>{{ '成立' if s.met else '部分成立' if s.partial else '未成立' }}</b></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section id="notes">
+    <h2>資料說明</h2>
+    <ul class="fine">
+      <li>每個平日早上 7:30（台北時間）美股收盤後自動更新；週更、月更的指標沒有新資料時沿用最新一期，並標示資料日期。</li>
+      <li>門檻固定不隨市場氣氛調整。燈號：紅燈＝超過警戒門檻，黃燈＝接近或需留意，綠燈＝正常，灰色＝資料不足。</li>
+      <li>巴菲特指標以 Wilshire 5000 指數（點數約等於美股總市值，十億美元）除以最新一季名目 GDP 計算，與 GuruFocus 等網站的計算方式略有差異。</li>
+      <li>保證金負債佔 GDP 以 FINRA 融資餘額除以當季名目 GDP（年化）計算。</li>
+      <li>騰落線由本站從開始抓取的那天起，逐日累計紐約證交所上漲減下跌家數；累積滿 20 個交易日後才判斷背離。</li>
+      <li>美銀牛熊指標取自 Bank of America「The Flow Show」週報內文（經 Finvaulta 整理），週報沒有提及時沿用上一期。</li>
+      <li>已拿掉無法穩定取得的指標：NAAIM 經理人持股（2026/7 後停更）、高收益債利差、內部人買賣比、AAII 散戶股票持有比重。</li>
+      {% for k, v in rep.errors.items() %}<li class="t-red">本次抓取失敗：{{ k }}（{{ v }}），沿用上一次的資料。</li>{% endfor %}
+    </ul>
+    <p class="fine">以上是依固定門檻得出的機械式判斷，不是個人化投資建議。</p>
+  </section>
+{% endif %}
+</article>
+
+{% if rep %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const ITEMS = {{ rep['items'] | tojson }};
+const LINE_COLORS = ['#c92a2a', '#2b8a3e', '#6c757d'];
+document.querySelectorAll('canvas[data-chart]').forEach(cv => {
+  const it = ITEMS.find(x => x.id === cv.dataset.chart);
+  if (!it || typeof Chart === 'undefined') return;
+  const labels = it.chart.map(p => p[0]);
+  const ds = [{ label: it.name, data: it.chart.map(p => p[1]), borderColor: '#1c7ed6', backgroundColor: 'rgba(28,126,214,.08)',
+                fill: true, borderWidth: 1.8, pointRadius: labels.length > 40 ? 0 : 2, tension: .2 }];
+  (it.extra_series || []).forEach(s => {
+    const m = Object.fromEntries(s.data);
+    ds.push({ label: s.name, data: labels.map(d => m[d] ?? null), borderColor: '#e8590c', borderWidth: 1.4, pointRadius: 0, fill: false, tension: .2 });
+  });
+  (it.lines || []).forEach(([v, name], i) => ds.push({ label: name, data: labels.map(() => v), borderColor: LINE_COLORS[i % 3],
+    borderDash: [5, 4], borderWidth: 1, pointRadius: 0, fill: false }));
+  new Chart(cv, {
+    type: 'line', data: { labels, datasets: ds },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: ds.length > 1, labels: { boxWidth: 14, font: { size: 11 } } },
+                 tooltip: { callbacks: { label: c => `${c.dataset.label}：${c.parsed.y?.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}` } } },
+      scales: { x: { ticks: { maxTicksLimit: 6, maxRotation: 0, font: { size: 11 } }, grid: { display: false } },
+                y: { ticks: { font: { size: 11 } }, grid: { color: '#f1f3f5' } } }
+    }
+  });
+});
+</script>
+{% endif %}
+{% endblock %}
