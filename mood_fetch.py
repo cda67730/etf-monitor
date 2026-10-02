@@ -111,6 +111,33 @@ def cboe_equity_pc(have=(), backfill_days=90):
     return sorted(out)
 
 
+def tw_vix(have=(), months=15):
+    """臺指選擇權波動率指數（期交所每月檔，每日收盤）；過去月份已有資料就不再抓"""
+    out = []
+    today = dt.date.today()
+    have_months = {d[:7] for d in have}
+    for k in range(months):
+        y, m = today.year, today.month - k
+        while m <= 0:
+            y, m = y - 1, m + 12
+        ym = f"{y}-{m:02d}"
+        if k >= 2 and ym in have_months:
+            continue
+        r = requests.get(f"https://www.taifex.com.tw/file/taifex/Dailydownload/vix/log2data/{y}{m:02d}new.txt",
+                         headers=UA, timeout=TIMEOUT)
+        if r.status_code != 200 or b"<HTML" in r.content[:200].upper():
+            continue
+        for line in r.content.decode("big5", "ignore").splitlines():
+            p = line.split()
+            if len(p) >= 3 and re.fullmatch(r"\d{8}", p[0]):
+                out.append((f"{p[0][:4]}-{p[0][4:6]}-{p[0][6:]}", float(p[2]),
+                            {"last_min_avg": float(p[3])} if len(p) > 3 else None))
+        time.sleep(0.3)
+    if not out and not have:
+        raise ValueError("期交所 VIX 檔案都抓不到")
+    return sorted(out)
+
+
 # ───────── 中期 ─────────
 def finra_margin():
     """FINRA 保證金負債（Debit Balances，百萬美元，月資料）"""
@@ -272,8 +299,8 @@ def lei():
 
 
 FETCHERS = {
-    "vix": vix, "cnn_fg": cnn_fear_greed, "aaii": aaii_sentiment, "put_call": cboe_equity_pc,
+    "vix": vix, "tw_vix": tw_vix, "cnn_fg": cnn_fear_greed, "aaii": aaii_sentiment, "put_call": cboe_equity_pc,
     "margin": finra_margin, "gdp": gdp, "ipo": ipo_stats, "nyse_ad": nyse_breadth, "bofa": bofa_bull_bear,
     "w5000": wilshire5000, "spx": sp500, "cape": cape, "t10y2y": treasury_10y2y, "lei": lei,
 }
-NEEDS_HAVE = {"put_call", "bofa"}
+NEEDS_HAVE = {"put_call", "bofa", "tw_vix"}

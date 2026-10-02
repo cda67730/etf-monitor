@@ -96,8 +96,7 @@
     .trow .track { grid-column: 1 / -1; grid-row: 2; }
   }
 
-  .mm-toc { display: flex; gap: 18px; flex-wrap: wrap; font-size: .9rem; padding: 12px 0; margin-top: 18px;
-            border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .mm-toc { display: flex; gap: 6px 18px; flex-wrap: wrap; font-size: .9rem; padding: 10px 0; border-bottom: 1px solid var(--rule); }
   .mm-toc a { color: var(--steel); text-decoration: none; } .mm-toc a:hover { text-decoration: underline; }
 
   /* 章節 */
@@ -109,6 +108,7 @@
   @media (max-width: 767.98px) { .cards { grid-template-columns: 1fr; } }
   .ent { background: var(--paper); border: 1px solid var(--rule); border-top: 3px solid var(--c); border-radius: 6px;
          padding: 16px 18px 14px; display: flex; flex-direction: column; min-width: 0; scroll-margin-top: 80px; }
+  .ent.wide { grid-column: 1 / -1; }
   .ent-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
   .ent h3 { font-family: var(--serif); font-weight: 600; font-size: 1.08rem; color: var(--ink); margin: 0; line-height: 1.4; }
   .ent .sig { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 600; color: var(--c); white-space: nowrap; padding-top: 3px; }
@@ -118,6 +118,18 @@
   .ent .fig .chg { font-family: var(--num); font-size: .84rem; color: var(--mute); }
   .ent .subv { font-size: .84rem; color: var(--body); font-family: var(--num); margin-top: 2px; }
   .ent .chart { position: relative; height: 170px; margin: 12px -4px 4px; }
+  .ent .chart { cursor: zoom-in; }
+  .zoom-btn { position: absolute; top: -2px; left: 4px; z-index: 2; border: 1px solid var(--rule); background: #fff; color: var(--mute);
+              font-size: .72rem; padding: 1px 7px; border-radius: 3px; cursor: pointer; }
+  .zoom-btn:hover { color: var(--ink); border-color: var(--mute); }
+  .mm-modal { border: 0; padding: 0; width: min(1180px, 96vw); max-width: 96vw; border-radius: 8px; box-shadow: 0 20px 60px rgba(15, 23, 32, .35); }
+  .mm-modal::backdrop { background: rgba(15, 23, 32, .55); }
+  .mm-modal .mh { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 18px 4px; }
+  .mm-modal .mh h4 { font-family: var(--serif); font-weight: 600; font-size: 1.15rem; color: var(--ink); margin: 0; }
+  .mm-modal .mh small { color: var(--mute); font-size: .82rem; }
+  .mm-modal .close { border: 0; background: none; font-size: 1.6rem; line-height: 1; color: var(--mute); cursor: pointer; padding: 0 4px; }
+  .mm-modal .close:hover { color: var(--ink); }
+  .mm-modal .mb { position: relative; height: min(62vh, 560px); padding: 6px 14px 16px; }
   .ent .chart-sm { height: 130px; margin-top: 2px; }
   .ent .chart2-title { font-size: .8rem; color: var(--mute); margin-top: 6px; }
   .ent .nochart { min-height: 110px; margin: 12px 0 4px; display: flex; align-items: center; justify-content: center; text-align: center;
@@ -157,6 +169,11 @@
     </div>
     {% endif %}
   </header>
+
+  <nav class="mm-toc" aria-label="目錄">
+    {% for t in rep.terms %}<a href="#{{ t.key }}">{{ t.name }}指標</a>{% endfor %}
+    <a href="#sells">賣出條件</a><a href="#notes">資料說明</a>
+  </nav>
 
   <section class="mm-verdict" aria-label="總覽">
     <div class="sell s-{{ rep.level.signal }}">
@@ -211,10 +228,6 @@
     {% endfor %}
   </figure>
 
-  <nav class="mm-toc" aria-label="目錄">
-    {% for t in rep.terms %}<a href="#{{ t.key }}">{{ t.name }}指標</a>{% endfor %}
-    <a href="#sells">賣出條件</a><a href="#notes">資料說明</a>
-  </nav>
 
   {% for t in rep.terms %}
   <section id="{{ t.key }}">
@@ -224,7 +237,7 @@
 
     <div class="cards">
     {% for x in t['items'] %}
-    <article class="ent s-{{ x.signal }}" id="ind-{{ x.id }}">
+    <article class="ent s-{{ x.signal }}{{ ' wide' if loop.last and loop.length is odd else '' }}" id="ind-{{ x.id }}">
       <div class="ent-head">
         <h3>{{ x.name }}</h3>
         <span class="sig">{{ sig_word[x.signal] }}，{{ x.label }}</span>
@@ -288,33 +301,63 @@
   </section>
 </article>
 
+<dialog class="mm-modal" id="mm-modal" aria-labelledby="mm-modal-title">
+  <div class="mh"><div><h4 id="mm-modal-title"></h4><small id="mm-modal-sub"></small></div>
+    <button type="button" class="close" aria-label="關閉" onclick="document.getElementById('mm-modal').close()">×</button></div>
+  <div class="mb"><canvas id="mm-modal-canvas"></canvas></div>
+</dialog>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 (() => {
   const ITEMS = {{ rep['items'] | tojson }};
   const css = getComputedStyle(document.querySelector('.mm'));
   const C = k => css.getPropertyValue(k).trim();
-  const ZONE = { red: C('--z-red'), amber: C('--z-amber'), green: 'rgba(47,125,79,.12)' };
+  const ZONE = { red: C('--z-red'), amber: C('--z-amber'), green: 'rgba(47,125,79,.12)', fear: 'rgba(47,125,79,.13)',
+                 fear2: 'rgba(47,125,79,.24)', neutral: 'rgba(106,120,134,.08)' };
+  const ZLABEL = { red: '#9b2c22', amber: '#8a5a12', fear: '#2f6b47', fear2: '#24563a', neutral: '#6a7886', green: '#2f6b47' };
   // 在圖上畫出警戒區色帶
   const zonePlugin = {
     id: 'zones',
     beforeDatasetsDraw(chart, _, opts) {
       const { ctx, chartArea: a, scales: { y } } = chart;
-      (opts.zones || []).forEach(([lo, hi, tone]) => {
-        const top = y.getPixelForValue(Math.min(hi, y.max)), bot = y.getPixelForValue(Math.max(lo, y.min));
-        if (bot <= a.top || top >= a.bottom || bot - top <= 0) return;
-        ctx.save(); ctx.fillStyle = ZONE[tone] || ZONE.red;
-        ctx.fillRect(a.left, Math.max(top, a.top), a.right - a.left, Math.min(bot, a.bottom) - Math.max(top, a.top));
+      (opts.zones || []).forEach(([lo, hi, tone, label]) => {
+        const top = Math.max(y.getPixelForValue(Math.min(hi, y.max)), a.top);
+        const bot = Math.min(y.getPixelForValue(Math.max(lo, y.min)), a.bottom);
+        if (bot - top <= 0) return;
+        ctx.save();
+        ctx.fillStyle = ZONE[tone] || ZONE.red;
+        ctx.fillRect(a.left, top, a.right - a.left, bot - top);
+        if (label && bot - top >= 12) {
+          ctx.fillStyle = ZLABEL[tone] || '#6a7886';
+          ctx.font = '500 11px "Noto Sans TC", sans-serif';
+          ctx.textBaseline = 'top'; ctx.textAlign = 'right';
+          ctx.fillText(label, a.right - 6, top + 3);
+        }
         ctx.restore();
       });
     }
   };
+  // 檢查線：滑鼠所在日期畫一條垂直線
+  const crosshair = {
+    id: 'crosshair',
+    afterDatasetsDraw(chart) {
+      const act = chart.tooltip && chart.tooltip.getActiveElements();
+      if (!act || !act.length) return;
+      const x = act[0].element.x, { ctx, chartArea: a } = chart;
+      ctx.save(); ctx.strokeStyle = 'rgba(23,33,43,.45)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(x, a.top); ctx.lineTo(x, a.bottom); ctx.stroke(); ctx.restore();
+    }
+  };
   const fmt = v => v == null ? '—' : Number(v).toLocaleString('zh-TW', { maximumFractionDigits: 2 });
-  function draw(cv, spec) {
+  function draw(cv, spec, big) {
     const labels = spec.data.map(p => p[0]), vals = spec.data.map(p => p[1]);
     const last = vals.length - 1;
-    const datasets = [{
-      label: spec.label, data: vals, borderColor: C('--ink'), borderWidth: 1.6, tension: .15, fill: false,
+    const isBar = spec.type === 'bar';
+    const datasets = [isBar ? {
+      type: 'bar', label: spec.label, data: vals, borderWidth: 0, categoryPercentage: 1, barPercentage: .85,
+      backgroundColor: vals.map(v => v >= 0 ? 'rgba(180,35,24,.75)' : 'rgba(47,125,79,.75)')
+    } : {
+      label: spec.label, data: vals, borderColor: C('--ink'), borderWidth: big ? 1.8 : 1.6, tension: .15, fill: false,
       pointRadius: vals.map((_, i) => i === last ? 3.5 : 0), pointBackgroundColor: C('--ink'), pointHoverRadius: 4
     }];
     (spec.extra || []).forEach(s => {
@@ -332,9 +375,10 @@
     const pad = (yMax - yMin) * .08 || 1;
     yMin -= pad; yMax += pad;
     if (spec.clamp) { yMin = Math.max(yMin, spec.clamp[0]); yMax = Math.min(yMax, spec.clamp[1]); }
-    new Chart(cv, {
+    if (spec.fixed) { [yMin, yMax] = spec.fixed; }
+    return new Chart(cv, {
       type: 'line', data: { labels, datasets },
-      plugins: [zonePlugin],
+      plugins: [zonePlugin, crosshair],
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         interaction: { mode: 'index', intersect: false },
@@ -346,26 +390,51 @@
                      callbacks: { label: c => `${c.dataset.label}  ${fmt(c.parsed.y)}` } }
         },
         scales: {
-          x: { ticks: { maxTicksLimit: 5, maxRotation: 0, color: C('--mute'), font: { size: 10.5 }, callback: function (v) { return this.getLabelForValue(v).slice(0, 7); } },
+          x: { ticks: { maxTicksLimit: big ? 10 : 5, maxRotation: 0, color: C('--mute'), font: { size: 10.5 }, callback: function (v) { return this.getLabelForValue(v).slice(0, 7); } },
                grid: { display: false }, border: { color: C('--rule') } },
-          y: { position: 'right', min: yMin, max: yMax, ticks: { maxTicksLimit: 5, color: C('--mute'), font: { size: 10.5 } },
+          y: { position: 'right', min: yMin, max: yMax, ticks: { maxTicksLimit: big ? 8 : 5, color: C('--mute'), font: { size: 10.5 } },
                grid: { color: '#eef1f4' }, border: { display: false } }
         }
       }
     });
   }
   if (typeof Chart === 'undefined') return;
+  const modal = document.getElementById('mm-modal');
+  let bigChart = null;
+  function openBig(title, sub, spec) {
+    document.getElementById('mm-modal-title').textContent = title;
+    document.getElementById('mm-modal-sub').textContent = sub;
+    if (bigChart) bigChart.destroy();
+    modal.showModal();
+    bigChart = draw(document.getElementById('mm-modal-canvas'), spec, true);
+  }
+  modal.addEventListener('click', e => { if (e.target === modal) modal.close(); });
+  modal.addEventListener('close', () => { if (bigChart) { bigChart.destroy(); bigChart = null; } });
+  function mount(cv, title, sub, spec) {
+    draw(cv, spec, false);
+    const box = cv.parentElement;
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'zoom-btn'; btn.textContent = '放大';
+    btn.setAttribute('aria-label', `放大 ${title} 走勢圖`);
+    box.appendChild(btn);
+    const open = () => openBig(title, sub, spec);
+    btn.addEventListener('click', e => { e.stopPropagation(); open(); });
+    cv.addEventListener('click', open);
+  }
   document.querySelectorAll('canvas[data-chart]').forEach(cv => {
     const it = ITEMS.find(x => x.id === cv.dataset.chart);
     if (!it) return;
-    draw(cv, { data: it.chart, label: it.name.split('（')[0], extra: it.extra_series, lines: it.lines, clamp: it.yclamp,
-               zones: (it.zones_raw || []).map(z => [z[0], z[1], z[2]]) });
+    mount(cv, it.name, `資料日期 ${it.date}，門檻 ${it.threshold}`,
+          { data: it.chart, label: it.name.split('（')[0], extra: it.extra_series, lines: it.lines, clamp: it.yclamp, fixed: it.yfixed,
+            zones: (it.zones_raw || []).map(z => [z[0], z[1], z[2], z[3]]) });
   });
   document.querySelectorAll('canvas[data-chart2]').forEach(cv => {
     const it = ITEMS.find(x => x.id === cv.dataset.chart2);
     if (!it || !it.chart2) return;
     const c2 = it.chart2;
-    draw(cv, { data: c2.data, label: c2.label, lines: c2.lines.map(l => [l[0]]), refs: [[0, '零軸'], [6.5, '長期平均 +6.5']], zones: c2.zones });
+    mount(cv, `AAII ${c2.title}`, '紅色＝看多多於看空，綠色＝看空多於看多',
+          { data: c2.data, label: c2.label, type: c2.type, lines: c2.lines.map(l => [l[0]]),
+            refs: [[6.5, '長期平均 +6.5']], zones: c2.zones });
   });
 })();
 </script>

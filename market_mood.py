@@ -179,8 +179,9 @@ IND = [
     # id, term, 名稱, 單位格式, 門檻說明, 頻率, 圖表視窗（天）
     ("vix", "short", "VIX 恐慌指數", "", "<13 自滿／>25 恐慌", "日", 365),
     ("cnn_fg", "short", "CNN 恐懼貪婪指數", "", ">75 極度貪婪", "日", 365),
-    ("aaii", "short", "AAII 散戶情緒（看多比）", "%", "看多 >45% 或多空差 >+20", "週", 400),
+    ("tw_vix", "short", "台股 VIX（臺指選擇權波動率指數）", "", "<15 自滿／>30 恐慌", "日", 365),
     ("put_call", "short", "CBOE 個股賣權買權比", "", "<0.55 自滿", "日", 120),
+    ("aaii", "short", "AAII 散戶情緒（看多比）", "%", "看多 >45% 或多空差 >+20", "週", 400),
     ("margin", "mid", "FINRA 保證金負債", "", "年增 >+30%", "月", 400),
     ("margin_gdp", "mid", "保證金負債佔 GDP", "%", ">4.0%", "月", 400),
     ("ipo", "mid", "美股 IPO 募資額（今年累計）", "", "募資額年增 >100% 留意", "日", 365),
@@ -192,13 +193,19 @@ IND = [
     ("lei", "long", "美國經濟諮商理事會領先指標", "", "近 6 個月 < -4%", "月", 3650),
 ]
 STALE = {"日": 6, "週": 12, "月": 75}
-SHORT = {"vix": "VIX 恐慌指數", "cnn_fg": "CNN 恐懼貪婪", "aaii": "AAII 散戶看多", "put_call": "個股賣權買權比",
+SHORT = {"vix": "VIX 恐慌指數", "tw_vix": "台股 VIX", "cnn_fg": "CNN 恐懼貪婪", "aaii": "AAII 散戶看多", "put_call": "個股賣權買權比",
          "margin": "FINRA 保證金負債", "margin_gdp": "保證金佔 GDP", "ipo": "IPO 募資額", "ad_line": "NYSE 騰落線",
          "bofa": "美銀牛熊指標", "buffett": "巴菲特指標", "cape": "席勒本益比 CAPE", "t10y2y": "美債 10Y−2Y 利差",
          "lei": "領先指標 LEI"}
-YCLAMP = {"cnn_fg": (0, 100), "aaii": (0, 70), "bofa": (0, 10)}
+CHART_ZONES = {
+    "cnn_fg": [(0, 25, "fear2", "極度恐懼"), (25, 45, "fear", "恐懼"), (45, 55, "neutral", "中性"),
+               (55, 75, "amber", "貪婪"), (75, 100, "red", "極度貪婪")],
+}
+YFIXED = {"cnn_fg": (0, 100)}
+YCLAMP = { "aaii": (0, 70), "bofa": (0, 10)}
 SOURCES = {
     "vix": ("CBOE", "https://www.cboe.com/tradable_products/vix/"),
+    "tw_vix": ("臺灣期貨交易所", "https://www.taifex.com.tw/cht/7/vixDaily3MNew"),
     "cnn_fg": ("CNN", "https://www.cnn.com/markets/fear-and-greed"),
     "aaii": ("AAII", "https://www.aaii.com/sentimentsurvey"),
     "put_call": ("CBOE", "https://www.cboe.com/us/options/market_statistics/daily/"),
@@ -227,12 +234,23 @@ def _judge(i, rows, S, D):
         r["note"] = (f"目前 {v:.2f}，" + ("站上 25 的恐慌線，市場正在付高價買保險。" if v > 25 else
                      "低於 13 的自滿線，避險很便宜，市場很放心。" if v < 13 else
                      f"介於 13 到 25 之間，距自滿線 {v - 13:.1f} 點、距恐慌線 {25 - v:.1f} 點。"))
+    elif i == "tw_vix":
+        r["display"] = _fmt(v)
+        r["lines"] = [(30, "恐慌 30"), (15, "自滿 15")]
+        if v > 30: r.update(signal="red", label="恐慌")
+        elif v < 15: r.update(signal="yellow", label="自滿")
+        us = (S.get("vix") or [[None, None]])[-1][1]
+        mx = max(x[1] for x in rows[-63:])
+        r["note"] = (f"目前 {v:.2f}，近 3 個月最高 {mx:.2f}。" +
+                     ("高於 30，台股選擇權避險需求很高。" if v > 30 else "低於 15，台股市場很放心。" if v < 15 else
+                      "介於 15 到 30 之間。") +
+                     (f"同日美股 VIX {us:.2f}，台股波動預期{'高於' if v > us else '低於'}美股。" if us else ""))
     elif i == "cnn_fg":
         rating = {"extreme fear": "極度恐懼", "fear": "恐懼", "neutral": "中性", "greed": "貪婪",
                   "extreme greed": "極度貪婪"}.get((e or {}).get("rating", ""), "")
         r["display"] = f"{v:.0f}"
         r["sub"] = rating
-        r["lines"] = [(75, "極度貪婪 75"), (25, "極度恐懼 25")]
+        r["lines"] = []
         if v >= 75: r.update(signal="red", label="極度貪婪")
         elif v >= 55: r.update(signal="yellow", label="貪婪")
         mx = max(x[1] for x in rows[-63:])
@@ -252,7 +270,7 @@ def _judge(i, rows, S, D):
         r["chart2"] = {"title": "多空差（看多 − 看空）", "label": "多空差",
                        "rows": [(x[0], (x[2] or {}).get("spread")) for x in rows if (x[2] or {}).get("spread") is not None],
                        "lines": [(20, "極端樂觀 +20"), (6.5, "長期平均 +6.5"), (-20, "極端悲觀 −20")],
-                       "zones": [(20, 60, "red"), (-60, -20, "green")]}
+                       "zones": [(20, 60, "red", "極端樂觀"), (-60, -20, "fear", "極端悲觀")], "type": "bar"}
     elif i == "put_call":
         r["display"] = f"{v:.2f}"
         r["lines"] = [(0.55, "自滿 0.55")]
@@ -333,6 +351,7 @@ def _judge(i, rows, S, D):
 # 溫度計刻度：lo、hi、警戒區 [(起, 迄, 顏色, 說明)]；track 取的值見 _track_value
 TRACK = {
     "vix":        (10, 40, [(10, 13, "amber", "自滿"), (25, 40, "red", "恐慌")], ""),
+    "tw_vix":     (10, 50, [(10, 15, "amber", "自滿"), (30, 50, "red", "恐慌")], ""),
     "cnn_fg":     (0, 100, [(55, 75, "amber", "貪婪"), (75, 100, "red", "極度貪婪")], ""),
     "aaii":       (15, 65, [(45, 65, "red", "過度樂觀")], "看多 %"),
     "put_call":   (0.4, 1.0, [(0.4, 0.55, "red", "自滿")], ""),
@@ -370,7 +389,7 @@ def build_report(S, errors=None):
     items, terms = [], {t[0]: {"key": t[0], "name": t[1], "span": t[2], "desc": t[3], "items": []} for t in TERMS}
     for i, term, name, unit, thr, freq, window in IND:
         rows = allS.get(i) or []
-        it = {"id": i, "term": term, "name": name, "short": SHORT[i], "yclamp": YCLAMP.get(i), "threshold": thr, "freq": freq,
+        it = {"id": i, "term": term, "name": name, "short": SHORT[i], "yclamp": YCLAMP.get(i), "yfixed": YFIXED.get(i), "threshold": thr, "freq": freq,
               "source": SOURCES[i][0], "source_url": SOURCES[i][1]}
         if not rows:
             it.update(signal="gray", label="尚無資料", display="—", note=(errors or {}).get(i, "等待第一次抓取。"), chart=[])
@@ -394,7 +413,7 @@ def build_report(S, errors=None):
                 it["track"] = {"lo": lo, "hi": hi, "unit": unit, "cur": cur, "prev": prv, "cur_pos": pos(cur),
                                "prev_pos": pos(prv), "zones": [{"from": pos(a), "to": pos(b), "tone": c, "label": t}
                                                                for a, b, c, t in zones]}
-                it["zones_raw"] = zones if i not in ("margin", "ipo", "lei") else []
+                it["zones_raw"] = CHART_ZONES.get(i) or (zones if i not in ("margin", "ipo", "lei") else [])
         items.append(it)
         terms[term]["items"].append(it)
 
