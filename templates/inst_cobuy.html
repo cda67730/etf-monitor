@@ -27,8 +27,17 @@
   .duel-pick button { border: 0; background: none; padding: 4px 12px; font-size: .84rem; border-radius: 6px; color: var(--body); white-space: nowrap; }
   .duel-pick button.on { background: #fff; color: var(--ink); font-weight: 700; box-shadow: 0 1px 2px rgba(15, 27, 45, .12); }
   /* 今日觀察 */
-  #obs { padding-bottom: 14px; }
-  .obs-head { font-size: 1.22rem; font-weight: 700; color: var(--ink); margin: 12px 0 8px; line-height: 1.45; }
+  #obs { padding-bottom: 10px; }
+  .obs-head { font-size: 1.22rem; font-weight: 700; color: var(--ink); line-height: 1.45; }
+  /* 抽屜：預設收合，只露出一句話結論 */
+  .obs-drawer > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0 6px; }
+  .obs-drawer > summary::-webkit-details-marker { display: none; }
+  .obs-drawer > summary:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; border-radius: 4px; }
+  .obs-tog { flex: 0 0 auto; font-size: .82rem; font-weight: 600; color: var(--steel); border: 1px solid var(--rule); border-radius: 999px; padding: 3px 12px; white-space: nowrap; }
+  .obs-tog::after { content: "展開 ▾"; }
+  .obs-drawer[open] .obs-tog::after { content: "收合 ▴"; }
+  .obs-drawer > summary:hover .obs-tog { background: var(--hover); border-color: var(--steel); }
+  .obs-drawer[open] > .obs-bul { margin-top: 6px; }
   .obs-bul { list-style: none; padding: 0; margin: 0 0 4px; }
   .obs-bul li { display: flex; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px dashed var(--rule); font-size: .92rem; }
   .obs-bul li:last-child { border-bottom: 0; }
@@ -53,7 +62,26 @@
   @media (max-width: 860px) { .watch { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 640px) { .watch { grid-template-columns: 1fr; } .obs-head { font-size: 1.08rem; } }
   .foot { color: var(--mute); font-size: .78rem; margin-top: 14px; line-height: 1.7; }
-  @media (max-width: 640px) { .filters input[type=search] { width: 100%; flex: 1 1 100%; } .tbl td.l:not(.name) { flex: 0 0 auto; } }
+  /* 手機也維持表格，只留重要欄位 */
+  @media (max-width: 640px) {
+    .ed #box .sort-m { display: none; }
+    .ed #box .tbl { display: table; width: 100%; table-layout: auto; font-size: .82rem; }
+    .ed #box .tbl thead { display: table-header-group; }
+    .ed #box .tbl tbody { display: table-row-group; }
+    .ed #box .tbl tr { display: table-row; padding: 0; }
+    .ed #box .tbl th, .ed #box .tbl td { display: table-cell; padding: 7px 4px; border-bottom: 1px solid #f1f4f8; text-align: right; white-space: nowrap; }
+    .ed #box .tbl th:first-child, .ed #box .tbl td:first-child { text-align: left; padding-left: 0; }
+    .ed #box .tbl th { font-size: .7rem; }
+    .ed #box .tbl td[data-l]::before { content: none; }
+    .ed #box .tbl td.name, .ed #box .tbl th.l { text-align: left; }
+    .ed #box .tbl td.name { flex: none; max-width: 6.5em; overflow: hidden; text-overflow: ellipsis; }
+    .ed #box .tbl td.name .code { display: block; margin: 0; font-size: .68rem; }
+    .ed #box .tbl .m-hide { display: none; }
+    .ed #box .tbl td.hist-top { white-space: normal; text-align: left; }
+    .ed #box .tbl th button.sort i { margin-left: 2px; }
+    .ed #box .hot { min-width: 1.4em; padding: 0 3px; }
+  }
+  @media (max-width: 640px) { .filters { width: 100%; } .filters .duel-pick { flex: 1 1 100%; } .filters input[type=search] { width: auto; min-width: 0; flex: 1 1 120px; } .tbl td.l:not(.name) { flex: 0 0 auto; } }
 </style>
 
 <article class="ed">
@@ -81,12 +109,14 @@
     <div class="sec-head">
       <div><h2>今日觀察</h2><div class="sub" id="obs-sub">AI 依當日盤後資料整理，數字經程式核對；非投資建議</div></div>
     </div>
-    <div class="obs-head" id="obs-head"></div>
-    <ul class="obs-bul" id="obs-bul"></ul>
-    <div class="watch" id="obs-watch"></div>
-    <details class="obs-more">
-      <summary>看完整解讀</summary>
-      <div id="obs-body"></div>
+    <details class="obs-drawer" id="obs-drawer">
+      <summary><span class="obs-head" id="obs-head"></span><span class="obs-tog" aria-hidden="true"></span></summary>
+      <ul class="obs-bul" id="obs-bul"></ul>
+      <div class="watch" id="obs-watch"></div>
+      <details class="obs-more">
+        <summary>看完整解讀</summary>
+        <div id="obs-body"></div>
+      </details>
     </details>
   </section>
 
@@ -130,22 +160,23 @@
   let IDX = null, DAY = null, tab = 'co', sortK = null, sortD = -1, duelDir = 0;
 
   // 欄位：[key, 標題, 型態, 手機隱藏]；型態 name＝股票、sgn＝帶正負、streak＝天數標色、ck＝打勾、n＝一般數字
+  // 欄位：[key, 標題, 型態, 手機隱藏]；標題盡量短，手機只留最重要的欄位
   function cols() {
     const n = DAY.n_days;
     if (tab === 'co') return [
-      ['name', '股票', 'name'], ['total', '同買張數', 'big'], ['co_streak', '同買連續天數', 'streak'], ['co_days', `${n}日同買天數`, 'n'],
-      ['foreign', '外資', 'sgn'], ['foreign_streak', '外資連買', 'streak', 1], ['trust', '投信', 'sgn'], ['trust_streak', '投信連買', 'streak', 1],
-      ['dealer', '自營', 'sgn'], ['dealer_streak', '自營連買', 'streak', 1]];
+      ['name', '股票', 'name'], ['total', '同買張', 'big'], ['co_streak', '連續天', 'streak'], ['co_days', `${n}日`, 'n', 1],
+      ['foreign', '外資', 'sgn'], ['foreign_streak', '外連', 'streak', 1], ['trust', '投信', 'sgn'], ['trust_streak', '投連', 'streak', 1],
+      ['dealer', '自營', 'sgn', 1], ['dealer_streak', '自連', 'streak', 1]];
     if (tab === 'ft') return [
-      ['name', '股票', 'name'], ['ft_total', '同買張數', 'big'], ['ft_streak', '同買連續天數', 'streak'], ['ft_days', `${n}日同買天數`, 'n'],
-      ['foreign', '外資', 'sgn'], ['foreign_streak', '外資連買', 'streak', 1], ['trust', '投信', 'sgn'], ['trust_streak', '投信連買', 'streak', 1],
-      ['dealer', '自營', 'sgn', 1], ['cobuy', '三大同買', 'ck', 1]];
+      ['name', '股票', 'name'], ['ft_total', '同買張', 'big'], ['ft_streak', '連續天', 'streak'], ['ft_days', `${n}日`, 'n', 1],
+      ['foreign', '外資', 'sgn'], ['foreign_streak', '外連', 'streak', 1], ['trust', '投信', 'sgn'], ['trust_streak', '投連', 'streak', 1],
+      ['dealer', '自營', 'sgn', 1], ['cobuy', '三大', 'ck', 1]];
     if (tab === 'duel') return [
-      ['name', '股票', 'name'], ['duel', '方向', 'dir'], ['_duel_size', '對作量', 'big'], ['trust', '投信', 'sgn'], ['foreign', '外資', 'sgn'],
-      ['duel_streak', '對作連續天數', 'streak'], ['dealer', '自營', 'sgn', 1], ['total', '三大合計', 'sgn', 1]];
+      ['name', '股票', 'name'], ['duel', '方向', 'dir', 1], ['_duel_size', '對作量', 'big', 1], ['trust', '投信', 'sgn'], ['foreign', '外資', 'sgn'],
+      ['duel_streak', '連續天', 'streak'], ['dealer', '自營', 'sgn', 1], ['total', '合計', 'sgn', 1]];
     const k = tab;
-    return [['rank', '#', 'n'], ['name', '股票', 'name'], [k, `${W[k]}買超`, 'big'], [k + '_streak', '連買天數', 'streak'],
-      [k + '_days', `${n}日買超天數`, 'n', 1], [k + '_sum', `${n}日累計`, 'sgn', 1], ['total', '三大合計', 'sgn', 1], ['cobuy', '三大同買', 'ck']];
+    return [['rank', '#', 'n', 1], ['name', '股票', 'name'], [k, '買超', 'big'], [k + '_streak', '連買天', 'streak'],
+      [k + '_days', `${n}日`, 'n', 1], [k + '_sum', `${n}日累計`, 'sgn', 1], ['total', '合計', 'sgn'], ['cobuy', '三大', 'ck', 1]];
   }
   const DEF = { co: 'total', ft: 'ft_total', duel: '_duel_size' };
   function rows() {
@@ -180,7 +211,7 @@
                  duel: ['土洋對作', '投信與外資當天一買一賣，依兩邊較小的張數（對作量）排序'],
                  hist: ['每日同買', `最近 ${IDX.dates.length} 個交易日，點日期切換`] };
     const [h, sub] = TT[tab] || [`${W[tab]}買超`, `${W[tab]}當天買超前 300 名`];
-    $('#h2').textContent = h; $('#h2sub').textContent = sub + '，單位：張';
+    $('#h2').textContent = h; $('#h2sub').textContent = sub + '，單位：張' + (tab === 'hist' ? '' : '；連＝連買天數');
     if (tab === 'hist') return renderHist();
     const C = cols(), R = rows();
     $('#box').innerHTML = `<div class="sort-m" role="group" aria-label="排序">排序 ${C.filter(c => c[2] !== 'name' && c[0] !== 'rank' && c[2] !== 'dir' && c[2] !== 'ck').slice(0, 4).map(([k, t]) =>
@@ -188,7 +219,7 @@
       <table class="tbl"><thead><tr>${C.map(([k, t, ty, mh]) => {
         const on = (sortK || DEF[tab]) === k;
         const inner = k === 'rank' || ty === 'dir' ? t : `<button type="button" class="sort${on ? ' on' : ''}" data-k="${k}">${t}<i class="fas ${sortIcon(k)}"></i></button>`;
-        return `<th class="${ty === 'name' || ty === 'dir' ? 'l' : ''}"${on ? ` aria-sort="${sortD < 0 ? 'descending' : 'ascending'}"` : ''}>${inner}</th>`; }).join('')}</tr></thead>
+        return `<th class="${ty === 'name' || ty === 'dir' ? 'l' : ''}${mh ? ' m-hide' : ''}"${on ? ` aria-sort="${sortD < 0 ? 'descending' : 'ascending'}"` : ''}>${inner}</th>`; }).join('')}</tr></thead>
       <tbody>${R.map(x => `<tr>${C.map(c => cell(x, c)).join('')}</tr>`).join('') || `<tr><td class="l" colspan="${C.length}"><div class="empty">沒有符合條件的個股。</div></td></tr>`}</tbody></table>`;
     $('#box').querySelectorAll('button.sort').forEach(b => b.onclick = () => {
       const k = b.dataset.k, cur = sortK || DEF[tab];
