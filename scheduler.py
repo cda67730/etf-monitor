@@ -6,6 +6,7 @@
   SCHED_ETF           ETF 持股＋折溢價，cron 格式（台灣時間），預設 "0 18,19,20 * * 1-5"
   SCHED_WARRANT       權證排行，預設 "40 16 * * 1-5"
   SCHED_INST          三大法人買賣超，預設 "20 18 * * 1-5"
+  SCHED_MOOD          市場情緒指標，預設 "30 7 * * 2-6"（美股收盤後）
   SCHED_MISFIRE_SEC   錯過排程的補跑寬限秒數，預設 3600（重新部署時仍會補跑）
 
 狀態查詢：GET /api/scheduler/status
