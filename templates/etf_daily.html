@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+
+{% block title %}主動式ETF日報（{{ scope_label }}） - ETF持股明細監控系統{% endblock %}
+
+{% block content %}
+{% include "_ed_css.html" %}
+
+{% set fmt_zhang = '{:,.0f}' %}
+<article class="ed">
+  <header class="term">
+    <div class="term-top">
+      <div>
+        <h1>主動式 ETF 日報</h1>
+        <div class="stat" role="status">
+          <span>資料日 <b>{{ etf_status.date or '—' }}</b></span><span>追蹤 <b>{{ etf_codes|length }}</b> 檔</span><span>已抓取 <b class="ok">{{ etf_status.found|length }}</b></span><span>未抓取 <b class="{{ 'bad' if etf_status.missing else '' }}">{{ etf_status.missing|length }}</b>{% if etf_status.missing %}<button type="button" class="miss-btn" aria-expanded="false" aria-controls="miss-list">明細</button>{% endif %}</span>
+        </div>
+      </div>
+      <nav class="tabs" aria-label="日報範圍">
+        <a href="/etf?scope=all" title="全部追蹤中的主動式 ETF" class="{{ 'on' if scope == 'all' else '' }}" {{ 'aria-current="page"' if scope == 'all' else '' }}>不分類</a>
+        <a href="/etf?scope=aggr" title="排除「國外為主」「高股息」" class="{{ 'on' if scope == 'aggr' else '' }}" {{ 'aria-current="page"' if scope == 'aggr' else '' }}>積極型</a>
+      </nav>
+    </div>
+    {% if etf_status.missing %}<div class="miss-list" id="miss-list" hidden>未抓取：{% for m in etf_status.missing %}{{ m.code if m.code is defined else m }} {{ m.name if m.name is defined else '' }}{{ '、' if not loop.last }}{% endfor %}</div>{% endif %}
+  </header>
+
+  <!-- 區塊導覽 -->
+  <nav class="secnav" aria-label="頁面區塊">
+    <a href="#rank" class="on">增減排行</a><a href="#first">首次買進</a><a href="#nav">淨值折溢價</a><a href="#cross">跨 ETF 持有</a>
+  </nav>
+
+  <!-- 第二區：排行榜 -->
+  <section class="sec panel" id="rank">
+    <div class="sec-head">
+      <div><h2>增減排行</h2><div class="sub">{{ etf_status.date or '' }} 各 ETF 加總，單位：張</div></div>
+    </div>
+    <div class="rank-switch" role="tablist" aria-label="切換排行">
+      <button type="button" class="on" data-show="buy" role="tab" aria-selected="true">加碼排行</button>
+      <button type="button" data-show="sell" role="tab" aria-selected="false">減碼排行</button>
+    </div>
+    <div class="ranks" data-show="buy">
+      {% for side, title, sign in [('buy', '加碼排行（新增＋加碼）', '+'), ('sell', '減碼排行（減碼＋出清）', '−')] %}
+      <div class="rank {{ side }}">
+        <h3><span class="bar"></span>{{ title }}</h3>
+        {% if rankings[side] %}
+        <ol>
+          {% set mx = rankings[side][0].shares or 1 %}
+          {% for r in rankings[side] %}
+          <li class="click{{ ' top' if loop.index <= 3 }}" style="--w: {{ (r.shares / mx * 100)|round(1) }}%" tabindex="0" data-stock="{{ r.stock_code }}" data-name="{{ r.stock_name }}" aria-expanded="false">
+            <span class="no">{{ loop.index }}</span>
+            <span class="stk"><b>{{ r.stock_name }}</b><span class="code">{{ r.stock_code }}</span></span>
+            <span class="amt">{{ sign }}{{ fmt_zhang.format(r.shares / 1000) }}<small>張</small></span>
+            <span class="meta" title="{{ ', '.join(r.etfs) }}">{{ r.etf_count }} 檔 ETF{% if side == 'buy' and r.n_new %}，{{ r.n_new }} 檔新進{% endif %}{% if side == 'sell' and r.n_removed %}，{{ r.n_removed }} 檔出清{% endif %}</span>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}<div class="empty">這一天沒有{{ '加碼' if side == 'buy' else '減碼' }}紀錄。</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- 首次買進 -->
+  <section class="sec panel" id="first">
+    <div class="sec-head">
+      <div><h2>ETF 首次買進</h2><div class="sub" id="first-sub">當天新進、而且這檔 ETF 以前從沒持有過的股票，單位：張</div></div>
+      <label class="dlg-ctl" style="margin:0">日期
+        <select class="sel" id="first-date">{% for d in dates[:60] %}<option value="{{ d }}">{{ d }}</option>{% endfor %}</select>
+      </label>
+    </div>
+    <div id="first-box"><div class="loading">載入中…</div></div>
+  </section>
+
+  <!-- 第三區：淨值表 -->
+  <section class="sec panel" id="nav">
+    <div class="sec-head">
+      <div><h2>淨值與折溢價</h2><div class="sub">{{ premium_data[0].date if premium_data and premium_data[0].date is defined else etf_status.date or '' }}，按「明細」看該 ETF 當天持股</div></div>
+      <button type="button" class="btn-ed" id="open-day"><i class="fas fa-table-list" style="margin-right:6px"></i>各 ETF 綜合明細</button>
+    </div>
+    {% if premium_data %}
+    <table class="tbl">
+      <thead><tr><th>ETF</th><th>收盤價</th><th>淨值</th><th>折溢價</th><th>漲跌</th><th><span class="visually-hidden">持股明細</span></th></tr></thead>
+      <tbody>
+        {% for p in premium_data %}
+        <tr>
+          <td class="name"><b>{{ p.name }}</b><span class="code">{{ p.code }}</span></td>
+          <td data-l="收盤">{{ "%.2f"|format(p.close) }}</td>
+          <td data-l="淨值">{{ "%.2f"|format(p.nav) }}</td>
+          <td data-l="折溢價"><span class="pill {{ 'up' if p.premium_pct > 0 else 'down' if p.premium_pct < 0 else 'flat' }}">{{ "%+.2f"|format(p.premium_pct) }}%</span></td>
+          <td data-l="漲跌"><span class="pill {{ 'up' if p.change_pct > 0 else 'down' if p.change_pct < 0 else 'flat' }}">{{ "%+.2f"|format(p.change_pct) }}%</span></td>
+          <td class="act"><button type="button" class="ico" data-etf="{{ p.code }}" aria-label="{{ p.name }} 持股明細"><i class="fas fa-list-ul"></i>明細</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="empty">這一天還沒有折溢價資料。</div>{% endif %}
+  </section>
+
+  <!-- 第四區：跨 ETF -->
+  <section class="sec panel" id="cross">
+    <div class="sec-head">
+      <div><h2>跨 ETF 共同持有</h2><div class="sub">被 2 檔以上 ETF 同時持有的股票，單位：張</div></div>
+      <label class="dlg-ctl" style="margin:0">日期
+        <select class="sel" id="cross-date">{% for d in dates[:60] %}<option value="{{ d }}">{{ d }}</option>{% endfor %}</select>
+      </label>
+    </div>
+    <div id="cross-box"><div class="loading">載入中…</div></div>
+  </section>
+</article>
+
+<!-- 看詳細：單一 ETF 當日持股 -->
+<dialog class="ed-dlg" id="detail" aria-labelledby="dlg-title">
+  <div class="dlg-head">
+    <div class="dlg-top"><h4 id="dlg-title">ETF 持股明細</h4>
+      <button type="button" class="dlg-x" aria-label="關閉" onclick="document.getElementById('detail').close()">×</button></div>
+    <div class="dlg-ctl">
+      <label>ETF <select class="sel" id="dlg-etf">{% for c in etf_codes %}<option value="{{ c }}">{{ c }} {{ etf_info.get(c, '') }}</option>{% endfor %}</select></label>
+      <label>日期 <select class="sel" id="dlg-date">{% for d in dates[:120] %}<option value="{{ d }}">{{ d }}</option>{% endfor %}</select></label>
+    </div>
+    <div class="dlg-sum" id="dlg-sum"></div>
+  </div>
+  <div class="dlg-body" id="dlg-body"></div>
+</dialog>
+
+<!-- 各 ETF 綜合明細（可選日期） -->
+<dialog class="ed-dlg" id="day" aria-labelledby="day-title">
+  <div class="dlg-head">
+    <div class="dlg-top"><h4 id="day-title">各 ETF 綜合明細</h4>
+      <button type="button" class="dlg-x" aria-label="關閉" onclick="document.getElementById('day').close()">×</button></div>
+    <div class="dlg-ctl">
+      <label>日期 <select class="sel" id="day-date">{% for d in dates[:120] %}<option value="{{ d }}">{{ d }}</option>{% endfor %}</select></label>
+    </div>
+    <div class="dlg-sum" id="day-sum"></div>
+  </div>
+  <div class="dlg-body" id="day-body"></div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(() => {
+  const SCOPE = {{ scope | tojson }};
+  const zh = n => (Math.round(n / 1000)).toLocaleString('zh-TW');
+  const big = n => Math.round((n || 0) / 1000) !== 0;
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // ---- 未抓取明細 ----
+  const mb = document.querySelector('.miss-btn'), ml = document.getElementById('miss-list');
+  if (mb && ml) mb.addEventListener('click', () => { ml.hidden = !ml.hidden; mb.setAttribute('aria-expanded', !ml.hidden); });
+
+  // ---- 區塊導覽：依捲動位置標示目前區塊 ----
+  const navLinks = [...document.querySelectorAll('.secnav a')];
+  const secs = navLinks.map(a => document.querySelector(a.getAttribute('href')));
+  const markNav = () => {
+    let i = 0;
+    secs.forEach((s, k) => { if (s && s.getBoundingClientRect().top < 120) i = k; });
+    if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 4) i = secs.length - 1;
+    navLinks.forEach((a, k) => { a.classList.toggle('on', k === i); if (k === i) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); });
+    const nv = navLinks[i].parentElement, l = navLinks[i];
+    if (l.offsetLeft < nv.scrollLeft || l.offsetLeft + l.offsetWidth > nv.scrollLeft + nv.clientWidth) nv.scrollLeft = l.offsetLeft - 8;
+  };
+  addEventListener('scroll', markNav, { passive: true }); markNav();
+
+  // ---- 手機版排行切換 ----
+  const ranks = document.querySelector('.ranks');
+  document.querySelectorAll('.rank-switch button').forEach(b => b.addEventListener('click', () => {
+    ranks.dataset.show = b.dataset.show;
+    document.querySelectorAll('.rank-switch button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); });
+  }));
+
+  // ---- 跨 ETF ----
+  const crossBox = document.getElementById('cross-box'), crossSel = document.getElementById('cross-date');
+  let crossAll = false, crossRows = [];
+  // 排序：預設 ETF 數多到少；合計持股、加碼、減碼可各自排序（再點一次反向）
+  const SORTS = { etf_count: 'ETF 數', total_shares: '合計持股', total_increase: '加碼', total_decrease: '減碼' };
+  let crossSort = { k: 'etf_count', d: -1 };
+  function sortCross() {
+    const { k, d } = crossSort;
+    crossRows.sort((a, b) => d * ((a[k] || 0) - (b[k] || 0)) || b.etf_count - a.etf_count || b.total_shares - a.total_shares);
+  }
+  const sortIcon = k => crossSort.k !== k ? 'fa-sort' : crossSort.d < 0 ? 'fa-sort-down' : 'fa-sort-up';
+  const thSort = (k, extra = '') => `<th${extra} aria-sort="${crossSort.k === k ? (crossSort.d < 0 ? 'descending' : 'ascending') : 'none'}"><button type="button" class="sort${crossSort.k === k ? ' on' : ''}" data-k="${k}">${SORTS[k]}<i class="fas ${sortIcon(k)}"></i></button></th>`;
+  function renderCross() {
+    if (!crossRows.length) { crossBox.innerHTML = '<div class="empty">這一天沒有共同持有的股票。</div>'; return; }
+    const rows = crossAll ? crossRows : crossRows.slice(0, 30);
+    const maxEtf = Math.max(...crossRows.map(r => r.etf_count));
+    crossBox.innerHTML = `<div class="sort-m" role="group" aria-label="排序">排序 ${Object.keys(SORTS).map(k =>
+        `<button type="button" class="sort${crossSort.k === k ? ' on' : ''}" data-k="${k}">${SORTS[k]}<i class="fas ${sortIcon(k)}"></i></button>`).join('')}</div>` +
+      `<table class="tbl"><thead><tr><th>股票</th>${thSort('etf_count')}${thSort('total_shares')}${thSort('total_increase')}${thSort('total_decrease')}</tr></thead><tbody>${
+      rows.map(r => {
+        const net = (r.total_increase || 0) - (r.total_decrease || 0);
+        const arrow = big(net) ? `<span class="net ${net > 0 ? 'up' : 'down'}">${zh(Math.abs(net))}</span>` : '<span class="net muted">持平</span>';
+        return `<tr class="click" tabindex="0" data-stock="${esc(r.stock_code)}" data-name="${esc(r.stock_name)}" aria-expanded="false">
+        <td class="name"><b>${esc(r.stock_name)}</b><span class="code">${esc(r.stock_code)}</span></td>
+        <td data-l="ETF 數" title="${esc((r.etf_details || []).map(e => e.etf_code).join(', '))}"><span class="etfn" style="--a:${(0.3 + 0.7 * Math.min(1, (r.etf_count - 2) / Math.max(1, maxEtf - 2))).toFixed(2)}">${r.etf_count}</span></td>
+        <td data-l="合計">${zh(r.total_shares)}${arrow}</td>
+        <td data-l="加碼" class="${crossSort.k === 'total_increase' ? '' : 'm-hide '}${big(r.total_increase) ? 'up' : 'muted'}">${big(r.total_increase) ? '+' + zh(r.total_increase) : '—'}</td>
+        <td data-l="減碼" class="${crossSort.k === 'total_decrease' ? '' : 'm-hide '}${big(r.total_decrease) ? 'down' : 'muted'}">${big(r.total_decrease) ? '−' + zh(r.total_decrease) : '—'}</td>
+      </tr>`; }).join('')}</tbody></table>` +
+      (crossRows.length > 30 ? `<div class="more"><button type="button" class="btn-ed" id="cross-more">${crossAll ? '收合，只看前 30 檔' : `顯示全部 ${crossRows.length} 檔`}</button></div>` : '');
+    const m = document.getElementById('cross-more');
+    if (m) m.onclick = () => { crossAll = !crossAll; renderCross(); };
+    crossBox.querySelectorAll('button.sort').forEach(b => b.addEventListener('click', () => {
+      const k = b.dataset.k;
+      crossSort = crossSort.k === k ? { k, d: -crossSort.d } : { k, d: -1 };
+      closeTrend(); sortCross(); renderCross();
+    }));
+    crossBox.querySelectorAll('tr[data-stock]').forEach(tr => {
+      tr.addEventListener('click', () => toggleTrend(tr));
+      tr.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTrend(tr); } });
+    });
+  }
+
+  // ---- 點股票：近 30 日合計持股（折線）＋每日淨進出（長條），共用日期軸 ----
+  let chart = null;
+  function closeTrend() {
+    if (chart) { chart.destroy(); chart = null; }
+    document.querySelectorAll('.ed .trend, .ed .trend-li').forEach(x => x.remove());
+    document.querySelectorAll('.ed .open').forEach(x => { x.classList.remove('open'); x.setAttribute('aria-expanded', 'false'); });
+  }
+  async function toggleTrend(tr) {
+    const wasOpen = tr.classList.contains('open');
+    closeTrend();
+    if (wasOpen) return;
+    tr.classList.add('open'); tr.setAttribute('aria-expanded', 'true');
+    const isRow = tr.tagName === 'TR';
+    const row = document.createElement(isRow ? 'tr' : 'li'); row.className = isRow ? 'trend' : 'trend-li';
+    row.innerHTML = `${isRow ? '<td colspan="5">' : ''}<div class="trend-box"><div class="trend-head"><span><b>${esc(tr.dataset.name)} ${esc(tr.dataset.stock)}</b>　近 30 個資料日</span>
+      <span><span class="lg"><i></i>ETF 合計持股（左軸）</span><span class="lg"><i class="bar"></i>當日淨進出（右軸）</span></span></div>
+      <div class="trend-cv"><div class="loading">載入中…</div></div></div>${isRow ? '</td>' : ''}`;
+    tr.after(row);
+    const box = row.querySelector('.trend-cv');
+    try {
+      const r = await fetch(`/api/stock-trend?stock_code=${encodeURIComponent(tr.dataset.stock)}&days=30&scope=${SCOPE}`);
+      if (!r.ok) throw new Error(r.status);
+      const rows = (await r.json()).rows || [];
+      if (!tr.classList.contains('open')) return;
+      if (!rows.length || !window.Chart) { box.innerHTML = '<div class="empty">沒有足夠的歷史資料。</div>'; return; }
+      box.innerHTML = '<canvas></canvas>';
+      const css = getComputedStyle(document.querySelector('.ed'));
+      const UP = css.getPropertyValue('--up').trim(), DN = css.getPropertyValue('--down').trim(), ST = css.getPropertyValue('--steel').trim();
+      const k = n => n == null ? null : Math.round(n / 1000);
+      const nets = rows.map(x => k(x.net)), held = rows.map(x => k(x.shares));
+      // 右軸以 0 為中線上下對稱，長條才看得出進或出
+      const m = Math.max(1, ...nets.map(v => Math.abs(v || 0)));
+      chart = new Chart(box.querySelector('canvas'), {
+        data: {
+          labels: rows.map(x => x.date.slice(5)),
+          datasets: [
+            { type: 'line', label: 'ETF 合計持股', data: held, yAxisID: 'y', borderColor: ST, backgroundColor: ST + '22', fill: true,
+              tension: .25, pointRadius: 2, pointHoverRadius: 4, borderWidth: 2, spanGaps: true, order: 1 },
+            { type: 'bar', label: '當日淨進出', data: nets, yAxisID: 'y1', order: 2, borderRadius: 2, maxBarThickness: 14,
+              backgroundColor: nets.map(v => (v || 0) >= 0 ? UP + 'cc' : DN + 'cc') },
+          ],
+        },
+        options: {
+          maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { display: false },
+            tooltip: { callbacks: {
+              title: it => rows[it[0].dataIndex].date,
+              label: c => c.dataset.type === 'line'
+                ? ` 合計 ${(c.raw ?? 0).toLocaleString('zh-TW')} 張（${rows[c.dataIndex].etf_count} 檔 ETF）`
+                : ` 淨${(c.raw || 0) >= 0 ? '進' : '出'} ${Math.abs(c.raw || 0).toLocaleString('zh-TW')} 張` } } },
+          scales: {
+            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 10, font: { size: 11 } } },
+            y: { position: 'left', grace: '8%', ...(Math.min(...held.map(v => v || 0)) === 0 ? { min: 0 } : {}), ticks: { font: { size: 11 }, callback: v => v.toLocaleString('zh-TW') }, grid: { color: '#eef1f5' } },
+            y1: { position: 'right', min: -m * 1.15, max: m * 1.15, grid: { display: false },
+                  ticks: { font: { size: 11 }, maxTicksLimit: 5, callback: v => Math.round(v).toLocaleString('zh-TW') } },
+          },
+        },
+      });
+    } catch (e) { box.innerHTML = '<div class="empty">讀取失敗，請稍後再試。</div>'; }
+  }
+  async function loadCross() {
+    crossBox.innerHTML = '<div class="loading">載入中…</div>';
+    try {
+      const r = await fetch(`/api/cross-holdings?date=${encodeURIComponent(crossSel.value)}&scope=${SCOPE}`);
+      if (!r.ok) throw new Error(r.status);
+      crossRows = (await r.json()).rows || []; sortCross();
+      crossAll = false; if (crossBox.querySelector('.open')) closeTrend(); renderCross();
+    } catch (e) { crossBox.innerHTML = '<div class="empty">讀取失敗，請重新整理頁面再試一次。</div>'; }
+  }
+  crossSel.addEventListener('change', loadCross);
+  loadCross();
+
+  // ---- 看詳細 ----
+  const dlg = document.getElementById('detail'), selEtf = document.getElementById('dlg-etf'), selDate = document.getElementById('dlg-date');
+  const body = document.getElementById('dlg-body'), sum = document.getElementById('dlg-sum');
+  const TYPE = { NEW: '新進', INCREASED: '加碼', DECREASED: '減碼', REMOVED: '出清' };
+  async function loadDetail() {
+    body.innerHTML = '<div class="loading">載入中…</div>'; sum.textContent = '';
+    document.getElementById('dlg-title').textContent = selEtf.options[selEtf.selectedIndex].text;
+    try {
+      const r = await fetch(`/api/etf-holdings?etf_code=${encodeURIComponent(selEtf.value)}&date=${encodeURIComponent(selDate.value)}`);
+      const j = await r.json();
+      const h = (j.holdings || []).sort((a, b) => b.weight - a.weight);
+      if (!h.length) { body.innerHTML = '<div class="empty">這一天沒有這檔 ETF 的持股資料，請換一個日期。</div>'; return; }
+      const cnt = t => h.filter(x => x.change_type === t).length;
+      sum.textContent = `共 ${h.length} 檔持股：新進 ${cnt('NEW')}、加碼 ${cnt('INCREASED')}、減碼 ${cnt('DECREASED')}、出清 ${cnt('REMOVED')}`;
+      body.innerHTML = `<table class="tbl"><thead><tr><th>股票</th><th>權重</th><th>持股</th><th>增減</th><th>狀態</th></tr></thead><tbody>${
+        h.map(x => {
+          const d = big(x.shares_increase) ? `<span class="up">+${zh(x.shares_increase)}</span>` : big(x.shares_decrease) ? `<span class="down">−${zh(x.shares_decrease)}</span>` : '<span class="muted">—</span>';
+          const unit = x.unit && x.unit !== '股' ? x.unit : '張';
+          const qty = x.unit && x.unit !== '股' ? Number(x.shares).toLocaleString('zh-TW') : zh(x.shares);
+          return `<tr><td class="name"><b>${esc(x.stock_name)}</b><span class="code">${esc(x.stock_code)}</span></td>
+            <td data-l="權重">${Number(x.weight).toFixed(2)}%</td><td data-l="持股">${qty} ${unit}</td>
+            <td data-l="增減">${d}</td><td data-l="狀態" class="m-hide">${TYPE[x.change_type] ? `<span class="chip ${x.change_type}">${TYPE[x.change_type]}</span>` : ''}</td></tr>`;
+        }).join('')}</tbody></table>`;
+    } catch (e) { body.innerHTML = '<div class="empty">讀取失敗，請稍後再試。</div>'; }
+  }
+  function openDetail(code, date) {
+    if (code) selEtf.value = code;
+    if (date && [...selDate.options].some(o => o.value === date)) selDate.value = date;
+    if (!dlg.open) dlg.showModal();
+    loadDetail();
+  }
+  selEtf.addEventListener('change', loadDetail);
+  selDate.addEventListener('change', loadDetail);
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+  document.querySelectorAll('#nav .ico[data-etf]').forEach(b => b.addEventListener('click', () => openDetail(b.dataset.etf, {{ (etf_status.date or '') | tojson }})));
+
+  // ---- 排行榜點個股：同樣展開趨勢圖 ----
+  document.querySelectorAll('.rank li[data-stock]').forEach(li => {
+    li.addEventListener('click', () => toggleTrend(li));
+    li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTrend(li); } });
+  });
+
+  // ---- 首次買進 ----
+  const firstBox = document.getElementById('first-box'), firstSel = document.getElementById('first-date');
+  async function loadFirst() {
+    firstBox.innerHTML = '<div class="loading">載入中…</div>';
+    try {
+      const r = await fetch(`/api/first-buys?date=${encodeURIComponent(firstSel.value)}&scope=${SCOPE}`);
+      if (!r.ok) throw new Error(r.status);
+      const j = await r.json(), rows = j.rows || [];
+      if (j.since) document.getElementById('first-sub').textContent = `當天新進、而且這檔 ETF 以前從沒持有過的股票（資料從 ${j.since} 起算），單位：張`;
+      if (!rows.length) { firstBox.innerHTML = '<div class="empty">這一天沒有 ETF 第一次買進的股票。</div>'; return; }
+      firstBox.innerHTML = `<table class="tbl"><thead><tr><th>股票</th><th>買進的 ETF</th><th>合計</th></tr></thead><tbody>${
+        rows.map(r => `<tr>
+          <td class="name"><b>${esc(r.stock_name)}</b><span class="code">${esc(r.stock_code)}</span>${r.first_any ? '<span class="fresh" title="範圍內所有 ETF 之前都沒持有過">全新</span>' : ''}</td>
+          <td><div class="etf-chips">${r.etfs.map(e => `<span class="ec" title="${esc(e.etf_name)}"><b>${esc(e.etf_code)}</b><span>${zh(e.shares)}</span></span>`).join('')}</div></td>
+          <td data-l="合計" class="up">+${zh(r.shares)}</td></tr>`).join('')}</tbody></table>`;
+    } catch (e) { firstBox.innerHTML = '<div class="empty">讀取失敗，請重新整理頁面再試一次。</div>'; }
+  }
+  firstSel.addEventListener('change', loadFirst);
+  loadFirst();
+
+  // ---- 各 ETF 綜合明細（可選日期）----
+  const day = document.getElementById('day'), daySel = document.getElementById('day-date');
+  const dayBody = document.getElementById('day-body'), daySum = document.getElementById('day-sum');
+  const pct = v => v == null ? '<span class="muted">—</span>' : `<span class="pill ${v > 0 ? 'up' : v < 0 ? 'down' : 'flat'}">${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%</span>`;
+  const n2 = v => v == null ? '<span class="muted">—</span>' : Number(v).toFixed(2);
+  const cnt = (v, c) => v ? `<span class="${c}">${v}</span>` : '<span class="muted">0</span>';
+  async function loadDay() {
+    dayBody.innerHTML = '<div class="loading">載入中…</div>'; daySum.textContent = '';
+    try {
+      const r = await fetch(`/api/etf-day?date=${encodeURIComponent(daySel.value)}&scope=${SCOPE}`);
+      if (!r.ok) throw new Error(r.status);
+      const rows = (await r.json()).rows || [];
+      const got = rows.filter(x => x.holdings);
+      daySum.textContent = `${rows.length} 檔 ETF，${got.length} 檔有持股資料；新進 ${rows.reduce((a, x) => a + x.new, 0)}、加碼 ${rows.reduce((a, x) => a + x.inc, 0)}、減碼 ${rows.reduce((a, x) => a + x.dec, 0)}、出清 ${rows.reduce((a, x) => a + x.removed, 0)}`;
+      if (!rows.length) { dayBody.innerHTML = '<div class="empty">這一天沒有資料。</div>'; return; }
+      dayBody.innerHTML = `<table class="tbl"><thead><tr><th>ETF</th><th>收盤</th><th>淨值</th><th>折溢價</th><th>漲跌</th><th>持股數</th><th>新進</th><th>加碼</th><th>減碼</th><th>出清</th><th></th></tr></thead><tbody>${
+        rows.map(x => `<tr>
+          <td class="name"><b>${esc(x.name)}</b><span class="code">${esc(x.code)}</span></td>
+          <td data-l="收盤">${n2(x.close)}</td><td data-l="淨值">${n2(x.nav)}</td>
+          <td data-l="折溢價">${pct(x.premium_pct)}</td><td data-l="漲跌">${pct(x.change_pct)}</td>
+          <td data-l="持股">${x.holdings || '<span class="muted">未抓取</span>'}</td>
+          <td data-l="新進">${cnt(x.new, 'up')}</td><td data-l="加碼">${cnt(x.inc, 'up')}</td>
+          <td data-l="減碼">${cnt(x.dec, 'down')}</td><td data-l="出清">${cnt(x.removed, 'down')}</td>
+          <td class="act">${x.holdings ? `<button type="button" class="ico" data-etf="${esc(x.code)}" aria-label="${esc(x.name)} 持股明細"><i class="fas fa-list-ul"></i>明細</button>` : ''}</td>
+        </tr>`).join('')}</tbody></table>`;
+      dayBody.querySelectorAll('.ico[data-etf]').forEach(b => b.addEventListener('click', () => openDetail(b.dataset.etf, daySel.value)));
+    } catch (e) { dayBody.innerHTML = '<div class="empty">讀取失敗，請稍後再試。</div>'; }
+  }
+  daySel.addEventListener('change', loadDay);
+  day.addEventListener('click', e => { if (e.target === day) day.close(); });
+  document.getElementById('open-day').addEventListener('click', () => { if (!day.open) day.showModal(); loadDay(); });
+})();
+</script>
+{% endblock %}

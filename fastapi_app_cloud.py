@@ -693,6 +693,128 @@ class DatabaseQuery:
             logger.error(f"獲取持股變化資料錯誤: {e}")
             return []
 
+    def get_stock_trend(self, stock_code: str, days: int = 30) -> List[Dict[str, Any]]:
+        """單一股票近 N 個資料日：範圍內 ETF 合計持股、持有 ETF 數、當日淨進出（股）。
+        日期軸用範圍內最近 N 個資料日，沒持有的日子記 0（剛新進的股票也看得出從 0 開始）"""
+        if not self.db_available or not stock_code:
+            return []
+        ph = self._get_placeholder()
+        sc = self._scope_sql("etf_code")
+        dates = [r["d"] for r in (self.execute_query(
+            f"SELECT DISTINCT update_date AS d FROM etf_holdings WHERE {sc} ORDER BY update_date DESC LIMIT {int(days)}",
+            fetch="all") or [])][::-1]
+        if not dates:
+            return []
+        since = dates[0]
+        held = {r["d"]: r for r in (self.execute_query(
+            f"SELECT update_date AS d, SUM(shares) AS shares, COUNT(DISTINCT etf_code) AS n FROM etf_holdings "
+            f"WHERE stock_code = {ph} AND update_date >= {ph} AND {sc} GROUP BY update_date",
+            (stock_code, since), fetch="all") or [])}
+        net = {r["d"]: r["net"] or 0 for r in (self.execute_query(
+            f"SELECT change_date AS d, SUM(new_shares - old_shares) AS net FROM holdings_changes "
+            f"WHERE stock_code = {ph} AND change_date >= {ph} AND {sc} GROUP BY change_date",
+            (stock_code, since), fetch="all") or [])}
+        if not held and not net:
+            return []
+        return [{"date": d, "shares": (held.get(d) or {}).get("shares") or 0, "etf_count": (held.get(d) or {}).get("n", 0),
+                 "net": net.get(d, 0)} for d in dates]
+
+    def get_etf_day(self, date: str) -> List[Dict[str, Any]]:
+        """指定日期各 ETF 綜合：收盤、淨值、折溢價、漲跌、持股檔數、新進／加碼／減碼／出清檔數"""
+        if not self.db_available or not date:
+            return []
+        ph = self._get_placeholder()
+        sc = self._scope_sql("etf_code")
+        prem = {p["code"]: p for p in self.get_premium_data(date)}
+        cnt = {r["etf_code"]: r["n"] for r in (self.execute_query(
+            f"SELECT etf_code, COUNT(*) AS n FROM etf_holdings WHERE update_date = {ph} AND {sc} GROUP BY etf_code",
+            (date,), fetch="all") or [])}
+        chg: Dict[str, Dict[str, int]] = {}
+        for r in self.execute_query(
+                f"SELECT etf_code, change_type, COUNT(*) AS n FROM holdings_changes WHERE change_date = {ph} AND {sc} "
+                f"GROUP BY etf_code, change_type", (date,), fetch="all") or []:
+            chg.setdefault(r["etf_code"], {})[r["change_type"]] = r["n"]
+        out = []
+        for code, name in self.etf_names.items():
+            p = prem.get(code, {})
+            c = chg.get(code, {})
+            out.append({"code": code, "name": name, "close": p.get("close"), "nav": p.get("nav"),
+                        "premium_pct": p.get("premium_pct"), "change_pct": p.get("change_pct"),
+                        "holdings": cnt.get(code, 0), "new": c.get("NEW", 0), "inc": c.get("INCREASED", 0),
+                        "dec": c.get("DECREASED", 0), "removed": c.get("REMOVED", 0)})
+        out.sort(key=lambda x: (x["premium_pct"] is None, -(x["premium_pct"] or 0)))
+        return out
+
+    def get_first_buys(self, date: str) -> Dict[str, Any]:
+        """指定日 ETF「第一次」買進的股票：當日 NEW，且該 ETF 在此日之前從未持有過。
+        以股票彙總；first_any=True 表示範圍內所有 ETF 之前都沒持有過（全新面孔）。"""
+        out = {"since": None, "rows": []}
+        if not self.db_available or not date:
+            return out
+        try:
+            ph = self._get_placeholder()
+            sc = self._scope_sql("c.etf_code")
+            first = self.execute_query("SELECT MIN(update_date) AS d FROM etf_holdings", fetch="one") or {}
+            out["since"] = first.get("d")
+            rows = self.execute_query(
+                f"SELECT c.etf_code, c.stock_code, c.stock_name, c.new_shares FROM holdings_changes c "
+                f"WHERE c.change_type = 'NEW' AND c.change_date = {ph} AND {sc} AND NOT EXISTS ("
+                f"SELECT 1 FROM etf_holdings h WHERE h.etf_code = c.etf_code AND h.stock_code = c.stock_code "
+                f"AND h.update_date < {ph})", (date, date), fetch="all") or []
+            if not rows:
+                return out
+            codes = sorted({r["stock_code"] for r in rows})
+            held_before = {r["stock_code"] for r in (self.execute_query(
+                f"SELECT DISTINCT stock_code FROM etf_holdings WHERE update_date < {ph} AND {self._scope_sql('etf_code')} "
+                f"AND stock_code IN ({', '.join([ph] * len(codes))})", (date, *codes), fetch="all") or [])}
+            agg: Dict[str, Dict[str, Any]] = {}
+            for r in rows:
+                a = agg.setdefault(r["stock_code"], {"stock_code": r["stock_code"], "stock_name": r["stock_name"],
+                                                     "shares": 0, "etfs": [],
+                                                     "first_any": r["stock_code"] not in held_before})
+                a["shares"] += r["new_shares"] or 0
+                a["etfs"].append({"etf_code": r["etf_code"], "etf_name": self.etf_names.get(r["etf_code"], ""),
+                                  "shares": r["new_shares"] or 0})
+            for a in agg.values():
+                a["etfs"].sort(key=lambda e: -e["shares"])
+                a["etf_count"] = len(a["etfs"])
+            out["rows"] = sorted(agg.values(), key=lambda x: (-x["etf_count"], not x["first_any"], -x["shares"]))
+        except Exception as e:
+            logger.error(f"首次買進查詢錯誤: {e}")
+        return out
+
+    def get_change_rankings(self, date: str, limit: int = 15) -> Dict[str, List[Dict[str, Any]]]:
+        """當日新增／加碼排行與減碼／出清排行（以股票彙總各 ETF，單位：股）"""
+        out = {"buy": [], "sell": []}
+        if not self.db_available or not date:
+            return out
+        try:
+            ph = self._get_placeholder()
+            rows = self.execute_query(
+                f"SELECT etf_code, stock_code, stock_name, change_type, old_shares, new_shares FROM holdings_changes "
+                f"WHERE change_date = {ph} AND {self._scope_sql('etf_code')}", (date,), fetch="all") or []
+            agg: Dict[tuple, Dict[str, Any]] = {}
+            for r in rows:
+                side = "buy" if r["change_type"] in ("NEW", "INCREASED") else "sell"
+                diff = abs((r["new_shares"] or 0) - (r["old_shares"] or 0))
+                if not diff:
+                    continue
+                a = agg.setdefault((side, r["stock_code"]), {"stock_code": r["stock_code"], "stock_name": r["stock_name"],
+                                                             "shares": 0, "etfs": [], "n_new": 0, "n_removed": 0})
+                a["shares"] += diff
+                a["etfs"].append(r["etf_code"])
+                a["n_new"] += r["change_type"] == "NEW"
+                a["n_removed"] += r["change_type"] == "REMOVED"
+            for (side, _), a in agg.items():
+                a["etf_count"] = len(a["etfs"])
+                out[side].append(a)
+            for side in out:
+                out[side].sort(key=lambda x: (-x["shares"], -x["etf_count"]))
+                out[side] = out[side][:limit]
+        except Exception as e:
+            logger.error(f"增減排行錯誤: {e}")
+        return out
+
     def get_removed_holdings(self, date: str) -> List[Dict[str, Any]]:
         """當日被出清（REMOVED）的持股，限目前日報範圍"""
         if not self.db_available or not date:
@@ -1546,6 +1668,49 @@ async def api_etf_holdings(
         return {"etf_code": etf_code, "etf_name": "", "date": date, "holdings": [], "error": str(e)}
 
 
+@app.get("/api/stock-trend")
+async def api_stock_trend(stock_code: str = Query(..., description="股票代號"), days: int = Query(30, ge=5, le=120)):
+    """API：單一股票近 N 日被範圍內 ETF 持有的合計張數與每日淨進出"""
+    return {"stock_code": stock_code, "scope": _etf_scope.get(), "rows": db_query.get_stock_trend(stock_code, days)}
+
+
+@app.get("/api/first-buys")
+async def api_first_buys(date: str = Query(None)):
+    """API：指定日 ETF 第一次買進的股票（依目前日報範圍）；單位：股"""
+    if not date:
+        dates = db_query.get_available_dates()
+        date = dates[0] if dates else None
+    return {"date": date, "scope": _etf_scope.get(), **db_query.get_first_buys(date)}
+
+
+@app.get("/api/etf-day")
+async def api_etf_day(date: str = Query(None)):
+    """API：指定日期各 ETF 綜合明細（依目前日報範圍）"""
+    if not date:
+        dates = db_query.get_available_dates()
+        date = dates[0] if dates else None
+    return {"date": date, "scope": _etf_scope.get(), "rows": db_query.get_etf_day(date)}
+
+
+@app.get("/api/cross-holdings")
+async def api_cross_holdings(date: str = Query(None, description="日期 YYYY-MM-DD，不填取最新")):
+    """API：跨 ETF 重複持股（依目前日報範圍）；單位：股"""
+    from starlette.concurrency import run_in_threadpool
+    if not date:
+        dates = await run_in_threadpool(db_query.get_available_dates)
+        date = dates[0] if dates else None
+    scope = _etf_scope.get()
+
+    def _run():  # 在背景執行緒裡也套用同樣的日報範圍
+        token = _etf_scope.set(scope)
+        try:
+            return db_query.get_cross_holdings(date)
+        finally:
+            _etf_scope.reset(token)
+    rows = await run_in_threadpool(_run) if date else []
+    return {"date": date, "scope": scope, "rows": rows}
+
+
 @app.get("/api/etfs")
 async def api_etfs(scope: str = Query("all", description="all＝全部啟用；aggr＝積極型；every＝含停用")):
     """API：追蹤中的 ETF 清單（免登入，給 BookReview 等外部程式用）"""
@@ -2146,8 +2311,11 @@ async def home(request: Request):
         etf_info = db_query.get_etf_codes_with_names()
         etf_status = db_query.get_etf_data_status(dates[0] if dates else None)
         premium_data = db_query.get_premium_data(dates[0] if dates else None)
+        rankings = db_query.get_change_rankings(dates[0] if dates else None)
 
-        return templates.TemplateResponse("index.html", {
+        return templates.TemplateResponse("etf_daily.html", {
+            "rankings": rankings,
+            "scope": _etf_scope.get(),
             "request": request,
             "dates": dates,
             "etf_codes": etf_codes,

@@ -368,6 +368,8 @@ class DatabaseConfig:
                 # ETF 索引
                 'CREATE INDEX IF NOT EXISTS idx_etf_date ON etf_holdings(etf_code, update_date)',
                 'CREATE INDEX IF NOT EXISTS idx_changes_date ON holdings_changes(etf_code, change_date)',
+                'CREATE INDEX IF NOT EXISTS idx_etf_stock ON etf_holdings(stock_code, update_date)',
+                'CREATE INDEX IF NOT EXISTS idx_changes_stock ON holdings_changes(stock_code, change_date)',
                 
                 # 權證索引
                 'CREATE INDEX IF NOT EXISTS idx_warrant_date ON warrant_data(update_date)',
