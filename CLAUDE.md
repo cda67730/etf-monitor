@@ -82,7 +82,7 @@
 - 流程：程式算「事實清單」→ 接 `templates/report_prompt.txt` 給 Gemini 寫說明 → `merge_checked` 逐段核對數字，對不上的段落換成 `fallback_text` 模板句子 → `templates/report_pdf.html` 用 WeasyPrint 轉 PDF
 - 環境變數：`GEMINI_API_KEY`（沒設＝全部模板句子）、`GEMINI_MODEL`（預設 gemini-3.1-pro-preview）、`GEMINI_FALLBACK_MODEL`（預設 gemini-3.8-flash）；新模型已停用 temperature 等參數，不要加
 - 結果存資料表 `etf_report`（d, scope, fp…）；`fp` 是當日持股筆數＋異動指紋，資料有變才重寫，否則沿用（不重複呼叫 Gemini）
-- 外部資料：證交所 MI_INDEX（指數、漲跌家數、個股漲跌）、FMTQIK（成交金額）、BFI82U（三大法人金額）；櫃買開放資料只有最新一日；股票簡稱與產業別抓證交所 ISIN 清單存 `stock_meta`（7 天更新）
+- 外部資料：證交所 MI_INDEX（指數、漲跌家數、個股漲跌）、FMTQIK（成交金額）、BFI82U（三大法人金額）；櫃買上櫃行情用 POST `www/zh-tw/afterTrading/dailyQuotes`（可指定日期）；股票簡稱與產業別抓證交所 ISIN 清單存 `stock_meta`（7 天更新）
 - 排程 `report` 平日 20:50（`SCHED_REPORT`）替最新資料日產生積極型與不分類兩份
 - Docker 需 Pango 與 `fonts-noto-cjk`（思源黑體）
 

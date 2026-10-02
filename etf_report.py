@@ -156,18 +156,24 @@ class Market:
                                   "自營商": yi(v.get("自營商(自行買賣)", 0) + v.get("自營商(避險)", 0)), "合計": yi(v.get("合計", 0))}
         except Exception as e:
             logger.warning(f"[report] 證交所 BFI82U 失敗：{e}")
-        try:   # 櫃買只有最新一日的開放資料，日期相符才用
-            for r in self._get("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes").json():
-                d = str(r.get("Date", ""))
-                if len(d) == 7 and f"{int(d[:3]) + 1911}{d[3:]}" == ymd:
+        try:   # 櫃買上櫃股票收盤行情（新版網站要用 POST）
+            r = requests.post("https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes", headers=UA, timeout=60,
+                              data={"date": f"{ymd[:4]}/{ymd[4:6]}/{ymd[6:]}", "id": "", "response": "json"})
+            r.raise_for_status()
+            j = r.json()
+            if str(j.get("date")) == ymd:
+                t = (j.get("tables") or [{}])[0]
+                f = t.get("fields") or []
+                ic, iclose, ichg = f.index("代號"), f.index("收盤"), f.index("漲跌")
+                for row in t.get("data") or []:
                     try:
-                        close, chg = num(r["Close"]), num(r["Change"])
+                        close, chg = num(row[iclose]), num(str(row[ichg]).strip().replace("+", ""))
                         prev = close - chg
-                        out["price"].setdefault(r["SecuritiesCompanyCode"], round(chg / prev * 100, 2) if prev else 0.0)
-                    except (ValueError, KeyError, ZeroDivisionError):
+                        out["price"].setdefault(row[ic], round(chg / prev * 100, 2) if prev else 0.0)
+                    except (ValueError, ZeroDivisionError):
                         pass
         except Exception as e:
-            logger.info(f"[report] 櫃買收盤行情略過：{e}")
+            logger.warning(f"[report] 櫃買收盤行情失敗：{e}")
         if out.get("index"):
             self._day[date] = out
         return out
