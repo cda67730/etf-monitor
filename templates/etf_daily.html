@@ -3,7 +3,7 @@
 {% block title %}主動式ETF日報（{{ scope_label }}） - ETF持股明細監控系統{% endblock %}
 
 {% block content %}
-<style>body { background: #eef1f5; }</style>
+<style>body { background: #eef1f5; } @media (max-width: 1199.98px) { .container { max-width: 100%; } }</style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -83,7 +83,9 @@
   .rank .amt { font-family: var(--num); font-variant-numeric: tabular-nums; font-weight: 700; color: var(--c); text-align: right; white-space: nowrap; }
   .rank .amt small { font-weight: 400; color: var(--mute); margin-left: 2px; font-size: .75rem; }
   .rank-switch { display: none; }
-  @media (max-width: 767.98px) {
+  /* 依排行區塊本身的寬度決定：夠寬就並列，太窄才改成切換 */
+  #rank { container-type: inline-size; container-name: rank; }
+  @container rank (max-width: 559.98px) {
     .ranks { grid-template-columns: 1fr; }
     .rank-switch { display: inline-flex; margin-top: 12px; border: 1px solid var(--rule); border-radius: 8px; padding: 3px; gap: 3px; background: var(--bg); }
     .rank-switch button { border: 0; background: transparent; padding: 5px 16px; font-size: .88rem; color: var(--body); border-radius: 6px; }
@@ -91,6 +93,11 @@
     .rank-switch button[data-show="sell"].on { background: var(--down); color: #fff; font-weight: 700; }
     .ranks[data-show="buy"] .rank.sell, .ranks[data-show="sell"] .rank.buy { display: none; }
     .ranks .rank h3 { display: none; }
+  }
+  @container rank (min-width: 560px) and (max-width: 760px) {
+    .ranks { gap: 0 16px; }
+    .rank .meta { font-size: .7rem; }
+    .rank li { grid-template-columns: 1.5em minmax(0, 1fr) auto; gap: 1px 6px; }
   }
   .empty { color: var(--mute); font-size: .9rem; padding: 16px 0; }
 
