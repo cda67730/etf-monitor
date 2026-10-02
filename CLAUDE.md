@@ -28,6 +28,7 @@
 
 ## 現有頁面
 `/` 首頁分流（`hub.html`，四張卡片）、`/etf` ETF 日報（原首頁）、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/inst-cobuy` 三大法人同買、`/market-mood` 市場情緒指標、`/admin/etfs` ETF 清單管理＋手動爬取 ETF／權證（首頁原按鈕已移到這裡）、`/login`
+- 導覽列順序（`base.html`）：三大法人同買、ETF日報、市場情緒、權證排行、權證量能、ETF 管理，最後是「舊版 ETF」下拉（每日持股、新增持股、減持表、跨ETF重複持股；這些頁 BookReview 仍在解析，不能刪）
 
 ## ETF 日報範圍（積極型／不分類）
 - `?scope=aggr|all` 切換，記在 cookie `etf_scope`；`etf_scope_middleware` 設 contextvar `_etf_scope`
