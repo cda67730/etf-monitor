@@ -1,24 +1,15 @@
-import requests, io, csv, json
-H={"User-Agent":"Mozilla/5.0"}
-out=[]
-def t(name, url, data):
-    try:
-        r=requests.post(url,data=data,headers=H,timeout=60)
-        raw=r.content
-        for enc in ("utf-8-sig","big5","cp950"):
-            try: txt=raw.decode(enc); break
-            except Exception: pass
-        out.append(f"== {name} {r.status_code} {r.headers.get('content-type')} len={len(raw)} enc={enc}")
-        rows=list(csv.reader(io.StringIO(txt)))
-        out.append(json.dumps(rows[:1],ensure_ascii=False))
-        out.append("\n".join(json.dumps(x,ensure_ascii=False) for x in rows[1:40]))
-        out.append(f"rows={len(rows)} dates={sorted(set(x[0] for x in rows[1:] if x))[:3]}..{sorted(set(x[0] for x in rows[1:] if x))[-3:]}")
-        names=sorted(set(x[1] for x in rows[1:] if len(x)>1)); out.append("products="+json.dumps(names,ensure_ascii=False))
-    except Exception as e:
-        out.append(f"== {name} ERR {e}")
-U="https://www.taifex.com.tw/cht/3/futContractsDateDown"
-t("1day", U, {"queryStartDate":"2026/10/01","queryEndDate":"2026/10/01","commodityId":""})
-t("1month", U, {"queryStartDate":"2026/09/01","queryEndDate":"2026/09/30","commodityId":""})
-t("1year", U, {"queryStartDate":"2025/10/01","queryEndDate":"2026/10/01","commodityId":""})
-t("tx_1year", U, {"queryStartDate":"2025/10/01","queryEndDate":"2026/10/01","commodityId":"TXF"})
-open("debug/fut_result.txt","w").write("\n".join(out)); print("\n".join(out)[:3000])
+import sys, csv, datetime as dt, time
+sys.path.insert(0, "debug")
+import fut_flow as F
+today = dt.date(2026, 10, 2)
+s = today - dt.timedelta(days=F.BACKFILL_DAYS)
+rows = []
+while s <= today:
+    e = min(s + dt.timedelta(days=364), today)
+    r = F.FutStore.fetch(s, e); print(s, e, len(r)); rows += r
+    s = e + dt.timedelta(days=1); time.sleep(1)
+names = {p for p, _ in F.PRODUCTS}
+keep = [r for r in rows if r[1] in names]
+print("kept", len(keep), "products seen", sorted({r[1] for r in keep}), "missing", names - {r[1] for r in rows})
+with open("debug/fut_rows.csv", "w", newline="") as f:
+    csv.writer(f).writerows(keep)
