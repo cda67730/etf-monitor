@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}期貨籌碼 - ETF持股明細監控系統{% endblock %}
+
+{% block content %}
+{% include "_ed_css.html" %}
+<style>
+  /* 8 個期貨商品的三大法人未平倉多空淨額（口），兩排各四張小圖 */
+  .fu .term .stat b.up { color: #ff6b6b; } .fu .term .stat b.down { color: #4ade80; }
+  .fu .ctl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .fu .tabs button { border: 0; background: none; padding: 6px 16px; font-size: .92rem; color: var(--term-text); border-radius: 6px; cursor: pointer; white-space: nowrap; }
+  .fu .tabs button.on { background: var(--accent); color: #1a1205; font-weight: 700; }
+  .fu .tabs button:not(.on):hover { background: var(--term-line); color: #fff; }
+  .fu .tabs button:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+  .fu .dl-sel { border-radius: 8px; border-right: 1px solid var(--term-line); padding: 6px 10px; }
+
+  .fgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+  @media (max-width: 960px) { .fgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  /* 手機兩欄小卡（像看盤軟體的 2×4），點開再看大圖 */
+  @media (max-width: 560px) {
+    .fgrid { gap: 8px; margin-top: 10px; }
+    .fcard { padding: 9px 10px 4px; border-radius: 8px; }
+    .fcard .nm { font-size: .88rem; } .fcard .tag { font-size: .68rem; padding: 0 5px; }
+    .fcard .big { font-size: 1.08rem; } .fcard .chg { font-size: .7rem; }
+    .fcard .cv, .fcard .empty { height: 92px; }
+  }
+  .fcard { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px 8px; cursor: pointer;
+           box-shadow: 0 1px 2px rgba(15, 27, 45, .04); text-align: left; width: 100%; font: inherit; color: inherit; }
+  .fcard:hover { border-color: #c5d2e3; box-shadow: 0 3px 10px rgba(15, 27, 45, .08); }
+  .fcard:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
+  .fcard .hd { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .fcard .nm { font-weight: 700; color: var(--ink); font-size: .98rem; }
+  .fcard .tag { font-size: .74rem; padding: 1px 7px; border-radius: 10px; font-weight: 600; }
+  .tag.up { background: var(--up-t); color: var(--up); } .tag.down { background: var(--down-t); color: var(--down); }
+  .fcard .big { font-family: var(--num); font-variant-numeric: tabular-nums; font-size: 1.35rem; font-weight: 600; margin-top: 2px; }
+  .fcard .big small { font-size: .74rem; color: var(--mute); font-weight: 400; margin-left: 3px; }
+  .fcard .chg { font-size: .76rem; color: var(--mute); }
+  .fcard .chg b { font-family: var(--num); font-weight: 600; }
+  .up { color: var(--up); } .down { color: var(--down); }
+  .fcard .cv { position: relative; height: 130px; margin-top: 6px; }
+  .fcard .empty { height: 130px; display: flex; align-items: center; justify-content: center; color: var(--mute); font-size: .85rem; }
+
+  .note { font-size: .8rem; color: var(--mute); margin-top: 14px; line-height: 1.7; }
+
+  /* 放大檢視 */
+  .fdlg { border: 0; border-radius: 12px; padding: 0; width: min(960px, 96vw); max-height: 92vh; box-shadow: 0 20px 60px rgba(15, 27, 45, .35); }
+  .fdlg::backdrop { background: rgba(15, 27, 45, .55); }
+  .fdlg .in { padding: 14px 18px 16px; }
+  .fdlg .hd { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .fdlg h3 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--ink); }
+  .fdlg .x { border: 0; background: none; font-size: 1.4rem; line-height: 1; color: var(--mute); cursor: pointer; padding: 2px 6px; }
+  .fdlg .meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .84rem; color: var(--body); margin: 6px 0 8px; }
+  .fdlg .meta b { font-family: var(--num); font-weight: 600; color: var(--ink); }
+  .fdlg .cv { position: relative; height: min(56vh, 440px); }
+</style>
+
+<article class="ed fu">
+  <header class="term">
+    <div class="term-top">
+      <div>
+        <h1>期貨籌碼</h1>
+        <div class="stat" id="stat" role="status"><span>載入中…</span></div>
+      </div>
+      <div class="ctl">
+        <div class="tabs" role="tablist" aria-label="法人">
+          {% for k, v in insts.items() %}<button type="button" role="tab" data-inst="{{ k }}"{% if loop.first %} class="on" aria-selected="true"{% endif %}>{{ '外資' if k == 'foreign' else v }}</button>{% endfor %}
+        </div>
+        <select class="dl-sel" id="days" aria-label="期間">
+          <option value="60">近 3 月</option>
+          <option value="120">近 6 月</option>
+          <option value="250" selected>近 1 年</option>
+          <option value="500">近 2 年</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <div class="fgrid" id="grid">
+    {% for p, short in products %}
+    <button type="button" class="fcard" data-i="{{ loop.index0 }}">
+      <div class="hd"><span class="nm">{{ short }}</span><span class="tag"></span></div>
+      <div class="big num">—</div>
+      <div class="chg">&nbsp;</div>
+      <div class="cv"><canvas aria-label="{{ short }} 未平倉淨額走勢"></canvas></div>
+    </button>
+    {% endfor %}
+  </div>
+
+  <p class="note">
+    數字是<b>未平倉多空淨額（口）</b>，所有月份合計：正值＝淨多單（紅）、負值＝淨空單（綠）。卡片上的「日」「5 日」是淨額比前 1／5 個交易日的增減。
+    股票期貨是所有個股期貨口數加總（各檔契約大小不同，只看方向與變化）。點卡片可放大。資料來源：臺灣期貨交易所「三大法人－區分各期貨契約」，每個交易日約 15:00 後更新。
+  </p>
+</article>
+
+<dialog class="fdlg ed-dlg" id="dlg" aria-labelledby="dlg-t">
+  <div class="in">
+    <div class="hd"><h3 id="dlg-t"></h3><button type="button" class="x" aria-label="關閉">×</button></div>
+    <div class="meta" id="dlg-m"></div>
+    <div class="cv"><canvas id="dlg-c"></canvas></div>
+  </div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  const RED = '#e5383b', GREEN = '#12a150';
+  const fmt = n => n == null ? '—' : n.toLocaleString('en-US');
+  const sgn = n => n == null ? '—' : (n > 0 ? '+' : '') + n.toLocaleString('en-US');
+  const cls = n => n > 0 ? 'up' : n < 0 ? 'down' : '';
+  const md = d => d.slice(5).replace('-', '/');
+  let inst = 'foreign', days = 250, data = null, charts = [], big = null;
+
+  function chart(cv, dates, vals, large) {
+    return new Chart(cv, {
+      type: 'line',
+      data: { labels: dates.map(md), datasets: [{
+        data: vals, borderWidth: large ? 2 : 1.5, pointRadius: 0, pointHoverRadius: 3, tension: .15, spanGaps: true,
+        segment: { borderColor: c => (c.p1.parsed.y >= 0 ? RED : GREEN) },
+        fill: { target: 'origin', above: 'rgba(229,56,59,.13)', below: 'rgba(18,161,80,.13)' } }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false },
+          tooltip: { displayColors: false, callbacks: { title: it => dates[it[0].dataIndex], label: it => '淨額 ' + sgn(it.parsed.y) + ' 口' } } },
+        scales: {
+          x: { display: large, grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#6b7a8f', font: { size: 11 } } },
+          y: { position: 'right', grid: { color: c => c.tick.value === 0 ? '#94a3b8' : '#eef1f5', lineWidth: c => c.tick.value === 0 ? 1 : .8 },
+               border: { display: false },
+               ticks: { maxTicksLimit: large ? 8 : (innerWidth < 560 ? 3 : 4), color: '#6b7a8f', font: { size: large ? 11 : 10 },
+                        callback: v => v === 0 ? '0' : Math.abs(v) >= 10000 ? (v / 10000).toLocaleString('en-US', { maximumFractionDigits: 1 }) + '萬' : v.toLocaleString('en-US') } }
+        }
+      }
+    });
+  }
+
+  function render() {
+    charts.forEach(c => c.destroy()); charts = [];
+    const { dates, products } = data;
+    const stat = document.getElementById('stat');
+    if (!dates.length) { stat.innerHTML = '<span>尚無資料（首次部署會在背景補兩年資料，約 1 分鐘後重新整理）</span>'; return; }
+    const tx = products.find(p => p.short === '台指期');
+    const name = inst === 'foreign' ? '外資' : data.inst_name;
+    stat.innerHTML = `<span>資料日 <b>${dates[dates.length - 1].replace(/-/g, '/')}</b></span>` +
+      (tx && tx.last ? `<span>${name} 台指期 ${tx.last.net_oi >= 0 ? '淨多' : '淨空'} <b class="${cls(tx.last.net_oi)}">${fmt(Math.abs(tx.last.net_oi))}</b> 口</span>` +
+        `<span>日 <b class="${cls(tx.chg1)}">${sgn(tx.chg1)}</b></span>` : '');
+    document.querySelectorAll('.fcard').forEach((el, i) => {
+      const p = products[i], v = p.last && p.last.net_oi;
+      const tag = el.querySelector('.tag');
+      tag.className = 'tag ' + cls(v); tag.textContent = v == null ? '' : v >= 0 ? '淨多' : '淨空';
+      el.querySelector('.big').innerHTML = v == null ? '—' : `<span class="${cls(v)}">${sgn(v)}</span><small>口</small>`;
+      el.querySelector('.chg').innerHTML = v == null ? '無資料' : `日 <b class="${cls(p.chg1)}">${sgn(p.chg1)}</b>　5 日 <b class="${cls(p.chg5)}">${sgn(p.chg5)}</b>`;
+      const wrap = el.querySelector('.cv');
+      if (!p.values.some(x => x != null)) { wrap.innerHTML = '<div class="empty">此身份無此商品部位</div>'; return; }
+      if (!wrap.querySelector('canvas')) wrap.innerHTML = '<canvas></canvas>';
+      charts.push(chart(wrap.querySelector('canvas'), dates, p.values, false));
+    });
+  }
+
+  async function load() {
+    document.getElementById('grid').style.opacity = .5;
+    try {
+      const r = await fetch(`/api/futures?inst=${inst}&days=${days}`);
+      if (!r.ok) throw new Error(r.status);
+      data = await r.json();
+      if (typeof Chart !== 'undefined') render();
+    } catch (e) {
+      document.getElementById('stat').innerHTML = '<span>資料載入失敗，請稍後再試</span>';
+    }
+    document.getElementById('grid').style.opacity = 1;
+  }
+
+  document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.tabs button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); });
+    inst = b.dataset.inst; load();
+  }));
+  document.getElementById('days').addEventListener('change', e => { days = +e.target.value; load(); });
+
+  const dlg = document.getElementById('dlg');
+  document.querySelectorAll('.fcard').forEach((el, i) => el.addEventListener('click', () => {
+    if (!data || !data.dates.length) return;
+    const p = data.products[i], l = p.last;
+    if (!l) return;
+    document.getElementById('dlg-t').textContent = `${inst === 'foreign' ? '外資' : data.inst_name}｜${p.short} 未平倉淨額`;
+    document.getElementById('dlg-m').innerHTML =
+      `<span>淨額 <b class="${cls(l.net_oi)}">${sgn(l.net_oi)}</b> 口</span><span>多方 <b>${fmt(l.long_oi)}</b></span><span>空方 <b>${fmt(l.short_oi)}</b></span>` +
+      `<span>當日交易淨額 <b class="${cls(l.net_trade)}">${sgn(l.net_trade)}</b></span><span>日 <b class="${cls(p.chg1)}">${sgn(p.chg1)}</b></span><span>5 日 <b class="${cls(p.chg5)}">${sgn(p.chg5)}</b></span>`;
+    dlg.showModal();
+    if (big) big.destroy();
+    big = chart(document.getElementById('dlg-c'), data.dates, p.values, true);
+  }));
+  dlg.querySelector('.x').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+
+  load();
+})();
+</script>
+{% endblock %}

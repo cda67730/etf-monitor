@@ -158,6 +158,10 @@ inst_flow.init(db_config)
 import market_mood
 market_mood.init(db_config)
 
+# ============ 期貨籌碼（fut_inst，期交所三大法人各期貨契約）============
+import fut_flow
+fut_flow.init(db_config)
+
 # ============ 初始化爬蟲 ============
 try:
     scraper = ETFHoldingsScraper() if db_config else None
@@ -187,6 +191,8 @@ async def start_scheduler():
             extra.append(("inst", "三大法人買賣超", inst_flow.flow.scrape, "SCHED_INST", "20 18 * * 1-5"))
         if market_mood.store:
             extra.append(("mood", "市場情緒指標", market_mood.store.update, "SCHED_MOOD", "30 7 * * 2-6"))
+        if fut_flow.store:
+            extra.append(("fut", "期貨三大法人未平倉", fut_flow.store.update, "SCHED_FUT", "10 15,18 * * 1-5"))
         if etf_report.report:
             extra.append(("report", "日報 PDF（Gemini 說明）", etf_report.report.run_daily, "SCHED_REPORT", "50 20 * * 1-5"))
         if inst_report.report:
@@ -2298,6 +2304,7 @@ async def admin_etf_delete(request: Request, code: str):
 
 app.include_router(inst_flow.create_router(templates, check_authentication))
 app.include_router(market_mood.create_router(templates))
+app.include_router(fut_flow.create_router(templates))
 app.include_router(etf_report.create_router(templates, check_authentication))
 app.include_router(inst_report.create_router(templates, check_authentication))
 

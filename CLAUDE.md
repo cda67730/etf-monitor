@@ -24,11 +24,12 @@
 | `inst_flow.py` | 三大法人同買／連買：資料表 `inst_daily`、`inst_no_trading`，頁面與 API |
 | `mood_fetch.py` | 市場情緒 14 項指標抓取（全部免 API key；FRED 從機房會逾時，不要用） |
 | `market_mood.py` | 資料表 `mood_obs`、燈號／賣出條件／自動結論、`/market-mood`、`/api/market-mood` |
+| `fut_flow.py` | 期貨籌碼：資料表 `fut_inst`（期交所三大法人各期貨契約，每日每商品每身份一列）、`/futures`、`/api/futures` |
 | `inst_cobuy/fetch.py` | 證交所／櫃買抓取函式（`twse`、`tpex`）；`inst_cobuy/data/*.csv` 只當首次匯入的種子資料 |
 
 ## 現有頁面
-`/` 首頁分流（`hub.html`，四張卡片）、`/etf` ETF 日報（原首頁）、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/inst-cobuy` 三大法人同買、`/market-mood` 市場情緒指標、`/admin/etfs` ETF 清單管理＋手動爬取 ETF／權證（首頁原按鈕已移到這裡）、`/login`
-- 導覽列順序（`base.html`）：三大法人同買、ETF日報、市場情緒、權證排行、權證量能、ETF 管理，最後是「舊版 ETF」下拉（每日持股、新增持股、減持表、跨ETF重複持股；這些頁 BookReview 仍在解析，不能刪）
+`/` 首頁分流（`hub.html`，四張卡片）、`/etf` ETF 日報（原首頁）、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/inst-cobuy` 三大法人同買、`/market-mood` 市場情緒指標、`/futures` 期貨籌碼、`/admin/etfs` ETF 清單管理＋手動爬取 ETF／權證（首頁原按鈕已移到這裡）、`/login`
+- 導覽列順序（`base.html`）：三大法人同買、ETF日報、市場情緒、期貨籌碼、權證排行、權證量能、ETF 管理，最後是「舊版 ETF」下拉（每日持股、新增持股、減持表、跨ETF重複持股；這些頁 BookReview 仍在解析，不能刪）
 
 ## ETF 日報範圍（積極型／不分類）
 - `?scope=aggr|all` 切換，記在 cookie `etf_scope`；`etf_scope_middleware` 設 contextvar `_etf_scope`
@@ -79,6 +80,13 @@
    3. 三大法人買賣超及連買
    4. 市場情緒指標（待使用者提供資料）
 6. ✅ 市場情緒指標（`/market-mood`，首頁第四張卡片）
+
+## 期貨籌碼（fut_flow）
+- 來源：POST `https://www.taifex.com.tw/cht/3/futContractsDateDown`（queryStartDate／queryEndDate `YYYY/MM/DD`、commodityId 空白＝全部），回 CP950 CSV，一次最多查一年；免金鑰，Actions 機房連得到
+- 存 `fut_inst`（d, product, inst, net_trade, long_oi, short_oi, net_oi, net_oi_amt）；身份別原文「外資及陸資」「投信」「自營商」
+- 頁面 8 張圖（股票期貨、金融期貨、那斯達克100、道瓊、台指期、電子期貨、標普500、費城半導體）＝未平倉多空淨額（口，所有月份合計）；可切外資／投信／自營商、近 3 月～2 年；手機 2 欄小卡，點卡片放大
+- 排程 `fut` 平日 15:10、18:10（`SCHED_FUT`）；資料庫空的時候啟動即背景補兩年（約 1.2 萬筆，批次寫入）
+- 公開頁，不需登入
 
 ## 日報 PDF（etf_report.py）
 - `GET /report/etf.pdf?date=&scope=aggr|all`（公開；`refresh=1` 強制重寫需登入）、`GET /api/report/etf`（JSON：facts＋ai）；ETF 日報頁右上有 PDF 按鈕
