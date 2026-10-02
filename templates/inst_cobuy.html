@@ -47,6 +47,7 @@
 
   <nav class="secnav" id="tabs" role="tablist" aria-label="表格">
     <button type="button" role="tab" data-t="co" class="on">三大同買<span class="n" id="n-co"></span></button>
+    <button type="button" role="tab" data-t="ft">外資投信同買<span class="n" id="n-ft"></span></button>
     <button type="button" role="tab" data-t="duel">土洋對作<span class="n" id="n-duel"></span></button>
     <button type="button" role="tab" data-t="foreign">外資買超</button>
     <button type="button" role="tab" data-t="trust">投信買超</button>
@@ -90,6 +91,10 @@
       ['name', '股票', 'name'], ['total', '同買張數', 'big'], ['co_streak', '同買連續天數', 'streak'], ['co_days', `${n}日同買天數`, 'n'],
       ['foreign', '外資', 'sgn'], ['foreign_streak', '外資連買', 'streak', 1], ['trust', '投信', 'sgn'], ['trust_streak', '投信連買', 'streak', 1],
       ['dealer', '自營', 'sgn'], ['dealer_streak', '自營連買', 'streak', 1]];
+    if (tab === 'ft') return [
+      ['name', '股票', 'name'], ['ft_total', '同買張數', 'big'], ['ft_streak', '同買連續天數', 'streak'], ['ft_days', `${n}日同買天數`, 'n'],
+      ['foreign', '外資', 'sgn'], ['foreign_streak', '外資連買', 'streak', 1], ['trust', '投信', 'sgn'], ['trust_streak', '投信連買', 'streak', 1],
+      ['dealer', '自營', 'sgn', 1], ['cobuy', '三大同買', 'ck', 1]];
     if (tab === 'duel') return [
       ['name', '股票', 'name'], ['duel', '方向', 'dir'], ['_duel_size', '對作量', 'big'], ['trust', '投信', 'sgn'], ['foreign', '外資', 'sgn'],
       ['duel_streak', '對作連續天數', 'streak'], ['dealer', '自營', 'sgn', 1], ['total', '三大合計', 'sgn', 1]];
@@ -97,15 +102,16 @@
     return [['rank', '#', 'n'], ['name', '股票', 'name'], [k, `${W[k]}買超`, 'big'], [k + '_streak', '連買天數', 'streak'],
       [k + '_days', `${n}日買超天數`, 'n', 1], [k + '_sum', `${n}日累計`, 'sgn', 1], ['total', '三大合計', 'sgn', 1], ['cobuy', '三大同買', 'ck']];
   }
-  const DEF = { co: 'total', duel: '_duel_size' };
+  const DEF = { co: 'total', ft: 'ft_total', duel: '_duel_size' };
   function rows() {
     const q = $('#q').value.trim(), ms = +$('#minS').value;
     let r = DAY.rows;
     if (tab === 'co') r = r.filter(x => x.cobuy);
+    else if (tab === 'ft') r = r.filter(x => x.ft_cobuy);
     else if (tab === 'duel') r = r.filter(x => x.duel && (!duelDir || x.duel === duelDir)).map(x => ({ ...x, _duel_size: Math.min(Math.abs(x.trust), Math.abs(x.foreign)) }));
     else r = r.filter(x => x[tab] > 0).sort((a, b) => b[tab] - a[tab]).slice(0, 300).map((x, i) => ({ ...x, rank: i + 1 }));
     if (q) r = r.filter(x => x.id.includes(q) || (x.name || '').includes(q));
-    if (ms) r = r.filter(x => (tab === 'co' ? x.co_streak : tab === 'duel' ? x.duel_streak : x[tab + '_streak']) >= ms);
+    if (ms) r = r.filter(x => (tab === 'co' ? x.co_streak : tab === 'ft' ? x.ft_streak : tab === 'duel' ? x.duel_streak : x[tab + '_streak']) >= ms);
     const k = sortK || DEF[tab];
     if (k) r = [...r].sort((a, b) => k === 'name' ? sortD * a.id.localeCompare(b.id) : sortD * ((a[k] ?? -1e18) - (b[k] ?? -1e18)) || b.total - a.total);
     return r;
@@ -125,6 +131,7 @@
     $('#duel-pick').hidden = tab !== 'duel';
     $('#minS').hidden = $('#q').hidden = tab === 'hist';
     const TT = { co: ['三大同買', '外資、投信、自營商當天都買超的股票，依同買張數排序'],
+                 ft: ['外資投信同買', '外資和投信當天都買超（不管自營商），同買張數＝外資＋投信，依此排序'],
                  duel: ['土洋對作', '投信與外資當天一買一賣，依兩邊較小的張數（對作量）排序'],
                  hist: ['每日同買', `最近 ${IDX.dates.length} 個交易日，點日期切換`] };
     const [h, sub] = TT[tab] || [`${W[tab]}買超`, `${W[tab]}當天買超前 300 名`];
@@ -157,11 +164,11 @@
     const r = await fetch(`/api/inst-cobuy?date=${d}`, { cache: 'no-store' });
     if (!r.ok) throw new Error('讀取失敗 (' + r.status + ')');
     DAY = await r.json();
-    const co = DAY.rows.filter(x => x.cobuy), du = DAY.rows.filter(x => x.duel);
+    const co = DAY.rows.filter(x => x.cobuy), du = DAY.rows.filter(x => x.duel), ft = DAY.rows.filter(x => x.ft_cobuy);
     $('#stat').innerHTML = [`資料日 <b>${fd(DAY.date)}</b>`, `區間 <b>${fd(DAY.window[0]).slice(5)}～${fd(DAY.window[1]).slice(5)}</b>（${DAY.n_days} 日）`,
-      `三大同買 <b>${co.length}</b> 檔`, `連續同買 ≥2 天 <b>${co.filter(x => x.co_streak >= 2).length}</b>`,
-      `投信連買 ≥5 天 <b>${DAY.rows.filter(x => x.trust_streak >= 5).length}</b>`, `土洋對作 <b>${du.length}</b> 檔`].map(s => `<span>${s}</span>`).join('');
-    $('#n-co').textContent = co.length; $('#n-duel').textContent = du.length;
+      `三大同買 <b>${co.length}</b> 檔`, `連續同買 ≥2 天 <b>${co.filter(x => x.co_streak >= 2).length}</b>`, `外資投信同買 <b>${ft.length}</b> 檔`,
+      `土洋對作 <b>${du.length}</b> 檔`].map(s => `<span>${s}</span>`).join('');
+    $('#n-co').textContent = co.length; $('#n-ft').textContent = ft.length; $('#n-duel').textContent = du.length;
     $('#csv').href = `/api/inst-cobuy.csv?date=${DAY.date}`;
     render();
   }
