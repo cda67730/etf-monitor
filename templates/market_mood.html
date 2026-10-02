@@ -23,6 +23,8 @@
   .mm .term .stat b.chg-up { color: #ff6b6b; } .mm .term .stat b.chg-down { color: #4ade80; }
   .mm .stat .pip { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--c); margin-left: 3px; vertical-align: 1px; }
   .mm .stat a { color: inherit; text-decoration: none; } .mm .stat a:hover b { text-decoration: underline; }
+  /* 手機只留 S&P 500 與一句文字結論，不放燈號與計數 */
+  @media (max-width: 640px) { .mm .stat .dt-only { display: none; } }
   .mm .verdict { margin-top: 8px; font-size: .86rem; color: var(--term-text); line-height: 1.6; }
   .s-red { --c: var(--red); } .s-yellow { --c: var(--amber); } .s-green { --c: var(--green); } .s-gray { --c: var(--gray); }
   .mm .term .stat .s-red, .mm .term .stat .s-yellow, .mm .term .stat .s-green, .mm .term .stat .s-gray { color: inherit; }
@@ -141,8 +143,8 @@
         <h1>市場情緒指標</h1>
         <div class="stat" role="status">
           {% if rep.spx %}<span>S&amp;P 500 <b>{{ "{:,.2f}".format(rep.spx.close) }}</b> <b class="{{ 'chg-up' if rep.spx.chg > 0 else 'chg-down' }}">{{ "%+.2f"|format(rep.spx.chg) }}%</b>（{{ rep.spx.date[5:].replace('-', '/') }}）</span><span>距一年高 <b>{{ "%.1f"|format(rep.spx.off_high) }}%</b></span>{% endif %}
-          <span class="sig-{{ rep.level.signal }}"><a href="#sells">賣出條件 <b>{{ rep.n_met }}/{{ rep.sells|length }}</b></a></span>
-          {% for t in rep.terms %}<span><a href="#{{ t.key }}">{{ t.name }} <b>{{ t.red|length }}/{{ t.n_valid }}</b>{% for x in t['items'] %}<i class="pip s-{{ x.signal }}" title="{{ x.name }}：{{ x.label }}"></i>{% endfor %}</a></span>{% endfor %}
+          <span class="sig-{{ rep.level.signal }} dt-only"><a href="#sells">賣出條件 <b>{{ rep.n_met }}/{{ rep.sells|length }}</b></a></span>
+          {% for t in rep.terms %}<span class="dt-only"><a href="#{{ t.key }}">{{ t.name }} <b>{{ t.red|length }}/{{ t.n_valid }}</b>{% for x in t['items'] %}<i class="pip s-{{ x.signal }}" title="{{ x.name }}：{{ x.label }}"></i>{% endfor %}</a></span>{% endfor %}
         </div>
         <div class="verdict">{{ rep.headline }}</div>
       </div>
