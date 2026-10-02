@@ -171,5 +171,5 @@
 </section>
 {% if ai.etf_link %}<section><h2>與主動 ETF 的呼應</h2><p>{{ ai.etf_link }}</p></section>{% endif %}
 <div class="risk"><b>提醒：</b>{{ ai.risk }}</div>
-<div class="disc">以上為 AI 輔助整理的投資筆記，非投資建議，資料日期 {{ dd }}，數據以官方公告為準，請自行查證，切勿直接投資。說明由 {{ "AI（" ~ model ~ "）撰寫並經程式核對數字" if model != "template" else "程式依規則產生" }}。資料來源：臺灣證券交易所 T86、BFI82U，證券櫃檯買賣中心三大法人買賣明細；張數＝股數 ÷ 1,000 四捨五入；外資含外資自營商；連買天數最多回溯 {{ nd }} 個交易日。</div>
+<div class="disc">以上為 AI 輔助整理的投資筆記，非投資建議，資料日期 {{ dd }}，數據以官方公告為準，請自行查證，切勿直接投資。說明由 {{ ("AI（" ~ model.replace("+查證", "") ~ "）撰寫" ~ ("、經 Google 搜尋查證" if "+查證" in model else "") ~ "，並由程式核對數字") if model != "template" else "程式依規則產生" }}。資料來源：臺灣證券交易所 T86、BFI82U，證券櫃檯買賣中心三大法人買賣明細；張數＝股數 ÷ 1,000 四捨五入；外資含外資自營商；連買天數最多回溯 {{ nd }} 個交易日。</div>
 </body></html>

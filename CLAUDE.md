@@ -90,8 +90,8 @@
 
 ## 日報 PDF（etf_report.py）
 - `GET /report/etf.pdf?date=&scope=aggr|all`（公開；`refresh=1` 強制重寫需登入）、`GET /api/report/etf`（JSON：facts＋ai）；ETF 日報頁右上有 PDF 按鈕
-- 流程：程式算「事實清單」→ 接 `templates/report_prompt.txt` 給 Gemini 寫說明 → `merge_checked` 逐段核對數字，對不上的段落換成 `fallback_text` 模板句子 → `templates/report_pdf.html` 用 WeasyPrint 轉 PDF
-- 環境變數：`GEMINI_API_KEY`（沒設＝全部模板句子）、`GEMINI_MODEL`（預設 gemini-3.1-pro-preview）、`GEMINI_FALLBACK_MODEL`（預設 gemini-3.8-flash）；新模型已停用 temperature 等參數，不要加
+- 流程：程式算「事實清單」→ 接 `templates/report_prompt.txt` 給 Gemini 寫初稿 → **查證**：初稿＋事實清單接 `templates/verify_prompt.txt` 再呼叫 Gemini（開 `google_search` 工具，不指定 JSON 格式、從文字取 JSON），數字對照清單、清單外敘述上網查證，回傳修正稿與 changes；查證兩個模型都失敗就整份改用模板（不採用沒查證的文字）；修改處、搜尋關鍵字、來源記在 `notes`（`/api/report/etf` 可看），model 欄會帶「+查證」，PDF 免責聲明隨之顯示 → `merge_checked` 逐段核對數字，對不上的段落換成 `fallback_text` 模板句子 → `templates/report_pdf.html` 用 WeasyPrint 轉 PDF
+- 環境變數：`GEMINI_API_KEY`（沒設＝全部模板句子）、`GEMINI_MODEL`（預設 gemini-3.1-pro-preview）、`GEMINI_FALLBACK_MODEL`（預設 gemini-3.8-flash）；新模型已停用 temperature 等參數，不要加；`GEMINI_VERIFY`（預設 true，設 false 跳過查證，不建議）
 - 結果存資料表 `etf_report`（d, scope, fp…）；`fp` 是當日持股筆數＋異動指紋，資料有變才重寫，否則沿用（不重複呼叫 Gemini）
 - 外部資料：證交所 MI_INDEX（指數、漲跌家數、個股漲跌）、FMTQIK（成交金額）、BFI82U（三大法人金額）；櫃買上櫃行情用 POST `www/zh-tw/afterTrading/dailyQuotes`（可指定日期）；股票簡稱與產業別抓證交所 ISIN 清單存 `stock_meta`（7 天更新）
 - 排程 `report` 平日 20:50（`SCHED_REPORT`）替最新資料日產生積極型與不分類兩份
