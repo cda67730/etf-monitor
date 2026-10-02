@@ -41,6 +41,7 @@
   - 注意：欄位名稱比對時「不含外資自營商」字樣會誤中排除條件（已修正過一次）
 - 定義：張＝股數/1000 四捨五入，≥1 張才算買超；只含 4 碼普通股／KY；連買天數上限 `N=40`；頁面可切換最近 20 個交易日（需 60 個交易日資料）
 - 目前：APScheduler 工作 `inst`（平日 18:20，`SCHED_INST`）寫入 PostgreSQL；啟動時背景匯入 `inst_cobuy/data/*.csv`（只補缺的日期）
+- 頁面樣式與 ETF 日報共用 `templates/_ed_css.html`；分頁：三大同買、土洋對作（`duel`：1＝投信買外資賣、-1＝外資買投信賣，`duel_streak` 同方向連續天數）、外資／投信／自營買超、每日同買；頁面不顯示上市櫃欄位
 - 頁面 `/inst-cobuy`、API `/api/inst-cobuy/dates`、`/api/inst-cobuy?date=`、`/api/inst-cobuy.csv?date=`；預設公開，`INST_COBUY_PUBLIC=false` 改為需登入
 - 2026-10 已移除 GitHub Actions（inst-cobuy.yml、daily-scraper.yml）與靜態網頁；GitHub Pages 需使用者在 repo Settings 關閉
 - 已驗證：2026-09-30 外資、自營與 FinMind 一致；投信 22 檔不同（以官方為準）；資料庫版計算結果與舊靜態版逐欄一致（2026-10-01，1160 檔）

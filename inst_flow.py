@@ -237,6 +237,11 @@ class InstFlow:
             r["co_days"] = sum(co)
             r["cobuy"] = co[-1]
             r["total"] = sum((today[k] or 0) for k in KINDS)
+            # 土洋對作：1＝投信買外資賣，-1＝外資買投信賣；duel_streak＝同方向連續天數
+            duel = [(1 if (t or 0) > 0 and (f or 0) < 0 else -1 if (f or 0) > 0 and (t or 0) < 0 else 0)
+                    for f, t in zip(V["foreign"], V["trust"])]
+            r["duel"] = duel[-1]
+            r["duel_streak"] = self._streak([1 if (d == duel[-1] and d) else 0 for d in duel])
             out.append(r)
         res = {"date": last, "window": [win[0], win[-1]], "n_days": len(win), "max_days": N, "rows": out}
         self._results[last] = res
