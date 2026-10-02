@@ -8,6 +8,7 @@ def get(url, name, kind="json", **kw):
     for i in range(3):
         try:
             r = S.get(url, timeout=60, **kw); r.raise_for_status()
+            if "isin" in url: r.encoding = "big5"
             data = r.json() if kind == "json" else r.text
             with open(f"{OUT}/{name}", "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False) if kind == "json" else f.write(data)
@@ -18,6 +19,8 @@ def get(url, name, kind="json", **kw):
 
 day = get(f"{B}/api/etf-day?scope=all", "etf_day.json")
 D = day["date"]; YMD = D.replace("-", "")
+get(f"{B}/decreased-holdings?scope=all&date={D}", "decreased.html", kind="text")
+get("https://isin.twse.com.tw/isin/C_public.jsp?strMode=2", "isin_twse.html", kind="text")
 get(f"{B}/api/etf-day?scope=aggr&date={D}", "etf_day_aggr.json")
 get(f"{B}/api/etfs?scope=every", "etfs.json")
 cross = get(f"{B}/api/cross-holdings?scope=all&date={D}", "cross.json")
@@ -39,7 +42,6 @@ get(f"{T}/fund/BFI82U?type=day&dayDate={YMD}&response=json", "twse_bfi82u.json")
 get(f"{T}/afterTrading/FMTQIK?date={YMD}&response=json", "twse_fmtqik.json")
 roc = f"{int(YMD[:4]) - 1911}/{YMD[4:6]}/{YMD[6:]}"
 get(f"https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQ?date={D.replace('-', '/')}&type=EW&response=json", "tpex_daily.json")
-get("https://openapi.twse.com.tw/v1/opendata/t187ap03_L", "twse_company.json")
 get("https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O", "tpex_company.json")
 open(f"{OUT}/_log.txt", "w").write(f"date {D}\n" + "\n".join(log))
 print("\n".join(log))
