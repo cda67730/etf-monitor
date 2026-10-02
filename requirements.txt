@@ -54,3 +54,6 @@ pydantic==2.5.0
 # orjson==3.9.10
 beautifulsoup4
 xlrd==2.0.1
+
+# 日報 PDF（HTML 轉 PDF）
+weasyprint>=62

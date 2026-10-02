@@ -77,6 +77,15 @@
    4. 市場情緒指標（待使用者提供資料）
 6. ✅ 市場情緒指標（`/market-mood`，首頁第四張卡片）
 
+## 日報 PDF（etf_report.py）
+- `GET /report/etf.pdf?date=&scope=aggr|all`（公開；`refresh=1` 強制重寫需登入）、`GET /api/report/etf`（JSON：facts＋ai）；ETF 日報頁右上有 PDF 按鈕
+- 流程：程式算「事實清單」→ 接 `templates/report_prompt.txt` 給 Gemini 寫說明 → `merge_checked` 逐段核對數字，對不上的段落換成 `fallback_text` 模板句子 → `templates/report_pdf.html` 用 WeasyPrint 轉 PDF
+- 環境變數：`GEMINI_API_KEY`（沒設＝全部模板句子）、`GEMINI_MODEL`（預設 gemini-3.1-pro-preview）、`GEMINI_FALLBACK_MODEL`（預設 gemini-3.8-flash）；新模型已停用 temperature 等參數，不要加
+- 結果存資料表 `etf_report`（d, scope, fp…）；`fp` 是當日持股筆數＋異動指紋，資料有變才重寫，否則沿用（不重複呼叫 Gemini）
+- 外部資料：證交所 MI_INDEX（指數、漲跌家數、個股漲跌）、FMTQIK（成交金額）、BFI82U（三大法人金額）；櫃買開放資料只有最新一日；股票簡稱與產業別抓證交所 ISIN 清單存 `stock_meta`（7 天更新）
+- 排程 `report` 平日 20:50（`SCHED_REPORT`）替最新資料日產生積極型與不分類兩份
+- Docker 需 Pango 與 `fonts-noto-cjk`（思源黑體）
+
 ## 外部依賴：BookReview（使用者電腦上的 n8n + FastAPI，`C:\Users\david\pyrag\BookReview\scripts\etf_report.py`）
 每天約 20:07 由 n8n 觸發，**直接解析本站 HTML**，改樣板或路由前務必確認不會壞：
 - `POST /login`（form `password`，跟隨轉址）→ 用 cookie session

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<title>主動式 ETF 日報 {{ f['資料日'] }}</title>
+<style>
+  @page { size: A4; margin: 14mm 13mm 16mm;
+    @bottom-left { content: "資料來源：ETF持股監控系統、臺灣證券交易所、證券櫃檯買賣中心｜AI 輔助整理，非投資建議"; font-size: 7pt; color: #8a96a8; font-family: "Noto Sans CJK TC", sans-serif; }
+    @bottom-right { content: counter(page) " / " counter(pages); font-size: 7pt; color: #8a96a8; font-family: "Noto Sans CJK TC", sans-serif; } }
+  @page :first { margin-top: 0; }
+  * { box-sizing: border-box; }
+  body { font-family: "Noto Sans CJK TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; font-size: 9pt; color: #1e293b; line-height: 1.6; margin: 0; }
+  .num { font-variant-numeric: tabular-nums; }
+  .up { color: #e5383b; } .down { color: #12a150; } .mute { color: #6b7a8f; }
+  h2 { font-size: 12.5pt; color: #0f1b2d; margin: 0 0 6px; padding-left: 9px; border-left: 4px solid #f5a623; line-height: 1.25; }
+  h2 small { font-size: 8pt; color: #6b7a8f; font-weight: 400; margin-left: 6px; }
+  section { margin-top: 11px; }
+  p { margin: 0 0 6px; text-align: justify; }
+  .brk { break-before: page; }
+
+  /* 封面頁首 */
+  .mast { background: #0f1b2d; color: #c9d4e3; margin: 0 -13mm; padding: 13mm 13mm 10px; }
+  .mast .kick { font-size: 8pt; letter-spacing: .2em; color: #f5a623; font-weight: 700; }
+  .mast h1 { font-size: 22pt; color: #fff; margin: 2px 0 2px; font-weight: 900; letter-spacing: .02em; }
+  .mast .meta { font-size: 8.5pt; color: #8ea0b8; }
+  .mast .meta b { color: #fff; font-weight: 600; }
+  .head { background: #16263d; color: #fff; margin: 0 -13mm; padding: 10px 13mm 12px; font-size: 15pt; font-weight: 700; border-bottom: 3px solid #f5a623; }
+  .head small { display: block; font-size: 7.5pt; color: #8ea0b8; font-weight: 400; letter-spacing: .15em; margin-bottom: 2px; }
+
+  .kpis { display: flex; gap: 6px; margin-top: 12px; }
+  .kpi { flex: 1; border: 1px solid #e3e8ef; border-radius: 6px; padding: 6px 8px; }
+  .kpi .k { font-size: 7.5pt; color: #6b7a8f; }
+  .kpi .v { font-size: 13pt; font-weight: 700; color: #0f1b2d; line-height: 1.25; }
+  .kpi .s { font-size: 7.5pt; color: #6b7a8f; }
+
+  .bul { list-style: none; padding: 0; margin: 0; }
+  .bul li { display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px dotted #e3e8ef; }
+  .tag { flex: 0 0 auto; font-size: 7pt; font-weight: 700; color: #fff; border-radius: 3px; padding: 1px 0; width: 30px; text-align: center; height: 15px; margin-top: 2px; }
+  .tag.up { background: #e5383b; } .tag.down { background: #12a150; } .tag.core { background: #2b6cb0; } .tag.warn { background: #f5a623; color: #1a1205; } .tag.info { background: #6b7a8f; }
+
+  /* 排行 */
+  .cols { display: flex; gap: 14px; }
+  .cols > div { flex: 1; min-width: 0; }
+  h3 { font-size: 9.5pt; margin: 4px 0 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 7pt; color: #6b7a8f; font-weight: 600; text-align: right; padding: 3px 4px; background: #f4f6f9; border-bottom: 1px solid #e3e8ef; white-space: nowrap; }
+  td { padding: 2px 4px; border-bottom: 1px solid #eef1f5; text-align: right; font-variant-numeric: tabular-nums; vertical-align: middle; }
+  th.l, td.l { text-align: left; }
+  td.nm b { color: #0f1b2d; } td.nm .c { color: #8a96a8; font-size: 7pt; margin-left: 3px; }
+  .ind { font-size: 6.8pt; color: #6b7a8f; }
+  .rk td { position: relative; }
+  .bar { display: block; height: 3px; border-radius: 2px; margin-top: 1px; }
+  .no { display: inline-block; width: 14px; height: 14px; line-height: 14px; text-align: center; border-radius: 3px; font-size: 7pt; font-weight: 700; }
+  .no.t { color: #fff; } .buy .no.t { background: #e5383b; } .sell .no.t { background: #12a150; }
+
+  .notes { margin-top: 8px; }
+  .note { display: flex; gap: 8px; padding: 2px 0; font-size: 8.5pt; line-height: 1.5; border-bottom: 1px dotted #e3e8ef; break-inside: avoid; }
+  .note .who { flex: 0 0 72px; font-weight: 700; color: #0f1b2d; }
+  .note .who small { display: block; font-weight: 400; color: #8a96a8; font-size: 7pt; }
+
+  /* 新進股票卡片 */
+  .cards { display: flex; flex-wrap: wrap; gap: 6px; }
+  .card { width: calc(50% - 3px); border: 1px solid #e3e8ef; border-radius: 6px; padding: 6px 8px; break-inside: avoid; }
+  .card .t { display: flex; justify-content: space-between; align-items: baseline; }
+  .card .t b { font-size: 10pt; color: #0f1b2d; } .card .t .c { color: #8a96a8; font-size: 7.5pt; margin-left: 4px; }
+  .card .amt { color: #e5383b; font-weight: 700; }
+  .card .etf { font-size: 7pt; color: #2b6cb0; margin: 1px 0 3px; }
+  .card p { font-size: 8.3pt; margin: 0; text-align: left; }
+  .fresh { font-size: 6.5pt; background: #f5a623; color: #1a1205; border-radius: 3px; padding: 0 4px; font-weight: 700; margin-left: 4px; }
+
+  .pill { display: inline-block; min-width: 40px; padding: 0 4px; border-radius: 3px; font-weight: 600; }
+  .pill.up { background: #fde8e8; color: #e5383b; } .pill.down { background: #e3f6eb; color: #12a150; } .pill.flat { background: #f1f4f8; color: #6b7a8f; }
+  .pill.sm { min-width: 0; font-size: 7.5pt; padding: 0 4px; }
+  .ink { color: #0f1b2d; } .prem-hi { color: #b7791f; font-weight: 700; } .prem-lo { color: #2b6cb0; font-weight: 700; }
+  .xt td { padding: 1px 4px; font-size: 8.3pt; } .xt td svg { display: block; }
+  .disc { margin-top: 10px; font-size: 7.5pt; color: #6b7a8f; border-top: 1px solid #e3e8ef; padding-top: 6px; }
+  .box { background: #f6f8fb; border: 1px solid #e3e8ef; border-radius: 6px; padding: 8px 10px; }
+</style></head><body>
+
+{% set o = f['主動ETF總覽'] %}{% set m = f['大盤'] or {} %}{% set inst = f['三大法人買賣超億元'] or {} %}
+<div class="mast">
+  <div class="kick">ACTIVE ETF DAILY</div>
+  <h1>主動式 ETF 日報</h1>
+  <div class="meta">資料日 <b>{{ f['資料日'] }}</b>　·　{{ f['範圍'] }}　·　跨 ETF 共同持有 <b>{{ o['跨ETF共同持有檔數'] }}</b> 檔　·　產製 {{ created }}</div>
+</div>
+<div class="head"><small>今日結論</small>{{ ai.headline }}</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="k">合計加碼</div><div class="v up num">+{{ o['合計加碼張']|n }}</div><div class="s">張・{{ o['新進筆數'] }} 筆新進</div></div>
+  <div class="kpi"><div class="k">合計減碼</div><div class="v down num">−{{ o['合計減碼張']|n }}</div><div class="s">張・{{ o['出清筆數'] }} 筆出清</div></div>
+  <div class="kpi"><div class="k">淨額</div><div class="v num {{ 'up' if o['淨額張'] > 0 else 'down' }}">{{ '+' if o['淨額張'] > 0 else '−' }}{{ o['淨額張']|abs|n }}</div><div class="s">張・{{ o['當日有異動的ETF數'] }} 檔 ETF 有異動</div></div>
+  {% if m.get('加權指數收盤') %}<div class="kpi"><div class="k">加權指數</div><div class="v num {{ 'up' if m['漲跌點'] > 0 else 'down' }}">{{ '{:,.2f}'.format(m['加權指數收盤']) }}</div><div class="s num">{{ '%+.2f'|format(m['漲跌點']) }}（{{ '%+.2f'|format(m['漲跌幅%']) }}%）</div></div>{% endif %}
+  {% if inst.get('投信') is not none %}<div class="kpi"><div class="k">投信買賣超</div><div class="v num {{ 'up' if inst['投信'] > 0 else 'down' }}">{{ '%+.2f'|format(inst['投信']) }}</div><div class="s">億元・外資 {{ '%+.2f'|format(inst['外資及陸資']) }}</div></div>{% endif %}
+</div>
+
+<section>
+  <h2>今日重點</h2>
+  <ul class="bul">{% for b in ai.bullets %}
+    <li><span class="tag {{ b.type }}">{{ {'up':'加碼','down':'減碼','core':'核心','warn':'注意','info':'盤勢'}[b.type] }}</span><span>{{ b.text }}</span></li>{% endfor %}
+  </ul>
+</section>
+<section><h2>總覽</h2><p>{{ ai.overview }}</p></section>
+<section><h2>族群輪動</h2><p>{{ ai.sectors }}</p></section>
+<section>
+  <h2>個股重點</h2>
+  <div class="notes">{% for r, text in stocks %}
+    <div class="note"><div class="who">{{ r['簡稱'] }}<small>{{ r['代號'] }}・<span class="{{ 'up' if r['淨增減張'] > 0 else 'down' }}">{{ '+' if r['淨增減張'] > 0 else '−' }}{{ r['淨增減張']|abs|n }} 張</span></small></div><div>{{ text }}</div></div>{% endfor %}
+  </div>
+</section>
+
+<!-- 第 2 頁：增減排行 -->
+<section class="brk">
+  <h2>主動式ETF增減排行<small>依各 ETF 合計淨增減，單位：張</small></h2>
+  <div class="cols">
+    {% for side, key, title, mx in [('buy', '加碼前15', '加碼前 15 名', mx_b), ('sell', '減碼前15', '減碼前 15 名', mx_s)] %}
+    <div class="{{ side }}">
+      <h3 class="{{ 'up' if side == 'buy' else 'down' }}">{{ title }}</h3>
+      <table class="rk"><thead><tr><th class="l">#</th><th class="l">股票</th><th>淨增減</th><th>ETF</th><th>股價</th></tr></thead><tbody>
+      {% for r in f[key] %}
+        <tr><td class="l"><span class="no {{ 't' if loop.index <= 3 }}">{{ loop.index }}</span></td>
+          <td class="l nm"><b>{{ r['簡稱'] }}</b><span class="c">{{ r['代號'] }}</span><br><span class="ind">{{ r['產業別'] }}{% if r['新進ETF'] %}・新進{% endif %}{% if r['出清ETF'] %}・出清{% endif %}</span></td>
+          <td class="{{ 'up' if side == 'buy' else 'down' }}"><b>{{ '+' if side == 'buy' else '−' }}{{ r['淨增減張']|abs|n }}</b>
+            <span class="bar" style="width: {{ (r['淨增減張']|abs / mx * 100)|round(1) }}%; background: {{ '#f08a8c' if side == 'buy' else '#5cc58a' }}; margin-left: auto"></span></td>
+          <td>{{ r['加碼ETF數'] if side == 'buy' else r['減碼ETF數'] }}</td>
+          <td><span class="pill sm {{ 'up' if (r['股價漲跌幅%'] or 0) > 0 else 'down' if (r['股價漲跌幅%'] or 0) < 0 else 'flat' }}">{{ r['股價漲跌幅%']|pct }}</span></td></tr>
+      {% endfor %}</tbody></table>
+    </div>
+    {% endfor %}
+  </div>
+  {% if f['加減碼互見'] %}<p class="mute" style="margin-top:6px;font-size:8pt">加減碼互見：{% for b in f['加減碼互見'] %}{{ b['簡稱'] }}（加 {{ b['加碼張']|n }}、減 {{ b['減碼張']|n }}，淨 {{ '%+d'|format(b['淨增減張']) }}）{{ '、' if not loop.last }}{% endfor %}</p>{% endif %}
+</section>
+
+
+<!-- 第 3 頁：新進股票 -->
+<section class="brk">
+  <h2>新進股票<small>當日由 ETF 新買進的股票，單位：張</small></h2>
+  <div class="cards">{% for r, text in new %}
+    <div class="card">
+      <div class="t"><span><b>{{ r['簡稱'] }}</b><span class="c">{{ r['代號'] }}・{{ r['產業別'] }}</span>{% if r['代號'] in first_codes %}<span class="fresh">首次持有</span>{% endif %}</span><span class="amt num">+{{ r['合計買進張']|n }}</span></div>
+      <div class="etf">{{ r['新進ETF']|join('、') }}</div>
+      <p>{{ text }}</p>
+    </div>{% endfor %}
+  </div>
+  {% set rest = f['新進股票'][new|length:] %}
+  {% if rest %}<p class="mute" style="margin-top:6px;font-size:8pt">其他新進：{% for r in rest %}{{ r['簡稱'] }}（{{ r['合計買進張']|n }}）{{ '、' if not loop.last }}{% endfor %}</p>{% endif %}
+  {% set fb = f['首次買進（該ETF過去從未持有）'] %}
+  <div class="box" style="margin-top:8px"><b>首次買進</b> <span class="mute">（該 ETF 自 {{ fb['起算日'] }} 起從未持有）</span>：
+    {% for r in fb['股票'] %}{{ r['簡稱'] }}（{{ r['代號'] }}）{{ r['買進ETF']|join('、') }}{% if r['全新面孔'] %}，所有 ETF 皆首見{% endif %}{{ '；' if not loop.last }}{% endfor %}</div>
+</section>
+
+<!-- 第 4 頁：ETF 動態 -->
+<section class="brk">
+  <h2>ETF 動態</h2>
+  <p>{{ ai.etf_moves }}</p>
+  <table style="margin-top:6px"><thead><tr><th class="l">ETF</th><th class="l">類型</th><th>漲跌</th><th>折溢價</th><th>新進</th><th>加碼</th><th>減碼</th><th>出清</th><th>買進張</th><th>賣出張</th></tr></thead><tbody>
+  {% for r in f['各ETF動作'] %}
+    <tr><td class="l nm"><b>{{ r['簡稱'] }}</b><span class="c">{{ r['代號'] }}</span></td><td class="l ind">{{ r['類型'] }}</td>
+      <td><span class="pill {{ 'up' if r['當日漲跌%'] > 0 else 'down' if r['當日漲跌%'] < 0 }}">{{ r['當日漲跌%']|pct }}</span></td>
+      <td class="{{ 'prem-hi' if r['折溢價%'] >= 1 else 'prem-lo' if r['折溢價%'] <= -1 else 'ink' }}">{{ r['折溢價%']|pct }}</td>
+      <td class="up">{{ r['新進'] or '' }}</td><td class="up">{{ r['加碼'] or '' }}</td><td class="down">{{ r['減碼'] or '' }}</td><td class="down">{{ r['出清'] or '' }}</td>
+      <td class="up">{{ r['買進張']|n if r['買進張'] else '' }}</td><td class="down">{{ r['賣出張']|n if r['賣出張'] else '' }}</td></tr>
+  {% endfor %}</tbody></table>
+</section>
+<section><h2>投信與主動 ETF</h2><p>{{ ai.trust_vs_etf }}</p></section>
+<section><h2>看法</h2><div class="box"><p style="margin:0">{{ ai.outlook }}</p></div></section>
+
+<!-- 第 5 頁：跨 ETF -->
+<section class="brk">
+  <h2>跨 ETF 共同持有<small>前 30 檔，依持有 ETF 數排序；趨勢為近 30 日合計持股（藍線）與每日淨進出（紅綠長條）</small></h2>
+  <table class="xt"><thead><tr><th class="l">股票</th><th>ETF 數</th><th>合計持股</th><th>加碼</th><th>減碼</th><th>淨增減</th><th class="l">近 30 日</th></tr></thead><tbody>
+  {% for r in cross %}{% set nt = r['淨增減張'] %}
+    <tr><td class="l nm"><b>{{ r['簡稱'] }}</b><span class="c">{{ r['代號'] }}</span></td><td>{{ r['持有ETF數'] }}</td><td>{{ r['合計持股張']|n }}</td>
+      <td class="up">{{ ('+' ~ (r['加碼張']|n)) if r['加碼張'] else '' }}</td><td class="down">{{ ('−' ~ (r['減碼張']|n)) if r['減碼張'] else '' }}</td>
+      <td class="{{ 'up' if nt > 0 else 'down' if nt < 0 else 'mute' }}">{{ ('▲ ' ~ (nt|n)) if nt > 0 else ('▼ ' ~ (nt|abs|n)) if nt < 0 else '持平' }}</td>
+      <td class="l">{{ r.spark|safe }}</td></tr>
+  {% endfor %}</tbody></table>
+  <div class="disc">以上為 AI 輔助整理的投資筆記，非投資建議，資料日期 {{ f['資料日'] }}，數據以官方公告為準，請自行查證，切勿直接投資。大盤與三大法人金額取自臺灣證券交易所盤後資料；說明由 {{ 'AI（' ~ model ~ '）撰寫並經程式核對數字' if model != 'template' else '程式依規則產生' }}；張數為各 ETF 揭露持股換算（1 張＝1,000 股）。</div>
+</section>
+</body></html>
