@@ -22,10 +22,12 @@
 | `warrant_scraper.py`、`warrant_volume_analyzer.py` | 權證排行與量能分析 |
 | `templates/*.html` | Jinja2 樣板，`base.html` 有導覽列（Bootstrap 5） |
 | `inst_flow.py` | 三大法人同買／連買：資料表 `inst_daily`、`inst_no_trading`，頁面與 API |
+| `mood_fetch.py` | 市場情緒 14 項指標抓取（全部免 API key；FRED 從機房會逾時，不要用） |
+| `market_mood.py` | 資料表 `mood_obs`、燈號／賣出條件／自動結論、`/market-mood`、`/api/market-mood` |
 | `inst_cobuy/fetch.py` | 證交所／櫃買抓取函式（`twse`、`tpex`）；`inst_cobuy/data/*.csv` 只當首次匯入的種子資料 |
 
 ## 現有頁面
-`/` 首頁分流（`hub.html`，四張卡片）、`/etf` ETF 日報（原首頁）、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/inst-cobuy` 三大法人同買、`/admin/etfs` ETF 清單管理＋手動爬取 ETF／權證（首頁原按鈕已移到這裡）、`/login`
+`/` 首頁分流（`hub.html`，四張卡片）、`/etf` ETF 日報（原首頁）、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/inst-cobuy` 三大法人同買、`/market-mood` 市場情緒指標、`/admin/etfs` ETF 清單管理＋手動爬取 ETF／權證（首頁原按鈕已移到這裡）、`/login`
 
 ## ETF 日報範圍（積極型／不分類）
 - `?scope=aggr|all` 切換，記在 cookie `etf_scope`；`etf_scope_middleware` 設 contextvar `_etf_scope`
@@ -41,6 +43,15 @@
 - 頁面 `/inst-cobuy`、API `/api/inst-cobuy/dates`、`/api/inst-cobuy?date=`、`/api/inst-cobuy.csv?date=`；預設公開，`INST_COBUY_PUBLIC=false` 改為需登入
 - 2026-10 已移除 GitHub Actions（inst-cobuy.yml、daily-scraper.yml）與靜態網頁；GitHub Pages 需使用者在 repo Settings 關閉
 - 已驗證：2026-09-30 外資、自營與 FinMind 一致；投信 22 檔不同（以官方為準）；資料庫版計算結果與舊靜態版逐欄一致（2026-10-01，1160 檔）
+
+## 市場情緒指標（market_mood）
+- 改自使用者 Google Drive「總體風險掃描_標準提示詞_v3」；門檻固定沿用提示詞
+- 短期：VIX（CBOE CSV）、台股 VIX（期交所月檔 `YYYYMMnew.txt`，只留近 3 個月）、CNN 恐懼貪婪、CBOE 個股賣權買權比、AAII（官方 xls）
+- 中期：FINRA 保證金負債（官網表格）、保證金佔 GDP（GDP 取自 multpl）、IPO（Renaissance 今年累計）、NYSE 騰落線（WSJ 當日漲跌家數，本站逐日累計，滿 20 日才判斷背離）、美銀牛熊指標（Finvaulta 的 Flow Show 週報內文）
+- 長期：巴菲特指標（Yahoo ^W5000 ÷ GDP）、CAPE（multpl）、美債 10Y−2Y（美國財政部 CSV）、LEI（Conference Board 新聞稿文字）
+- 已拿掉：NAAIM（2026/7 後停更）、高收益債利差（只有 FRED）、內部人買賣比與 AAII 持股比重（GuruFocus／AAII 擋）、M 平方（Cloudflare）
+- 排程 `mood` 週二～六 07:30（`SCHED_MOOD`）；資料庫空的時候啟動即背景抓一次
+- 賣出條件 5 項：VIX>25、保證金連 3 月下降、恐懼貪婪由 ≥75 跌破 50、騰落線背離、美銀 >8；≥3 出脫、≥2 警戒升級
 
 ## 進行中的重構計畫（2026-10 與使用者確認）
 1. ✅ 本檔 CLAUDE.md
@@ -62,7 +73,7 @@
    2. 主動式 ETF 日報（不分類）＝全部啟用 ETF
    3. 三大法人買賣超及連買
    4. 市場情緒指標（待使用者提供資料）
-6. 市場情緒指標
+6. ✅ 市場情緒指標（`/market-mood`，首頁第四張卡片）
 
 ## 外部依賴：BookReview（使用者電腦上的 n8n + FastAPI，`C:\Users\david\pyrag\BookReview\scripts\etf_report.py`）
 每天約 20:07 由 n8n 觸發，**直接解析本站 HTML**，改樣板或路由前務必確認不會壞：
