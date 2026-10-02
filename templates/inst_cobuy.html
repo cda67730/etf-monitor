@@ -61,6 +61,7 @@
   .obs-risk { margin-top: 12px; background: #fff8e6; border: 1px solid #f6dfa5; border-radius: 8px; padding: 8px 12px; font-size: .86rem; color: #6b4e00; }
   @media (max-width: 860px) { .watch { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 640px) { .watch { grid-template-columns: 1fr; } .obs-head { font-size: 1.08rem; } }
+  #box tr.flash td { background: #fff4cc !important; transition: background-color .4s; }
   .foot { color: var(--mute); font-size: .78rem; margin-top: 14px; line-height: 1.7; }
   /* 手機也維持表格，只留重要欄位 */
   @media (max-width: 640px) {
@@ -137,10 +138,12 @@
         <span class="duel-pick" id="duel-pick" hidden role="group" aria-label="對作方向">
           <button type="button" data-d="0" class="on">全部</button><button type="button" data-d="1">投信買・外資賣</button><button type="button" data-d="-1">外資買・投信賣</button>
         </span>
+        <select class="sel" id="per" aria-label="統計期間">
+          <option value="0">當日</option><option value="5">近 5 日</option><option value="10">近 10 日</option>
+        </select>
         <select class="sel" id="minS" aria-label="最少連續天數">
           <option value="0">連續天數不限</option><option value="2">連續 ≥2 天</option><option value="3">連續 ≥3 天</option><option value="5">連續 ≥5 天</option><option value="10">連續 ≥10 天</option>
         </select>
-        <input class="sel" type="search" id="q" placeholder="搜尋代號或名稱" aria-label="搜尋代號或名稱">
       </div>
     </div>
     <div id="box"><div class="loading">載入中…</div></div>
@@ -163,6 +166,12 @@
   // 欄位：[key, 標題, 型態, 手機隱藏]；標題盡量短，手機只留最重要的欄位
   function cols() {
     const n = DAY.n_days;
+    const w = per();
+    if (w && (tab === 'co' || tab === 'ft')) {
+      const p = tab === 'co' ? 'co' : 'ft';
+      return [['name', '股票', 'name'], [`${p}_s${w}`, '同買張', 'big'], [`${p}_d${w}`, '同買天', 'streak'], [`${p}_streak`, '連續天', 'streak'],
+        [`f${w}`, '外資', 'sgn'], [`t${w}`, '投信', 'sgn'], [`dl${w}`, '自營', 'sgn', 1], [`${p}_days`, `${n}日`, 'n', 1]];
+    }
     if (tab === 'co') return [
       ['name', '股票', 'name'], ['total', '同買張', 'big'], ['co_streak', '連續天', 'streak'], ['co_days', `${n}日`, 'n', 1],
       ['foreign', '外資', 'sgn'], ['foreign_streak', '外連', 'streak', 1], ['trust', '投信', 'sgn'], ['trust_streak', '投連', 'streak', 1],
@@ -178,18 +187,20 @@
     return [['rank', '#', 'n', 1], ['name', '股票', 'name'], [k, '買超', 'big'], [k + '_streak', '連買天', 'streak'],
       [k + '_days', `${n}日`, 'n', 1], [k + '_sum', `${n}日累計`, 'sgn', 1], ['total', '合計', 'sgn'], ['cobuy', '三大', 'ck', 1]];
   }
+  const per = () => (tab === 'co' || tab === 'ft') ? +$('#per').value : 0;
+  const defKey = () => { const w = per(); return w ? `${tab === 'co' ? 'co' : 'ft'}_d${w}` : DEF[tab]; };
   const DEF = { co: 'total', ft: 'ft_total', duel: '_duel_size' };
   function rows() {
-    const q = $('#q').value.trim(), ms = +$('#minS').value;
+    const ms = +$('#minS').value, w = per();
     let r = DAY.rows;
-    if (tab === 'co') r = r.filter(x => x.cobuy);
-    else if (tab === 'ft') r = r.filter(x => x.ft_cobuy);
+    if (tab === 'co') r = r.filter(x => w ? x[`co_d${w}`] > 0 : x.cobuy);
+    else if (tab === 'ft') r = r.filter(x => w ? x[`ft_d${w}`] > 0 : x.ft_cobuy);
     else if (tab === 'duel') r = r.filter(x => x.duel && (!duelDir || x.duel === duelDir)).map(x => ({ ...x, _duel_size: Math.min(Math.abs(x.trust), Math.abs(x.foreign)) }));
     else r = r.filter(x => x[tab] > 0).sort((a, b) => b[tab] - a[tab]).slice(0, 300).map((x, i) => ({ ...x, rank: i + 1 }));
-    if (q) r = r.filter(x => x.id.includes(q) || (x.name || '').includes(q));
     if (ms) r = r.filter(x => (tab === 'co' ? x.co_streak : tab === 'ft' ? x.ft_streak : tab === 'duel' ? x.duel_streak : x[tab + '_streak']) >= ms);
-    const k = sortK || DEF[tab];
-    if (k) r = [...r].sort((a, b) => k === 'name' ? sortD * a.id.localeCompare(b.id) : sortD * ((a[k] ?? -1e18) - (b[k] ?? -1e18)) || b.total - a.total);
+    const k = sortK || defKey();
+    const tb = w ? `${tab === 'co' ? 'co' : 'ft'}_s${w}` : 'total';      // 同分時的次要排序
+    if (k) r = [...r].sort((a, b) => k === 'name' ? sortD * a.id.localeCompare(b.id) : sortD * ((a[k] ?? -1e18) - (b[k] ?? -1e18)) || (b[tb] || 0) - (a[tb] || 0));
     return r;
   }
   function cell(x, [k, , t, mh]) {
@@ -202,27 +213,29 @@
     if (t === 'big') return `<td data-l="${lab}" class="big${k === '_duel_size' ? '' : ' up'}${m}">${num(v)}</td>`;
     return `<td data-l="${lab}" class="${m}">${num(v)}</td>`;
   }
-  const sortIcon = k => (sortK || DEF[tab]) !== k ? 'fa-sort' : sortD < 0 ? 'fa-sort-down' : 'fa-sort-up';
+  const sortIcon = k => (sortK || defKey()) !== k ? 'fa-sort' : sortD < 0 ? 'fa-sort-down' : 'fa-sort-up';
   function render() {
     $('#duel-pick').hidden = tab !== 'duel';
-    $('#minS').hidden = $('#q').hidden = tab === 'hist';
+    $('#minS').hidden = tab === 'hist';
+    $('#per').hidden = !(tab === 'co' || tab === 'ft');
     const TT = { co: ['三大同買', '外資、投信、自營商當天都買超的股票，依同買張數排序'],
                  ft: ['外資投信同買', '外資和投信當天都買超（不管自營商），同買張數＝外資＋投信，依此排序'],
                  duel: ['土洋對作', '投信與外資當天一買一賣，依兩邊較小的張數（對作量）排序'],
                  hist: ['每日同買', `最近 ${IDX.dates.length} 個交易日，點日期切換`] };
-    const [h, sub] = TT[tab] || [`${W[tab]}買超`, `${W[tab]}當天買超前 300 名`];
+    let [h, sub] = TT[tab] || [`${W[tab]}買超`, `${W[tab]}當天買超前 300 名`];
+    if (per()) { h += `（近 ${per()} 日）`; sub = `近 ${per()} 個交易日內至少同買 1 天，依同買天數、同買張排序；外資、投信為 ${per()} 日合計`; }
     $('#h2').textContent = h; $('#h2sub').textContent = sub + '，單位：張' + (tab === 'hist' ? '' : '；連＝連買天數');
     if (tab === 'hist') return renderHist();
     const C = cols(), R = rows();
     $('#box').innerHTML = `<div class="sort-m" role="group" aria-label="排序">排序 ${C.filter(c => c[2] !== 'name' && c[0] !== 'rank' && c[2] !== 'dir' && c[2] !== 'ck').slice(0, 4).map(([k, t]) =>
-        `<button type="button" class="sort${(sortK || DEF[tab]) === k ? ' on' : ''}" data-k="${k}">${t}<i class="fas ${sortIcon(k)}"></i></button>`).join('')}</div>
+        `<button type="button" class="sort${(sortK || defKey()) === k ? ' on' : ''}" data-k="${k}">${t}<i class="fas ${sortIcon(k)}"></i></button>`).join('')}</div>
       <table class="tbl"><thead><tr>${C.map(([k, t, ty, mh]) => {
-        const on = (sortK || DEF[tab]) === k;
+        const on = (sortK || defKey()) === k;
         const inner = k === 'rank' || ty === 'dir' ? t : `<button type="button" class="sort${on ? ' on' : ''}" data-k="${k}">${t}<i class="fas ${sortIcon(k)}"></i></button>`;
         return `<th class="${ty === 'name' || ty === 'dir' ? 'l' : ''}${mh ? ' m-hide' : ''}"${on ? ` aria-sort="${sortD < 0 ? 'descending' : 'ascending'}"` : ''}>${inner}</th>`; }).join('')}</tr></thead>
-      <tbody>${R.map(x => `<tr>${C.map(c => cell(x, c)).join('')}</tr>`).join('') || `<tr><td class="l" colspan="${C.length}"><div class="empty">沒有符合條件的個股。</div></td></tr>`}</tbody></table>`;
+      <tbody>${R.map(x => `<tr data-id="${esc(x.id)}">${C.map(c => cell(x, c)).join('')}</tr>`).join('') || `<tr><td class="l" colspan="${C.length}"><div class="empty">沒有符合條件的個股。</div></td></tr>`}</tbody></table>`;
     $('#box').querySelectorAll('button.sort').forEach(b => b.onclick = () => {
-      const k = b.dataset.k, cur = sortK || DEF[tab];
+      const k = b.dataset.k, cur = sortK || defKey();
       sortD = cur === k ? -sortD : -1; sortK = k; render();
     });
   }
@@ -254,8 +267,9 @@
       $('#obs-watch').querySelectorAll('.wcard').forEach(b => b.onclick = () => {
         const x = byId[b.dataset.code] || {};
         setTab(x.cobuy ? 'co' : x.ft_cobuy ? 'ft' : x.duel ? 'duel' : 'co');
-        $('#q').value = b.dataset.code; render();
-        document.getElementById('tabs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        $('#per').value = '0'; $('#minS').value = '0'; render();
+        const tr = $('#box').querySelector(`tr[data-id="${b.dataset.code}"]`);
+        if (tr) { tr.scrollIntoView({ behavior: 'smooth', block: 'center' }); tr.classList.add('flash'); setTimeout(() => tr.classList.remove('flash'), 2400); }
       });
       box.hidden = false;
     } catch (e) { box.hidden = true; }
@@ -291,7 +305,8 @@
   $('#duel-pick').onclick = e => { const b = e.target.closest('button'); if (!b) return; duelDir = +b.dataset.d;
     $('#duel-pick').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); render(); };
   $('#date').onchange = e => loadDay(e.target.value).catch(err => { $('#box').innerHTML = `<div class="empty">${esc(err.message)}</div>`; });
-  ['#q', '#minS'].forEach(s => $(s).addEventListener('input', render));
+  $('#minS').addEventListener('input', render);
+  $('#per').addEventListener('input', () => { sortK = null; sortD = -1; render(); });
   init().catch(e => { $('#stat').innerHTML = `<span>資料載入失敗：${esc(e.message)}</span>`; $('#box').innerHTML = ''; });
 })();
 </script>

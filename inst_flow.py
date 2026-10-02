@@ -38,6 +38,7 @@ BACKFILL = N + KEEP                               # 資料庫要保有的交易�
 PUBLIC = os.getenv("INST_COBUY_PUBLIC", "true").lower() == "true"   # 預設公開；設 false 改為需登入
 SEED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inst_cobuy", "data")
 KINDS = ("foreign", "trust", "dealer")
+PERIODS = (5, 10)                                     # 頁面「近 5 日／近 10 日」篩選
 STOCK_RE = re.compile(r"[1-9]\d{3}")
 
 
@@ -223,8 +224,11 @@ class InstFlow:
         for sid, s in S.items():
             V = {k: s["v"][k][start:end] for k in KINDS}
             today = {k: V[k][-1] for k in KINDS}
-            if not any((today[k] or 0) > 0 for k in KINDS):
-                continue                                           # 至少一個法人買超
+            pos = lambda k, i: V[k][i] is not None and V[k][i] > 0
+            co = [all(pos(k, i) for k in KINDS) for i in range(len(win))]
+            ft = [pos("foreign", i) and pos("trust", i) for i in range(len(win))]
+            if not any((today[k] or 0) > 0 for k in KINDS) and not any(co[-PERIODS[-1]:]) and not any(ft[-PERIODS[-1]:]):
+                continue                                           # 當日至少一個法人買超，或近 10 日有同買
             name, mkt = s["names"].get(last) or (s["name"], s["market"])
             r = {"id": sid, "name": name, "market": mkt}
             for k in KINDS:
@@ -232,14 +236,11 @@ class InstFlow:
                 r[k + "_streak"] = self._streak(V[k])
                 r[k + "_sum"] = sum(x for x in V[k] if x is not None)
                 r[k + "_days"] = sum(1 for x in V[k] if x is not None and x > 0)
-            co = [all(V[k][i] is not None and V[k][i] > 0 for k in KINDS) for i in range(len(win))]
             r["co_streak"] = self._streak([1 if c else 0 for c in co])
             r["co_days"] = sum(co)
             r["cobuy"] = co[-1]
             r["total"] = sum((today[k] or 0) for k in KINDS)
             # 外資＋投信同買（不管自營商）
-            ft = [V["foreign"][i] is not None and V["foreign"][i] > 0 and V["trust"][i] is not None and V["trust"][i] > 0
-                  for i in range(len(win))]
             r["ft_cobuy"] = ft[-1]
             r["ft_streak"] = self._streak([1 if c else 0 for c in ft])
             r["ft_days"] = sum(ft)
@@ -249,6 +250,16 @@ class InstFlow:
                     for f, t in zip(V["foreign"], V["trust"])]
             r["duel"] = duel[-1]
             r["duel_streak"] = self._streak([1 if (d == duel[-1] and d) else 0 for d in duel])
+            # 近 5／10 日：同買天數、同買日的張數合計、各法人淨買賣合計
+            for w in PERIODS:
+                idx = range(max(0, len(win) - w), len(win))
+                val = lambda k, i: V[k][i] or 0
+                r[f"co_d{w}"] = sum(co[i] for i in idx)
+                r[f"co_s{w}"] = sum(val("foreign", i) + val("trust", i) + val("dealer", i) for i in idx if co[i])
+                r[f"ft_d{w}"] = sum(ft[i] for i in idx)
+                r[f"ft_s{w}"] = sum(val("foreign", i) + val("trust", i) for i in idx if ft[i])
+                for k, z in (("foreign", "f"), ("trust", "t"), ("dealer", "dl")):
+                    r[f"{z}{w}"] = sum(val(k, i) for i in idx)
             out.append(r)
         res = {"date": last, "window": [win[0], win[-1]], "n_days": len(win), "max_days": N, "rows": out}
         self._results[last] = res
