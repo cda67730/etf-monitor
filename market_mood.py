@@ -179,7 +179,7 @@ IND = [
     # id, term, 名稱, 單位格式, 門檻說明, 頻率, 圖表視窗（天）
     ("vix", "short", "VIX 恐慌指數", "", "<13 自滿／>25 恐慌", "日", 365),
     ("cnn_fg", "short", "CNN 恐懼貪婪指數", "", ">75 極度貪婪", "日", 365),
-    ("aaii", "short", "AAII 散戶情緒（看多比）", "%", "看多 >45% 或多空差 >+20", "週", 730),
+    ("aaii", "short", "AAII 散戶情緒（看多比）", "%", "看多 >45% 或多空差 >+20", "週", 400),
     ("put_call", "short", "CBOE 個股賣權買權比", "", "<0.55 自滿", "日", 120),
     ("margin", "mid", "FINRA 保證金負債", "", "年增 >+30%", "月", 400),
     ("margin_gdp", "mid", "保證金負債佔 GDP", "%", ">4.0%", "月", 400),
@@ -192,6 +192,11 @@ IND = [
     ("lei", "long", "美國經濟諮商理事會領先指標", "", "近 6 個月 < -4%", "月", 3650),
 ]
 STALE = {"日": 6, "週": 12, "月": 75}
+SHORT = {"vix": "VIX 恐慌指數", "cnn_fg": "CNN 恐懼貪婪", "aaii": "AAII 散戶看多", "put_call": "個股賣權買權比",
+         "margin": "FINRA 保證金負債", "margin_gdp": "保證金佔 GDP", "ipo": "IPO 募資額", "ad_line": "NYSE 騰落線",
+         "bofa": "美銀牛熊指標", "buffett": "巴菲特指標", "cape": "席勒本益比 CAPE", "t10y2y": "美債 10Y−2Y 利差",
+         "lei": "領先指標 LEI"}
+YCLAMP = {"cnn_fg": (0, 100), "aaii": (0, 70), "bofa": (0, 10)}
 SOURCES = {
     "vix": ("CBOE", "https://www.cboe.com/tradable_products/vix/"),
     "cnn_fg": ("CNN", "https://www.cnn.com/markets/fear-and-greed"),
@@ -225,7 +230,8 @@ def _judge(i, rows, S, D):
     elif i == "cnn_fg":
         rating = {"extreme fear": "極度恐懼", "fear": "恐懼", "neutral": "中性", "greed": "貪婪",
                   "extreme greed": "極度貪婪"}.get((e or {}).get("rating", ""), "")
-        r["display"] = f"{v:.0f}" + (f"（{rating}）" if rating else "")
+        r["display"] = f"{v:.0f}"
+        r["sub"] = rating
         r["lines"] = [(75, "極度貪婪 75"), (25, "極度恐懼 25")]
         if v >= 75: r.update(signal="red", label="極度貪婪")
         elif v >= 55: r.update(signal="yellow", label="貪婪")
@@ -243,6 +249,10 @@ def _judge(i, rows, S, D):
                      ("看空超過 40.7%，散戶明顯悲觀，歷史上常是反向買點。" if bear and bear > 40.7 else
                       "散戶一面倒看多，要小心。" if r["signal"] == "red" else "散戶情緒沒有過熱。"))
         r["extra_series"] = [{"name": "看空 %", "data": [(x[0], (x[2] or {}).get("bearish")) for x in rows]}]
+        r["chart2"] = {"title": "多空差（看多 − 看空）", "label": "多空差",
+                       "rows": [(x[0], (x[2] or {}).get("spread")) for x in rows if (x[2] or {}).get("spread") is not None],
+                       "lines": [(20, "極端樂觀 +20"), (6.5, "長期平均 +6.5"), (-20, "極端悲觀 −20")],
+                       "zones": [(20, 60, "red"), (-60, -20, "green")]}
     elif i == "put_call":
         r["display"] = f"{v:.2f}"
         r["lines"] = [(0.55, "自滿 0.55")]
@@ -320,13 +330,47 @@ def _judge(i, rows, S, D):
     return r
 
 
+# 溫度計刻度：lo、hi、警戒區 [(起, 迄, 顏色, 說明)]；track 取的值見 _track_value
+TRACK = {
+    "vix":        (10, 40, [(10, 13, "amber", "自滿"), (25, 40, "red", "恐慌")], ""),
+    "cnn_fg":     (0, 100, [(55, 75, "amber", "貪婪"), (75, 100, "red", "極度貪婪")], ""),
+    "aaii":       (15, 65, [(45, 65, "red", "過度樂觀")], "看多 %"),
+    "put_call":   (0.4, 1.0, [(0.4, 0.55, "red", "自滿")], ""),
+    "margin":     (-20, 60, [(30, 60, "red", "年增過快")], "年增 %"),
+    "margin_gdp": (2.0, 5.0, [(4.0, 5.0, "red", "偏高")], "%"),
+    "ipo":        (-50, 500, [(100, 500, "amber", "募資暴增")], "募資年增 %"),
+    "bofa":       (0, 10, [(8, 10, "red", "賣出訊號")], ""),
+    "buffett":    (50, 250, [(150, 200, "amber", "高估"), (200, 250, "red", "極度高估")], "%"),
+    "cape":       (10, 50, [(30, 40, "amber", "偏高"), (40, 50, "red", "極端")], ""),
+    "t10y2y":     (-1.5, 2.0, [(-1.5, 0, "red", "倒掛")], "百分點"),
+    "lei":        (-8, 4, [(-8, -4, "red", "衰退警戒")], "近 6 個月 %"),
+}
+
+
+def _track_value(i, rows):
+    """溫度計上的位置：多數指標用原值；保證金用年增率、IPO 用募資年增、LEI 用近 6 個月變化"""
+    def at(k):
+        if len(rows) < k:
+            return None
+        d, v, e = rows[-k]
+        if i == "margin":
+            yr = _asof(rows[:len(rows) - k + 1], (dt.date.fromisoformat(d) - dt.timedelta(days=360)).isoformat())
+            return round((v / yr[1] - 1) * 100, 1) if yr and yr[0] < d else None
+        if i == "ipo":
+            return (e or {}).get("proceeds_yoy")
+        if i == "lei":
+            return (e or {}).get("six_month")
+        return v
+    return at(1), at(2)
+
+
 def build_report(S, errors=None):
     D = derive(S)
     allS = {**S, **D}
     items, terms = [], {t[0]: {"key": t[0], "name": t[1], "span": t[2], "desc": t[3], "items": []} for t in TERMS}
     for i, term, name, unit, thr, freq, window in IND:
         rows = allS.get(i) or []
-        it = {"id": i, "term": term, "name": name, "threshold": thr, "freq": freq,
+        it = {"id": i, "term": term, "name": name, "short": SHORT[i], "yclamp": YCLAMP.get(i), "threshold": thr, "freq": freq,
               "source": SOURCES[i][0], "source_url": SOURCES[i][1]}
         if not rows:
             it.update(signal="gray", label="尚無資料", display="—", note=(errors or {}).get(i, "等待第一次抓取。"), chart=[])
@@ -339,8 +383,18 @@ def build_report(S, errors=None):
             since = (dt.date.today() - dt.timedelta(days=window)).isoformat()
             scale = it.pop("chart_scale", 1)
             it["chart"] = [(d, round(v * scale, 4)) for d, v, _ in rows if d >= since]
+            if it.get("chart2"):
+                it["chart2"]["data"] = [(d, v) for d, v in it["chart2"].pop("rows") if d >= since]
             if i in ("ad_line",) and len(it["chart"]) < 2:
                 it["chart"] = [(d, v) for d, v, _ in rows]
+            if i in TRACK:
+                lo, hi, zones, unit = TRACK[i]
+                cur, prv = _track_value(i, rows)
+                pos = lambda x: None if x is None else round(max(0, min(1, (x - lo) / (hi - lo))) * 100, 1)
+                it["track"] = {"lo": lo, "hi": hi, "unit": unit, "cur": cur, "prev": prv, "cur_pos": pos(cur),
+                               "prev_pos": pos(prv), "zones": [{"from": pos(a), "to": pos(b), "tone": c, "label": t}
+                                                               for a, b, c, t in zones]}
+                it["zones_raw"] = zones if i not in ("margin", "ipo", "lei") else []
         items.append(it)
         terms[term]["items"].append(it)
 

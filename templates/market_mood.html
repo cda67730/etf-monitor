@@ -3,136 +3,270 @@
 {% block title %}市場情緒指標 - ETF持股明細監控系統{% endblock %}
 
 {% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;800&display=swap" rel="stylesheet">
 <style>
-  .mood { max-width: 860px; margin: 0 auto 48px; color: #212529; }
-  .mood .eyebrow { font-size: .8rem; letter-spacing: .08em; color: #6c757d; text-transform: uppercase; }
-  .mood h1 { font-size: 2rem; font-weight: 800; margin: .2rem 0 .4rem; }
-  .mood .byline { color: #6c757d; font-size: .9rem; }
-  .mood .byline b { color: #212529; font-variant-numeric: tabular-nums; }
-  .mood .lede { font-size: 1.12rem; line-height: 1.75; margin: 1.2rem 0; }
-  .mood h2 { font-size: 1.45rem; font-weight: 800; margin: 2.6rem 0 .3rem; padding-top: .4rem; border-top: 3px solid #212529; }
-  .mood h2 small { font-size: .9rem; font-weight: 500; color: #6c757d; margin-left: .4rem; }
-  .mood .section-desc { color: #6c757d; margin-bottom: .8rem; }
-  .mood p { line-height: 1.8; }
+  /* 版面概念：研究報告式單欄文章，最上方一張「風險溫度計」把 13 項指標放在各自的刻度上 */
+  .mm {
+    --paper: #ffffff; --ground: #f3f5f7; --ink: #17212b; --body: #33414e; --mute: #6a7886; --rule: #dde3e9;
+    --steel: #1f5fad; --red: #b42318; --amber: #b7791f; --green: #2f7d4f; --gray: #98a2b3;
+    --z-red: rgba(180, 35, 24, .14); --z-amber: rgba(183, 121, 31, .16);
+    --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+    --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    --num: "IBM Plex Sans", "Noto Sans TC", sans-serif;
+    font-family: var(--sans); color: var(--body); max-width: 920px; margin: 0 auto 64px;
+  }
+  .mm b, .mm strong { color: var(--ink); }
+  .mm .num { font-family: var(--num); font-variant-numeric: tabular-nums; }
 
-  /* 頂部統計 */
-  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 1.2rem 0; }
-  @media (max-width: 767.98px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  .tile { border: 1px solid #dee2e6; border-radius: 10px; padding: 12px 14px; background: #fff; text-decoration: none; color: inherit; display: block; }
-  a.tile:hover { border-color: #adb5bd; color: inherit; }
-  .tile .k { font-size: .8rem; color: #6c757d; }
-  .tile .v { font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.2; }
-  .tile .v small { font-size: .95rem; font-weight: 600; color: #6c757d; }
-  .tile .s { font-size: .82rem; margin-top: 4px; }
-  .dots { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
-  .sig-red { background: #d63939; } .sig-yellow { background: #f59f00; } .sig-green { background: #2fb344; } .sig-gray { background: #adb5bd; }
-  .t-red { color: #c92a2a; } .t-yellow { color: #b35c00; } .t-green { color: #2b8a3e; } .t-gray { color: #6c757d; }
+  /* 刊頭 */
+  .mm-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: end;
+             padding: 8px 0 18px; border-bottom: 2px solid var(--ink); }
+  .mm-head h1 { font-family: var(--serif); font-weight: 800; font-size: 2.5rem; letter-spacing: .02em; color: var(--ink); margin: 0; line-height: 1.15; }
+  .mm-head .dek { margin: 8px 0 0; color: var(--mute); font-size: .98rem; }
+  .mm-spx { text-align: right; min-width: 0; }
+  .mm-spx .lab { font-size: .8rem; color: var(--mute); }
+  .mm-spx .val { font-family: var(--num); font-size: 1.6rem; font-weight: 600; color: var(--ink); line-height: 1.2; }
+  .mm-spx .sub { font-size: .82rem; color: var(--mute); font-family: var(--num); }
+  @media (max-width: 640px) { .mm-head { grid-template-columns: 1fr; } .mm-spx { text-align: left; } .mm-head h1 { font-size: 2rem; } }
 
-  .toc { font-size: .9rem; display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 0; border-bottom: 1px solid #e9ecef; }
-  .toc a { color: #495057; text-decoration: none; } .toc a:hover { text-decoration: underline; }
+  /* 判讀列 */
+  .mm-verdict { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 2fr); gap: 0; border-bottom: 1px solid var(--rule); }
+  .mm-verdict > div { padding: 18px 0; }
+  .mm-verdict .sell { padding-right: 24px; border-right: 1px solid var(--rule); }
+  .mm-verdict .terms { padding-left: 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  @media (max-width: 767.98px) {
+    .mm-verdict { grid-template-columns: 1fr; }
+    .mm-verdict .sell { border-right: 0; border-bottom: 1px solid var(--rule); padding-right: 0; }
+    .mm-verdict .terms { padding-left: 0; }
+  }
+  .sell .k, .terms .k { font-size: .82rem; color: var(--mute); margin-bottom: 4px; }
+  .sell .big { font-family: var(--num); font-size: 2.4rem; font-weight: 600; color: var(--ink); line-height: 1.1; }
+  .sell .big span { font-size: 1.1rem; color: var(--mute); font-weight: 500; }
+  .seg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin: 10px 0 8px; }
+  .seg i { height: 8px; background: var(--rule); border-radius: 1px; }
+  .seg i.on { background: var(--red); } .seg i.half { background: repeating-linear-gradient(135deg, var(--amber) 0 3px, #f3e3c3 3px 6px); }
+  .sell .state { font-weight: 700; } .sell .hint { font-size: .85rem; color: var(--mute); }
+  .terms a { color: inherit; text-decoration: none; display: block; }
+  .terms a:hover .tname { text-decoration: underline; }
+  .terms .tname { font-family: var(--serif); font-weight: 600; color: var(--ink); font-size: 1.05rem; }
+  .terms .tspan { font-size: .78rem; color: var(--mute); }
+  .terms .count { font-family: var(--num); font-size: 1.5rem; font-weight: 600; color: var(--ink); margin: 2px 0; }
+  .terms .count small { font-size: .85rem; color: var(--mute); font-weight: 500; }
+  .pips { display: flex; gap: 3px; }
+  .pips i { width: 14px; height: 6px; border-radius: 1px; background: var(--gray); }
+  .s-red { --c: var(--red); } .s-yellow { --c: var(--amber); } .s-green { --c: var(--green); } .s-gray { --c: var(--gray); }
+  .pips i { background: var(--c); }
 
-  .callout { background: #f8f9fa; border-left: 4px solid #adb5bd; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: .6rem 0 1.4rem; line-height: 1.75; }
-  .callout.c-red { border-left-color: #d63939; } .callout.c-yellow { border-left-color: #f59f00; } .callout.c-green { border-left-color: #2fb344; }
+  .mm-lede { font-size: 1.08rem; line-height: 1.9; color: var(--ink); margin: 20px 0 6px; max-width: 46em; }
 
-  /* 指標條目 */
-  .entry { padding: 1.3rem 0 1.1rem; border-bottom: 1px solid #e9ecef; }
-  .entry-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-  .entry h3 { font-size: 1.15rem; font-weight: 700; margin: 0; }
-  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; font-weight: 600; padding: 2px 10px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
-  .figure { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: .5rem 0 .2rem; }
-  .figure .big { font-size: 1.9rem; font-weight: 800; font-variant-numeric: tabular-nums; }
-  .figure .chg { font-variant-numeric: tabular-nums; color: #495057; }
-  .figure .sub { color: #6c757d; font-size: .92rem; }
-  .meta { font-size: .82rem; color: #6c757d; display: flex; flex-wrap: wrap; gap: 4px 16px; }
-  .meta a { color: #6c757d; }
-  .chart-box { position: relative; height: 190px; margin: .7rem 0 .4rem; }
-  .entry p.note { margin: .3rem 0 0; }
-  .stale-tag { font-size: .75rem; background: #fff3bf; color: #8a5a00; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
+  /* 風險溫度計 */
+  .thermo { margin: 22px 0 8px; }
+  .thermo-cap { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;
+                font-size: .85rem; color: var(--mute); margin-bottom: 6px; }
+  .thermo-cap b { font-family: var(--serif); font-size: 1.1rem; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .lg-z { width: 14px; height: 8px; background: var(--z-red); border: 1px solid rgba(180,35,24,.35); }
+  .lg-cur { width: 10px; height: 10px; border-radius: 50%; background: var(--ink); }
+  .lg-prev { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--mute); background: #fff; }
+  .tg { border-top: 1px solid var(--rule); }
+  .tg-title { font-size: .8rem; color: var(--mute); padding: 10px 0 2px; }
+  .trow { display: grid; grid-template-columns: 10.5em minmax(0, 1fr) 7.5em 5.5em; gap: 14px; align-items: center; padding: 7px 0; }
+  .trow + .trow { border-top: 1px dashed #edf0f3; }
+  .trow .nm { font-size: .9rem; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trow .nm a { color: inherit; text-decoration: none; } .trow .nm a:hover { text-decoration: underline; }
+  .track { position: relative; height: 18px; }
+  .track .base { position: absolute; left: 0; right: 0; top: 8px; height: 2px; background: var(--rule); }
+  .track .zone { position: absolute; top: 3px; height: 12px; }
+  .zone.red { background: var(--z-red); } .zone.amber { background: var(--z-amber); }
+  .track .mk { position: absolute; top: 3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; }
+  .mk.cur { background: var(--ink); box-shadow: 0 0 0 2px #fff; z-index: 2; }
+  .mk.prev { border: 1.5px solid var(--mute); background: #fff; z-index: 1; }
+  .track .ends { position: absolute; top: 18px; left: 0; right: 0; display: flex; justify-content: space-between;
+                 font-size: .68rem; color: #9aa6b2; font-family: var(--num); }
+  .trow .v { font-family: var(--num); font-size: .92rem; color: var(--ink); text-align: right; white-space: nowrap; }
+  .trow .st { font-size: .82rem; font-weight: 600; color: var(--c); white-space: nowrap; }
+  .trow.na .track .base { background: repeating-linear-gradient(90deg, var(--rule) 0 6px, transparent 6px 10px); }
+  @media (max-width: 640px) {
+    .trow { grid-template-columns: minmax(0, 1fr) auto auto; gap: 2px 10px; padding: 8px 0 18px; }
+    .trow .nm { grid-column: 1; grid-row: 1; } .trow .v { grid-column: 2; grid-row: 1; }
+    .trow .st { grid-column: 3; grid-row: 1; text-align: right; min-width: 4.5em; }
+    .trow .track { grid-column: 1 / -1; grid-row: 2; }
+  }
 
-  table.sells { width: 100%; font-size: .92rem; }
-  table.sells td, table.sells th { padding: 8px 6px; border-bottom: 1px solid #e9ecef; vertical-align: top; }
-  table.sells th { font-size: .8rem; color: #6c757d; font-weight: 600; }
-  .fine { font-size: .82rem; color: #6c757d; line-height: 1.7; }
+  .mm-toc { display: flex; gap: 18px; flex-wrap: wrap; font-size: .9rem; padding: 12px 0; margin-top: 18px;
+            border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .mm-toc a { color: var(--steel); text-decoration: none; } .mm-toc a:hover { text-decoration: underline; }
+
+  /* 章節 */
+  .mm h2 { font-family: var(--serif); font-weight: 800; font-size: 1.7rem; color: var(--ink); margin: 48px 0 4px; }
+  .mm .h2-sub { color: var(--mute); font-size: .92rem; margin-bottom: 14px; }
+  .mm .take { font-size: 1.02rem; line-height: 1.9; color: var(--ink); padding-left: 14px; border-left: 3px solid var(--c); margin: 0 0 8px; max-width: 46em; }
+
+  .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+  @media (max-width: 767.98px) { .cards { grid-template-columns: 1fr; } }
+  .ent { background: var(--paper); border: 1px solid var(--rule); border-top: 3px solid var(--c); border-radius: 6px;
+         padding: 16px 18px 14px; display: flex; flex-direction: column; min-width: 0; scroll-margin-top: 80px; }
+  .ent-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .ent h3 { font-family: var(--serif); font-weight: 600; font-size: 1.08rem; color: var(--ink); margin: 0; line-height: 1.4; }
+  .ent .sig { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 600; color: var(--c); white-space: nowrap; padding-top: 3px; }
+  .ent .sig::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+  .ent .fig { margin: 8px 0 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .ent .fig .big { font-family: var(--num); font-size: 1.85rem; font-weight: 600; color: var(--ink); line-height: 1.1; }
+  .ent .fig .chg { font-family: var(--num); font-size: .84rem; color: var(--mute); }
+  .ent .subv { font-size: .84rem; color: var(--body); font-family: var(--num); margin-top: 2px; }
+  .ent .chart { position: relative; height: 170px; margin: 12px -4px 4px; }
+  .ent .chart-sm { height: 130px; margin-top: 2px; }
+  .ent .chart2-title { font-size: .8rem; color: var(--mute); margin-top: 6px; }
+  .ent .nochart { min-height: 110px; margin: 12px 0 4px; display: flex; align-items: center; justify-content: center; text-align: center;
+                  font-size: .82rem; color: var(--mute); background: var(--ground); border-radius: 4px; padding: 14px; }
+  .ent p { line-height: 1.8; margin: 8px 0 10px; font-size: .92rem; }
+  .ent dl { margin: auto 0 0; padding-top: 10px; border-top: 1px solid #eef1f4; display: grid; grid-template-columns: auto minmax(0, 1fr);
+            gap: 2px 12px; font-size: .78rem; color: var(--mute); }
+  .ent dt { font-weight: 400; } .ent dd { margin: 0; color: var(--body); }
+  .ent dd a { color: var(--steel); }
+  .ent .stale { color: var(--amber); font-weight: 600; margin-left: 6px; }
+
+  table.mm-sells { width: 100%; border-collapse: collapse; font-size: .92rem; margin-top: 6px; }
+  .mm-sells th { font-size: .8rem; color: var(--mute); font-weight: 500; text-align: left; padding: 8px 8px 8px 0; border-bottom: 2px solid var(--ink); }
+  .mm-sells td { padding: 11px 8px 11px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  .mm-sells td.res { font-weight: 700; color: var(--c); white-space: nowrap; }
+  .mm-notes { font-size: .85rem; color: var(--mute); line-height: 1.85; padding-left: 1.1em; }
+  .mm-notes .err { color: var(--red); }
+  .mm a:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
 </style>
 
-<article class="mood">
 {% if not rep %}
-  <h1>市場情緒指標</h1>
-  <p class="lede">資料庫目前無法使用，請稍後再試。</p>
+<article class="mm"><div class="mm-head"><div><h1>市場情緒指標</h1><p class="dek">資料庫目前無法使用，請稍後再試。</p></div></div></article>
 {% else %}
-  {% set sig_text = {'red': '紅燈', 'yellow': '黃燈', 'green': '綠燈', 'gray': '資料不足'} %}
-  <div class="eyebrow">美股市場情緒 · 短中長期 13 項指標</div>
-  <h1>市場情緒指標</h1>
-  <div class="byline">
-    最新資料日 <b>{{ rep.latest }}</b> ・ 更新於 {{ rep.generated }}
-    {% if rep.spx %} ・ S&amp;P 500 收 <b>{{ "{:,.2f}".format(rep.spx.close) }}</b>
-      （{{ "%+.2f"|format(rep.spx.chg) }}%，距一年高點 {{ "%.1f"|format(rep.spx.off_high) }}%）{% endif %}
-  </div>
+{% set sig_word = {'red': '紅燈', 'yellow': '黃燈', 'green': '綠燈', 'gray': '資料不足'} %}
+<article class="mm">
 
-  <!-- 頂部統計 -->
-  <div class="tiles">
-    <a class="tile" href="#sells">
+  <header class="mm-head">
+    <div>
+      <h1>市場情緒指標</h1>
+      <p class="dek">美股短、中、長期 13 項風險指標，資料日 {{ rep.latest }}，每個交易日早上更新</p>
+    </div>
+    {% if rep.spx %}
+    <div class="mm-spx">
+      <div class="lab">S&amp;P 500（{{ rep.spx.date[5:].replace('-', '/') }} 收盤）</div>
+      <div class="val">{{ "{:,.2f}".format(rep.spx.close) }}</div>
+      <div class="sub">{{ "%+.2f"|format(rep.spx.chg) }}%　距一年高點 {{ "%.1f"|format(rep.spx.off_high) }}%</div>
+    </div>
+    {% endif %}
+  </header>
+
+  <section class="mm-verdict" aria-label="總覽">
+    <div class="sell s-{{ rep.level.signal }}">
       <div class="k">賣出條件</div>
-      <div class="v t-{{ rep.level.signal }}">{{ rep.n_met }}<small> / {{ rep.sells|length }} 成立</small></div>
-      <div class="s t-{{ rep.level.signal }}">{{ rep.level.label }}</div>
-    </a>
+      <div class="big">{{ rep.n_met }}<span> / {{ rep.sells|length }} 成立</span></div>
+      <div class="seg" aria-hidden="true">{% for s in rep.sells %}<i class="{{ 'on' if s.met else 'half' if s.partial else '' }}" title="{{ s.name }}"></i>{% endfor %}</div>
+      <div class="state" style="color: var(--c)">{{ rep.level.label }}</div>
+      <div class="hint">{{ rep.level.desc }}</div>
+    </div>
+    <div class="terms">
+      {% for t in rep.terms %}
+      <a href="#{{ t.key }}">
+        <div class="tname">{{ t.name }}</div>
+        <div class="tspan">{{ t.span }}</div>
+        <div class="count">{{ t.red|length }}<small> / {{ t.n_valid }} 紅燈</small></div>
+        <div class="pips" aria-hidden="true">{% for x in t['items'] %}<i class="s-{{ x.signal }}" title="{{ x.name }}：{{ x.label }}"></i>{% endfor %}</div>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <p class="mm-lede">{{ rep.headline }}</p>
+
+  <figure class="thermo" aria-label="風險溫度計">
+    <figcaption class="thermo-cap">
+      <b>風險溫度計</b>
+      <span class="legend">
+        <span><i class="lg-z"></i>警戒區</span><span><i class="lg-cur"></i>目前</span><span><i class="lg-prev"></i>上一期</span>
+      </span>
+    </figcaption>
     {% for t in rep.terms %}
-    <a class="tile" href="#{{ t.key }}">
-      <div class="k">{{ t.name }}（{{ t.span }}）</div>
-      <div class="v {{ 't-red' if t.red else 't-green' }}">{{ t.red|length }}<small> / {{ t.n_valid }} 紅燈</small></div>
-      <div class="dots" aria-hidden="true">{% for x in t['items'] %}<span class="dot sig-{{ x.signal }}" title="{{ x.name }}：{{ x.label }}"></span>{% endfor %}</div>
-      <div class="s text-muted">{% if t.yellow %}黃燈 {{ t.yellow|length }}・{% endif %}綠燈 {{ t.green }}</div>
-    </a>
+    <div class="tg">
+      <div class="tg-title">{{ t.name }}（{{ t.span }}）</div>
+      {% for x in t['items'] %}
+      {% set tr = x.track %}
+      <div class="trow s-{{ x.signal }} {{ '' if tr and tr.cur_pos is not none else 'na' }}">
+        <div class="nm"><a href="#ind-{{ x.id }}">{{ x.short }}</a></div>
+        <div class="track">
+          <div class="base"></div>
+          {% if tr %}
+            {% for z in tr.zones %}<div class="zone {{ z.tone }}" style="left: {{ z['from'] }}%; width: {{ z.to - z['from'] }}%" title="{{ z.label }}"></div>{% endfor %}
+            {% if tr.prev_pos is not none %}<div class="mk prev" style="left: {{ tr.prev_pos }}%" title="上一期 {{ tr.prev }}"></div>{% endif %}
+            {% if tr.cur_pos is not none %}<div class="mk cur" style="left: {{ tr.cur_pos }}%" title="目前 {{ tr.cur }}"></div>{% endif %}
+            <div class="ends"><span>{{ tr.lo }}</span><span>{{ tr.unit }}</span><span>{{ tr.hi }}</span></div>
+          {% endif %}
+        </div>
+        <div class="v">{% if tr and tr.cur is not none and x.id in ('margin', 'ipo', 'lei') %}{{ "%+.1f"|format(tr.cur) }}%{% else %}{{ x.display }}{% endif %}</div>
+        <div class="st">{{ x.label }}</div>
+      </div>
+      {% endfor %}
+    </div>
     {% endfor %}
-  </div>
+  </figure>
 
-  <p class="lede">{{ rep.headline }}{{ rep.level.desc }}</p>
-
-  <nav class="toc" aria-label="目錄">
+  <nav class="mm-toc" aria-label="目錄">
     {% for t in rep.terms %}<a href="#{{ t.key }}">{{ t.name }}指標</a>{% endfor %}
     <a href="#sells">賣出條件</a><a href="#notes">資料說明</a>
   </nav>
 
   {% for t in rep.terms %}
   <section id="{{ t.key }}">
-    <h2>{{ t.name }}指標<small>{{ t.span }}・{{ t.desc }}</small></h2>
-    <div class="callout c-{{ 'red' if t.red|length * 2 >= t.n_valid and t.red else 'yellow' if t.red or t.yellow else 'green' }}">{{ t.summary }}</div>
+    <h2>{{ t.name }}指標</h2>
+    <div class="h2-sub">{{ t.span }}，{{ t.desc }}</div>
+    <p class="take s-{{ 'red' if t.red|length * 2 >= t.n_valid and t.red else 'yellow' if t.red or t.yellow else 'green' }}">{{ t.summary }}</p>
 
+    <div class="cards">
     {% for x in t['items'] %}
-    <div class="entry" id="ind-{{ x.id }}">
-      <div class="entry-head">
+    <article class="ent s-{{ x.signal }}" id="ind-{{ x.id }}">
+      <div class="ent-head">
         <h3>{{ x.name }}</h3>
-        <span class="pill t-{{ x.signal }}"><span class="dot sig-{{ x.signal }}"></span>{{ sig_text[x.signal] }}・{{ x.label }}</span>
+        <span class="sig">{{ sig_word[x.signal] }}，{{ x.label }}</span>
       </div>
-      <div class="figure">
+      <div class="fig">
         <span class="big">{{ x.display }}</span>
         {% if x.change is defined and x.change is not none %}
-        <span class="chg">{{ x.arrow }} {{ "%+.2f"|format(x.change) if (x.change|abs) < 1000 else "{:+,.0f}".format(x.change) }}（較前一期）</span>
+        <span class="chg">{{ x.arrow }} {{ "%+.2f"|format(x.change) if (x.change|abs) < 1000 else "{:+,.0f}".format(x.change) }} 較前一期</span>
         {% endif %}
-        {% if x.sub %}<span class="sub">{{ x.sub }}</span>{% endif %}
       </div>
-      <div class="meta">
-        <span>資料日期 {{ x.date or '—' }}（{{ x.freq }}更）{% if x.stale %}<span class="stale-tag">資料較舊</span>{% endif %}</span>
-        <span>警戒門檻：{{ x.threshold }}</span>
-        <span>來源：<a href="{{ x.source_url }}" target="_blank" rel="noopener">{{ x.source }}</a></span>
-      </div>
-      {% if x.chart|length > 1 %}<div class="chart-box"><canvas data-chart="{{ x.id }}" aria-label="{{ x.name }}走勢圖" role="img"></canvas></div>{% endif %}
-      <p class="note">{{ x.note }}</p>
-    </div>
+      {% if x.sub %}<div class="subv">{{ x.sub }}</div>{% endif %}
+      {% if x.chart|length > 1 %}
+      <div class="chart"><canvas data-chart="{{ x.id }}" role="img" aria-label="{{ x.name }}走勢圖"></canvas></div>
+      {% if x.chart2 %}
+      <div class="chart2-title">{{ x.chart2.title }}</div>
+      <div class="chart chart-sm"><canvas data-chart2="{{ x.id }}" role="img" aria-label="{{ x.chart2.title }}走勢圖"></canvas></div>
+      {% endif %}
+      {% else %}
+      <div class="nochart">{{ '本站從開始抓取起逐日累積，資料多於一筆後就會顯示走勢。' if x.chart|length == 1 else '尚無資料。' }}</div>
+      {% endif %}
+      <p>{{ x.note }}</p>
+      <dl>
+        <dt>資料日期</dt><dd class="num">{{ x.date or '—' }}，{{ x.freq }}更{% if x.stale %}<span class="stale">資料較舊</span>{% endif %}</dd>
+        <dt>警戒門檻</dt><dd>{{ x.threshold }}</dd>
+        <dt>來源</dt><dd><a href="{{ x.source_url }}" target="_blank" rel="noopener">{{ x.source }}</a></dd>
+      </dl>
+    </article>
     {% endfor %}
+    </div>
   </section>
   {% endfor %}
 
   <section id="sells">
-    <h2>賣出條件追蹤<small>同時成立 3 項以上 → 開始分批出脫；2 項 → 警戒升級</small></h2>
-    <table class="sells">
-      <thead><tr><th>賣出條件</th><th>成立門檻</th><th>目前狀況</th><th style="width:80px">是否成立</th></tr></thead>
+    <h2>賣出條件追蹤</h2>
+    <div class="h2-sub">同時成立 3 項以上就開始分批出脫；成立 2 項時警戒升級。</div>
+    <table class="mm-sells">
+      <thead><tr><th>賣出條件</th><th>成立門檻</th><th>目前狀況</th><th>結果</th></tr></thead>
       <tbody>
       {% for s in rep.sells %}
-        <tr>
-          <td>{{ s.name }}</td><td>{{ s.rule }}</td><td>{{ s.now }}</td>
-          <td class="{{ 't-red' if s.met else 't-yellow' if s.partial else 't-green' }}"><b>{{ '成立' if s.met else '部分成立' if s.partial else '未成立' }}</b></td>
+        <tr class="{{ 's-red' if s.met else 's-yellow' if s.partial else 's-green' }}">
+          <td><b>{{ s.name }}</b></td><td>{{ s.rule }}</td><td class="num">{{ s.now }}</td>
+          <td class="res">{{ '成立' if s.met else '部分成立' if s.partial else '未成立' }}</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -141,50 +275,99 @@
 
   <section id="notes">
     <h2>資料說明</h2>
-    <ul class="fine">
-      <li>每個平日早上 7:30（台北時間）美股收盤後自動更新；週更、月更的指標沒有新資料時沿用最新一期，並標示資料日期。</li>
-      <li>門檻固定不隨市場氣氛調整。燈號：紅燈＝超過警戒門檻，黃燈＝接近或需留意，綠燈＝正常，灰色＝資料不足。</li>
-      <li>巴菲特指標以 Wilshire 5000 指數（點數約等於美股總市值，十億美元）除以最新一季名目 GDP 計算，與 GuruFocus 等網站的計算方式略有差異。</li>
-      <li>保證金負債佔 GDP 以 FINRA 融資餘額除以當季名目 GDP（年化）計算。</li>
-      <li>騰落線由本站從開始抓取的那天起，逐日累計紐約證交所上漲減下跌家數；累積滿 20 個交易日後才判斷背離。</li>
-      <li>美銀牛熊指標取自 Bank of America「The Flow Show」週報內文（經 Finvaulta 整理），週報沒有提及時沿用上一期。</li>
-      <li>已拿掉無法穩定取得的指標：NAAIM 經理人持股（2026/7 後停更）、高收益債利差、內部人買賣比、AAII 散戶股票持有比重。</li>
-      {% for k, v in rep.errors.items() %}<li class="t-red">本次抓取失敗：{{ k }}（{{ v }}），沿用上一次的資料。</li>{% endfor %}
+    <ul class="mm-notes">
+      <li>每個交易日早上 7:30（台北時間）美股收盤後自動更新。週更、月更的指標沒有新資料時沿用最新一期，並標出資料日期。</li>
+      <li>門檻固定，不隨市場氣氛調整。紅燈代表超過警戒門檻，黃燈代表接近或需要留意，綠燈代表正常，灰色代表資料還不足以判斷。</li>
+      <li>巴菲特指標用 Wilshire 5000 指數（點數約等於美股總市值，單位十億美元）除以最新一季名目 GDP，與 GuruFocus 等網站的計算方式略有差異。保證金負債佔 GDP 用 FINRA 融資餘額除以當季名目 GDP（年化）。</li>
+      <li>騰落線由本站從開始抓取那天起，逐日累計紐約證交所上漲減下跌家數，累積滿 20 個交易日後才判斷背離。</li>
+      <li>美銀牛熊指標取自 Bank of America「The Flow Show」週報內文，經 Finvaulta 整理；週報沒有提到時沿用上一期。</li>
+      <li>無法穩定取得而沒有列入的指標：NAAIM 經理人持股（2026 年 7 月後停更）、高收益債利差、內部人買賣比、AAII 散戶股票持有比重。</li>
+      {% for k, v in rep.errors.items() %}<li class="err">本次 {{ k }} 抓取失敗（{{ v }}），沿用上一次的資料。</li>{% endfor %}
+      <li>以上是依固定門檻得出的機械式判斷，不是個人化投資建議。</li>
     </ul>
-    <p class="fine">以上是依固定門檻得出的機械式判斷，不是個人化投資建議。</p>
   </section>
-{% endif %}
 </article>
 
-{% if rep %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
-const ITEMS = {{ rep['items'] | tojson }};
-const LINE_COLORS = ['#c92a2a', '#2b8a3e', '#6c757d'];
-document.querySelectorAll('canvas[data-chart]').forEach(cv => {
-  const it = ITEMS.find(x => x.id === cv.dataset.chart);
-  if (!it || typeof Chart === 'undefined') return;
-  const labels = it.chart.map(p => p[0]);
-  const ds = [{ label: it.name, data: it.chart.map(p => p[1]), borderColor: '#1c7ed6', backgroundColor: 'rgba(28,126,214,.08)',
-                fill: true, borderWidth: 1.8, pointRadius: labels.length > 40 ? 0 : 2, tension: .2 }];
-  (it.extra_series || []).forEach(s => {
-    const m = Object.fromEntries(s.data);
-    ds.push({ label: s.name, data: labels.map(d => m[d] ?? null), borderColor: '#e8590c', borderWidth: 1.4, pointRadius: 0, fill: false, tension: .2 });
-  });
-  (it.lines || []).forEach(([v, name], i) => ds.push({ label: name, data: labels.map(() => v), borderColor: LINE_COLORS[i % 3],
-    borderDash: [5, 4], borderWidth: 1, pointRadius: 0, fill: false }));
-  new Chart(cv, {
-    type: 'line', data: { labels, datasets: ds },
-    options: {
-      responsive: true, maintainAspectRatio: false, animation: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: ds.length > 1, labels: { boxWidth: 14, font: { size: 11 } } },
-                 tooltip: { callbacks: { label: c => `${c.dataset.label}：${c.parsed.y?.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}` } } },
-      scales: { x: { ticks: { maxTicksLimit: 6, maxRotation: 0, font: { size: 11 } }, grid: { display: false } },
-                y: { ticks: { font: { size: 11 } }, grid: { color: '#f1f3f5' } } }
+(() => {
+  const ITEMS = {{ rep['items'] | tojson }};
+  const css = getComputedStyle(document.querySelector('.mm'));
+  const C = k => css.getPropertyValue(k).trim();
+  const ZONE = { red: C('--z-red'), amber: C('--z-amber'), green: 'rgba(47,125,79,.12)' };
+  // 在圖上畫出警戒區色帶
+  const zonePlugin = {
+    id: 'zones',
+    beforeDatasetsDraw(chart, _, opts) {
+      const { ctx, chartArea: a, scales: { y } } = chart;
+      (opts.zones || []).forEach(([lo, hi, tone]) => {
+        const top = y.getPixelForValue(Math.min(hi, y.max)), bot = y.getPixelForValue(Math.max(lo, y.min));
+        if (bot <= a.top || top >= a.bottom || bot - top <= 0) return;
+        ctx.save(); ctx.fillStyle = ZONE[tone] || ZONE.red;
+        ctx.fillRect(a.left, Math.max(top, a.top), a.right - a.left, Math.min(bot, a.bottom) - Math.max(top, a.top));
+        ctx.restore();
+      });
     }
+  };
+  const fmt = v => v == null ? '—' : Number(v).toLocaleString('zh-TW', { maximumFractionDigits: 2 });
+  function draw(cv, spec) {
+    const labels = spec.data.map(p => p[0]), vals = spec.data.map(p => p[1]);
+    const last = vals.length - 1;
+    const datasets = [{
+      label: spec.label, data: vals, borderColor: C('--ink'), borderWidth: 1.6, tension: .15, fill: false,
+      pointRadius: vals.map((_, i) => i === last ? 3.5 : 0), pointBackgroundColor: C('--ink'), pointHoverRadius: 4
+    }];
+    (spec.extra || []).forEach(s => {
+      const m = Object.fromEntries(s.data);
+      datasets.push({ label: s.name, data: labels.map(d => m[d] ?? null), borderColor: C('--amber'), borderWidth: 1.2,
+                      borderDash: [4, 3], pointRadius: 0, fill: false, tension: .15 });
+    });
+    (spec.refs || []).forEach(([v, name]) => datasets.push({ label: name, data: labels.map(() => v), borderColor: '#9aa6b2',
+      borderWidth: 1, borderDash: [2, 3], pointRadius: 0, fill: false }));
+    const lines = (spec.lines || []).map(l => l[0]);
+    const nums = vals.filter(v => v != null);
+    const lo = Math.min(...nums), hi = Math.max(...nums);
+    const near = lines.filter(v => v >= lo - (hi - lo) * .6 && v <= hi + (hi - lo) * .6);
+    let yMin = Math.min(lo, ...near), yMax = Math.max(hi, ...near);
+    const pad = (yMax - yMin) * .08 || 1;
+    yMin -= pad; yMax += pad;
+    if (spec.clamp) { yMin = Math.max(yMin, spec.clamp[0]); yMax = Math.min(yMax, spec.clamp[1]); }
+    new Chart(cv, {
+      type: 'line', data: { labels, datasets },
+      plugins: [zonePlugin],
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          zones: { zones: spec.zones || [] },
+          legend: { display: datasets.length > 1 && !spec.refs, align: 'end', labels: { boxWidth: 18, boxHeight: 1, font: { size: 11 }, color: C('--mute') } },
+          tooltip: { backgroundColor: C('--ink'), titleFont: { size: 11 }, bodyFont: { size: 12 }, padding: 8, displayColors: false,
+                     filter: c => !(spec.refs || []).some(r => r[1] === c.dataset.label),
+                     callbacks: { label: c => `${c.dataset.label}  ${fmt(c.parsed.y)}` } }
+        },
+        scales: {
+          x: { ticks: { maxTicksLimit: 5, maxRotation: 0, color: C('--mute'), font: { size: 10.5 }, callback: function (v) { return this.getLabelForValue(v).slice(0, 7); } },
+               grid: { display: false }, border: { color: C('--rule') } },
+          y: { position: 'right', min: yMin, max: yMax, ticks: { maxTicksLimit: 5, color: C('--mute'), font: { size: 10.5 } },
+               grid: { color: '#eef1f4' }, border: { display: false } }
+        }
+      }
+    });
+  }
+  if (typeof Chart === 'undefined') return;
+  document.querySelectorAll('canvas[data-chart]').forEach(cv => {
+    const it = ITEMS.find(x => x.id === cv.dataset.chart);
+    if (!it) return;
+    draw(cv, { data: it.chart, label: it.name.split('（')[0], extra: it.extra_series, lines: it.lines, clamp: it.yclamp,
+               zones: (it.zones_raw || []).map(z => [z[0], z[1], z[2]]) });
   });
-});
+  document.querySelectorAll('canvas[data-chart2]').forEach(cv => {
+    const it = ITEMS.find(x => x.id === cv.dataset.chart2);
+    if (!it || !it.chart2) return;
+    const c2 = it.chart2;
+    draw(cv, { data: c2.data, label: c2.label, lines: c2.lines.map(l => [l[0]]), refs: [[0, '零軸'], [6.5, '長期平均 +6.5']], zones: c2.zones });
+  });
+})();
 </script>
 {% endif %}
 {% endblock %}
