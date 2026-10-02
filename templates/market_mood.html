@@ -3,73 +3,40 @@
 {% block title %}市場情緒指標 - ETF持股明細監控系統{% endblock %}
 
 {% block content %}
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;800&display=swap" rel="stylesheet">
+{% include "_ed_css.html" %}
 <style>
   /* 版面概念：研究報告式單欄文章，最上方一張「風險溫度計」把 13 項指標放在各自的刻度上 */
   .mm {
-    --paper: #ffffff; --ground: #f3f5f7; --ink: #17212b; --body: #33414e; --mute: #6a7886; --rule: #dde3e9;
-    --steel: #1f5fad; --red: #b42318; --amber: #b7791f; --green: #2f7d4f; --gray: #98a2b3;
-    --z-red: rgba(180, 35, 24, .14); --z-amber: rgba(183, 121, 31, .16);
-    --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
-    --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
-    --num: "IBM Plex Sans", "Noto Sans TC", sans-serif;
-    font-family: var(--sans); color: var(--body); max-width: 920px; margin: 0 auto 64px;
+    --paper: #ffffff; --ground: #eef1f5; --ink: #0f1b2d; --body: #334155; --mute: #6b7a8f; --rule: #e3e8ef;
+    --steel: #2b6cb0; --red: #e5383b; --amber: #d48806; --green: #12a150; --gray: #a0aec0;
+    --z-red: rgba(229, 56, 59, .13); --z-amber: rgba(245, 166, 35, .18);
+    --serif: var(--sans);
+    max-width: 1080px; margin: -8px auto 64px;
   }
   .mm b, .mm strong { color: var(--ink); }
   .mm .num { font-family: var(--num); font-variant-numeric: tabular-nums; }
 
-  /* 刊頭 */
-  .mm-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: end;
-             padding: 8px 0 18px; border-bottom: 2px solid var(--ink); }
-  .mm-head h1 { font-family: var(--serif); font-weight: 800; font-size: 2.5rem; letter-spacing: .02em; color: var(--ink); margin: 0; line-height: 1.15; }
-  .mm-head .dek { margin: 8px 0 0; color: var(--mute); font-size: .98rem; }
-  .mm-spx { text-align: right; min-width: 0; }
-  .mm-spx .lab { font-size: .8rem; color: var(--mute); }
-  .mm-spx .val { font-family: var(--num); font-size: 1.6rem; font-weight: 600; color: var(--ink); line-height: 1.2; }
-  .mm-spx .sub { font-size: .82rem; color: var(--mute); font-family: var(--num); }
-  @media (max-width: 640px) { .mm-head { grid-template-columns: 1fr; } .mm-spx { text-align: left; } .mm-head h1 { font-size: 2rem; } }
-
-  /* 判讀列 */
-  .mm-verdict { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 2fr); gap: 0; border-bottom: 1px solid var(--rule); }
-  .mm-verdict > div { padding: 18px 0; }
-  .mm-verdict .sell { padding-right: 24px; border-right: 1px solid var(--rule); }
-  .mm-verdict .terms { padding-left: 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-  @media (max-width: 767.98px) {
-    .mm-verdict { grid-template-columns: 1fr; }
-    .mm-verdict .sell { border-right: 0; border-bottom: 1px solid var(--rule); padding-right: 0; }
-    .mm-verdict .terms { padding-left: 0; }
-  }
-  .sell .k, .terms .k { font-size: .82rem; color: var(--mute); margin-bottom: 4px; }
-  .sell .big { font-family: var(--num); font-size: 2.4rem; font-weight: 600; color: var(--ink); line-height: 1.1; }
-  .sell .big span { font-size: 1.1rem; color: var(--mute); font-weight: 500; }
-  .seg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin: 10px 0 8px; }
-  .seg i { height: 8px; background: var(--rule); border-radius: 1px; }
-  .seg i.on { background: var(--red); } .seg i.half { background: repeating-linear-gradient(135deg, var(--amber) 0 3px, #f3e3c3 3px 6px); }
-  .sell .state { font-weight: 700; } .sell .hint { font-size: .85rem; color: var(--mute); }
-  .terms a { color: inherit; text-decoration: none; display: block; }
-  .terms a:hover .tname { text-decoration: underline; }
-  .terms .tname { font-family: var(--serif); font-weight: 600; color: var(--ink); font-size: 1.05rem; }
-  .terms .tspan { font-size: .78rem; color: var(--mute); }
-  .terms .count { font-family: var(--num); font-size: 1.5rem; font-weight: 600; color: var(--ink); margin: 2px 0; }
-  .terms .count small { font-size: .85rem; color: var(--mute); font-weight: 500; }
-  .pips { display: flex; gap: 3px; }
-  .pips i { width: 14px; height: 6px; border-radius: 1px; background: var(--gray); }
+  /* 刊頭：與 ETF 日報相同的深色行情列 */
+  .mm .term .stat b { color: #fff; }
+  .mm .term .stat .sig-red b { color: #ff6b6b; } .mm .term .stat .sig-yellow b { color: var(--accent); }
+  .mm .term .stat .sig-green b { color: #4ade80; } .mm .term .stat .sig-gray b { color: #cbd5e1; }
+  .mm .term .stat b.chg-up { color: #ff6b6b; } .mm .term .stat b.chg-down { color: #4ade80; }
+  .mm .stat .pip { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--c); margin-left: 3px; vertical-align: 1px; }
+  .mm .stat a { color: inherit; text-decoration: none; } .mm .stat a:hover b { text-decoration: underline; }
+  .mm .verdict { margin-top: 8px; font-size: .86rem; color: var(--term-text); line-height: 1.6; }
   .s-red { --c: var(--red); } .s-yellow { --c: var(--amber); } .s-green { --c: var(--green); } .s-gray { --c: var(--gray); }
-  .pips i { background: var(--c); }
-
-  .mm-lede { font-size: 1.08rem; line-height: 1.9; color: var(--ink); margin: 20px 0 6px; max-width: 46em; }
+  .mm .term .stat .s-red, .mm .term .stat .s-yellow, .mm .term .stat .s-green, .mm .term .stat .s-gray { color: inherit; }
 
   /* 風險溫度計 */
-  .thermo { margin: 18px 0 8px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .thermo { margin: 16px 0 8px; background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 0 18px; }
+  @media (max-width: 640px) { .thermo { padding: 0 12px; } }
   .thermo-cap { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
                 font-size: .85rem; color: var(--mute); padding: 12px 0; cursor: pointer; list-style: none; user-select: none; }
   .thermo-cap::-webkit-details-marker { display: none; }
   .thermo-cap:hover b { text-decoration: underline; }
   .thermo-cap:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
   .thermo-title { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .thermo-cap b { font-family: var(--serif); font-size: 1.1rem; color: var(--ink); }
+  .thermo-cap b { font-size: 1.08rem; color: var(--ink); }
   .thermo-hint { font-size: .82rem; color: var(--mute); }
   .chev { color: var(--ink); transition: transform .15s ease; flex: none; }
   .thermo[open] .chev { transform: rotate(90deg); }
@@ -106,21 +73,22 @@
     .trow .track { grid-column: 1 / -1; grid-row: 2; }
   }
 
-  .mm-toc { display: flex; gap: 6px 18px; flex-wrap: wrap; font-size: .9rem; padding: 10px 0; border-bottom: 1px solid var(--rule); }
-  .mm-toc a { color: var(--steel); text-decoration: none; } .mm-toc a:hover { text-decoration: underline; }
+
 
   /* 章節 */
-  .mm h2 { font-family: var(--serif); font-weight: 800; font-size: 1.7rem; color: var(--ink); margin: 48px 0 4px; }
-  .mm .h2-sub { color: var(--mute); font-size: .92rem; margin-bottom: 14px; }
+  .mm h2 { font-size: 1.3rem; margin: 34px 0 4px; scroll-margin-top: 64px; }
+  .mm section { scroll-margin-top: 64px; }
+  .mm .h2-sub { color: var(--mute); font-size: .88rem; margin-bottom: 12px; padding-left: 12px; }
   .mm .take { font-size: 1.02rem; line-height: 1.9; color: var(--ink); padding-left: 14px; border-left: 3px solid var(--c); margin: 0 0 8px; max-width: 46em; }
 
   .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
   @media (max-width: 767.98px) { .cards { grid-template-columns: 1fr; } }
-  .ent { background: var(--paper); border: 1px solid var(--rule); border-top: 3px solid var(--c); border-radius: 6px;
+  .ent { background: var(--paper); border: 1px solid var(--rule); border-top: 3px solid var(--c); border-radius: 10px;
+         box-shadow: 0 1px 2px rgba(15, 27, 45, .04);
          padding: 16px 18px 14px; display: flex; flex-direction: column; min-width: 0; scroll-margin-top: 80px; }
   .ent.wide { grid-column: 1 / -1; }
   .ent-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-  .ent h3 { font-family: var(--serif); font-weight: 600; font-size: 1.08rem; color: var(--ink); margin: 0; line-height: 1.4; }
+  .ent h3 { font-weight: 700; font-size: 1.02rem; color: var(--ink); margin: 0; line-height: 1.4; }
   .ent .sig { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 600; color: var(--c); white-space: nowrap; padding-top: 3px; }
   .ent .sig::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
   .ent .fig { margin: 8px 0 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
@@ -135,7 +103,7 @@
   .mm-modal { border: 0; padding: 0; width: min(1180px, 96vw); max-width: 96vw; border-radius: 8px; box-shadow: 0 20px 60px rgba(15, 23, 32, .35); }
   .mm-modal::backdrop { background: rgba(15, 23, 32, .55); }
   .mm-modal .mh { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 18px 4px; }
-  .mm-modal .mh h4 { font-family: var(--serif); font-weight: 600; font-size: 1.15rem; color: var(--ink); margin: 0; }
+  .mm-modal .mh h4 { font-weight: 700; font-size: 1.15rem; color: var(--ink); margin: 0; }
   .mm-modal .mh small { color: var(--mute); font-size: .82rem; }
   .mm-modal .close { border: 0; background: none; font-size: 1.6rem; line-height: 1; color: var(--mute); cursor: pointer; padding: 0 4px; }
   .mm-modal .close:hover { color: var(--ink); }
@@ -151,9 +119,10 @@
   .ent dd a { color: var(--steel); }
   .ent .stale { color: var(--amber); font-weight: 600; margin-left: 6px; }
 
-  table.mm-sells { width: 100%; border-collapse: collapse; font-size: .92rem; margin-top: 6px; }
-  .mm-sells th { font-size: .8rem; color: var(--mute); font-weight: 500; text-align: left; padding: 8px 8px 8px 0; border-bottom: 2px solid var(--ink); }
-  .mm-sells td { padding: 11px 8px 11px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  table.mm-sells { width: 100%; border-collapse: collapse; font-size: .9rem; margin-top: 6px; background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+  .mm-sells th { font-size: .76rem; color: var(--mute); font-weight: 600; text-align: left; padding: 9px 10px; background: #f8fafc; border-bottom: 1px solid var(--rule); }
+  .mm-sells td:first-child, .mm-sells th:first-child { padding-left: 14px; }
+  .mm-sells td { padding: 10px 10px; border-bottom: 1px solid #f1f4f8; vertical-align: top; }
   .mm-sells td.res { font-weight: 700; color: var(--c); white-space: nowrap; }
   .mm-notes { font-size: .85rem; color: var(--mute); line-height: 1.85; padding-left: 1.1em; }
   .mm-notes .err { color: var(--red); }
@@ -161,53 +130,30 @@
 </style>
 
 {% if not rep %}
-<article class="mm"><div class="mm-head"><div><h1>市場情緒指標</h1><p class="dek">資料庫目前無法使用，請稍後再試。</p></div></div></article>
+<article class="ed mm"><header class="term"><h1>市場情緒指標</h1><div class="stat"><span>資料庫目前無法使用，請稍後再試。</span></div></header></article>
 {% else %}
 {% set sig_word = {'red': '紅燈', 'yellow': '黃燈', 'green': '綠燈', 'gray': '資料不足'} %}
-<article class="mm">
+<article class="ed mm">
 
-  <header class="mm-head">
-    <div>
-      <h1>市場情緒指標</h1>
-      <p class="dek">短、中、長期 {{ rep['items']|length }} 項市場風險指標，資料日 {{ rep.latest }}，每個交易日早上更新</p>
+  <header class="term">
+    <div class="term-top">
+      <div>
+        <h1>市場情緒指標</h1>
+        <div class="stat" role="status">
+          {% if rep.spx %}<span>S&amp;P 500 <b>{{ "{:,.2f}".format(rep.spx.close) }}</b> <b class="{{ 'chg-up' if rep.spx.chg > 0 else 'chg-down' }}">{{ "%+.2f"|format(rep.spx.chg) }}%</b>（{{ rep.spx.date[5:].replace('-', '/') }}）</span><span>距一年高 <b>{{ "%.1f"|format(rep.spx.off_high) }}%</b></span>{% endif %}
+          <span class="sig-{{ rep.level.signal }}"><a href="#sells">賣出條件 <b>{{ rep.n_met }}/{{ rep.sells|length }}</b></a></span>
+          {% for t in rep.terms %}<span><a href="#{{ t.key }}">{{ t.name }} <b>{{ t.red|length }}/{{ t.n_valid }}</b>{% for x in t['items'] %}<i class="pip s-{{ x.signal }}" title="{{ x.name }}：{{ x.label }}"></i>{% endfor %}</a></span>{% endfor %}
+        </div>
+        <div class="verdict">{{ rep.headline }}</div>
+      </div>
     </div>
-    {% if rep.spx %}
-    <div class="mm-spx">
-      <div class="lab">S&amp;P 500（{{ rep.spx.date[5:].replace('-', '/') }} 收盤）</div>
-      <div class="val">{{ "{:,.2f}".format(rep.spx.close) }}</div>
-      <div class="sub">{{ "%+.2f"|format(rep.spx.chg) }}%　距一年高點 {{ "%.1f"|format(rep.spx.off_high) }}%</div>
-    </div>
-    {% endif %}
   </header>
 
-  <nav class="mm-toc" aria-label="目錄">
-    {% for t in rep.terms %}<a href="#{{ t.key }}">{{ t.name }}指標</a>{% endfor %}
-    <a href="#sells">賣出條件</a><a href="#notes">資料說明</a>
+  <nav class="secnav" aria-label="頁面區塊">
+    <a href="#thermo" class="on">溫度計</a>{% for t in rep.terms %}<a href="#{{ t.key }}">{{ t.name }}指標</a>{% endfor %}<a href="#sells">賣出條件</a><a href="#notes">資料說明</a>
   </nav>
 
-  <section class="mm-verdict" aria-label="總覽">
-    <div class="sell s-{{ rep.level.signal }}">
-      <div class="k">賣出條件</div>
-      <div class="big">{{ rep.n_met }}<span> / {{ rep.sells|length }} 成立</span></div>
-      <div class="seg" aria-hidden="true">{% for s in rep.sells %}<i class="{{ 'on' if s.met else 'half' if s.partial else '' }}" title="{{ s.name }}"></i>{% endfor %}</div>
-      <div class="state" style="color: var(--c)">{{ rep.level.label }}</div>
-      <div class="hint">{{ rep.level.desc }}</div>
-    </div>
-    <div class="terms">
-      {% for t in rep.terms %}
-      <a href="#{{ t.key }}">
-        <div class="tname">{{ t.name }}</div>
-        <div class="tspan">{{ t.span }}</div>
-        <div class="count">{{ t.red|length }}<small> / {{ t.n_valid }} 紅燈</small></div>
-        <div class="pips" aria-hidden="true">{% for x in t['items'] %}<i class="s-{{ x.signal }}" title="{{ x.name }}：{{ x.label }}"></i>{% endfor %}</div>
-      </a>
-      {% endfor %}
-    </div>
-  </section>
-
-  <p class="mm-lede">{{ rep.headline }}</p>
-
-  <details class="thermo">
+  <details class="thermo" id="thermo">
     <summary class="thermo-cap">
       <span class="thermo-title"><svg class="chev" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <b>風險溫度計</b><span class="thermo-hint">{{ rep['items']|length }} 項指標在各自刻度上的位置</span></span>
@@ -323,9 +269,9 @@
   const ITEMS = {{ rep['items'] | tojson }};
   const css = getComputedStyle(document.querySelector('.mm'));
   const C = k => css.getPropertyValue(k).trim();
-  const ZONE = { red: C('--z-red'), amber: C('--z-amber'), green: 'rgba(47,125,79,.12)', fear: 'rgba(47,125,79,.13)',
-                 fear2: 'rgba(47,125,79,.24)', neutral: 'rgba(106,120,134,.08)' };
-  const ZLABEL = { red: '#9b2c22', amber: '#8a5a12', fear: '#2f6b47', fear2: '#24563a', neutral: '#6a7886', green: '#2f6b47' };
+  const ZONE = { red: C('--z-red'), amber: C('--z-amber'), green: 'rgba(18,161,80,.10)', fear: 'rgba(18,161,80,.11)',
+                 fear2: 'rgba(18,161,80,.22)', neutral: 'rgba(106,120,134,.08)' };
+  const ZLABEL = { red: '#c0262a', amber: '#9a6400', fear: '#0e7a3e', fear2: '#0b5e30', neutral: '#6b7a8f', green: '#0e7a3e' };
   // 在圖上畫出警戒區色帶
   const zonePlugin = {
     id: 'zones',
@@ -366,7 +312,7 @@
     const isBar = spec.type === 'bar';
     const datasets = [isBar ? {
       type: 'bar', label: spec.label, data: vals, borderWidth: 0, categoryPercentage: 1, barPercentage: .85,
-      backgroundColor: vals.map(v => v >= 0 ? 'rgba(180,35,24,.75)' : 'rgba(47,125,79,.75)')
+      backgroundColor: vals.map(v => v >= 0 ? 'rgba(229,56,59,.75)' : 'rgba(18,161,80,.75)')
     } : {
       label: spec.label, data: vals, borderColor: C('--ink'), borderWidth: big ? 1.8 : 1.6, tension: .15, fill: false,
       pointRadius: vals.map((_, i) => i === last ? 3.5 : 0), pointBackgroundColor: C('--ink'), pointHoverRadius: 4
@@ -409,6 +355,17 @@
       }
     });
   }
+  const navLinks = [...document.querySelectorAll('.secnav a')];
+  const secs = navLinks.map(a => document.querySelector(a.getAttribute('href')));
+  const markNav = () => {
+    let i = 0;
+    secs.forEach((el, k) => { if (el && el.getBoundingClientRect().top < 120) i = k; });
+    if (innerHeight + scrollY >= document.body.scrollHeight - 4) i = secs.length - 1;
+    navLinks.forEach((a, k) => a.classList.toggle('on', k === i));
+    const nv = navLinks[i].parentElement, l = navLinks[i];
+    if (l.offsetLeft < nv.scrollLeft || l.offsetLeft + l.offsetWidth > nv.scrollLeft + nv.clientWidth) nv.scrollLeft = l.offsetLeft - 8;
+  };
+  addEventListener('scroll', markNav, { passive: true }); markNav();
   if (typeof Chart === 'undefined') return;
   const modal = document.getElementById('mm-modal');
   let bigChart = null;
