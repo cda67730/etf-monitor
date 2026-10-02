@@ -117,9 +117,11 @@
   </div>
 </section>
 
+{% set colist = f.get('_三大同買清單') or f['三大同買前15'] %}
 <section class="brk"><h2>三大同買</h2><p>{{ ai.cobuy }}</p>
+  <p class="mute" style="font-size:7.8pt;margin-top:2px">共 {{ f['檔數統計']['三大同買'] }} 檔{% if f['檔數統計']['三大同買'] > colist|length %}，列出同買張數前 {{ colist|length }} 檔{% endif %}</p>
   <table style="margin-top:4px"><thead><tr><th class="l">#</th><th class="l">股票</th><th>同買張數</th><th>外資</th><th>投信</th><th>自營</th><th>同買連續</th><th>{{ nd }}日同買</th><th>股價</th></tr></thead><tbody>
-  {% for r in f['三大同買前15'] %}
+  {% for r in colist %}
     <tr><td class="l"><span class="no {{ 't' if loop.index <= 3 }}" style="{{ 'background:#e5383b;color:#fff' if loop.index <= 3 }}">{{ loop.index }}</span></td>
       <td class="l nm"><b>{{ r['簡稱'] }}</b><span class="c">{{ r['代號'] }}</span>{% if r.get('主動ETF當日淨加碼張') %}<span class="etfmark">ETF 加碼</span>{% endif %} <span class="ind">{{ r['產業別'] }}</span></td>
       <td class="up"><b>{{ r['三大合計張']|n }}</b></td><td class="up">{{ r['外資張']|n }}</td><td class="up">{{ r['投信張']|n }}</td><td class="up">{{ r['自營張']|n }}</td>

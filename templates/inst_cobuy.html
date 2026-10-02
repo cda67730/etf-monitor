@@ -122,8 +122,8 @@
   </section>
 
   <nav class="secnav" id="tabs" role="tablist" aria-label="表格">
-    <button type="button" role="tab" data-t="co" class="on">三大同買<span class="n" id="n-co"></span></button>
-    <button type="button" role="tab" data-t="ft">外資投信同買<span class="n" id="n-ft"></span></button>
+    <button type="button" role="tab" data-t="co">三大同買<span class="n" id="n-co"></span></button>
+    <button type="button" role="tab" data-t="ft" class="on">外資投信同買<span class="n" id="n-ft"></span></button>
     <button type="button" role="tab" data-t="duel">土洋對作<span class="n" id="n-duel"></span></button>
     <button type="button" role="tab" data-t="foreign">外資買超</button>
     <button type="button" role="tab" data-t="trust">投信買超</button>
@@ -160,7 +160,7 @@
   const num = v => v == null ? '<span class="muted">—</span>' : v.toLocaleString('zh-TW');
   const sgn = v => v == null ? '<span class="muted">—</span>' : `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : 'muted'}">${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toLocaleString('zh-TW')}</span>`;
   const st = v => v >= 3 ? `<span class="hot">${v}</span>` : (v || '<span class="muted">0</span>');
-  let IDX = null, DAY = null, tab = 'co', sortK = null, sortD = -1, duelDir = 0;
+  let IDX = null, DAY = null, tab = 'ft', sortK = null, sortD = -1, duelDir = 0;
 
   // 欄位：[key, 標題, 型態, 手機隱藏]；型態 name＝股票、sgn＝帶正負、streak＝天數標色、ck＝打勾、n＝一般數字
   // 欄位：[key, 標題, 型態, 手機隱藏]；標題盡量短，手機只留最重要的欄位
