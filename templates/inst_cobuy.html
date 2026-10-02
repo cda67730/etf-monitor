@@ -167,6 +167,14 @@
   function cols() {
     const n = DAY.n_days;
     const w = per();
+    if (w && tab === 'duel') return [
+      ['name', '股票', 'name'], [`duel${w}`, '方向', 'dir', 1], ['_duel_size', '對作量', 'big', 1], [`t${w}`, '投信', 'sgn'], [`f${w}`, '外資', 'sgn'],
+      [`duel_d${w}`, '對作天', 'streak'], [`dl${w}`, '自營', 'sgn', 1]];
+    if (w && W[tab]) {
+      const z = ZK[tab];
+      return [['rank', '#', 'n', 1], ['name', '股票', 'name'], [`${z}${w}`, '買超', 'big'], [`${tab}_d${w}`, '買超天', 'streak'], [`${tab}_streak`, '連買天', 'streak'],
+        ...Object.keys(W).filter(k => k !== tab).map(k => [`${ZK[k]}${w}`, W[k].slice(0, 2), 'sgn', 1])];
+    }
     if (w && (tab === 'co' || tab === 'ft')) {
       const p = tab === 'co' ? 'co' : 'ft';
       return [['name', '股票', 'name'], [`${p}_s${w}`, '同買張', 'big'], [`${p}_d${w}`, '同買天', 'streak'], [`${p}_streak`, '連續天', 'streak'],
@@ -187,19 +195,31 @@
     return [['rank', '#', 'n', 1], ['name', '股票', 'name'], [k, '買超', 'big'], [k + '_streak', '連買天', 'streak'],
       [k + '_days', `${n}日`, 'n', 1], [k + '_sum', `${n}日累計`, 'sgn', 1], ['total', '合計', 'sgn'], ['cobuy', '三大', 'ck', 1]];
   }
-  const per = () => (tab === 'co' || tab === 'ft') ? +$('#per').value : 0;
-  const defKey = () => { const w = per(); return w ? `${tab === 'co' ? 'co' : 'ft'}_d${w}` : DEF[tab]; };
+  const ZK = { foreign: 'f', trust: 't', dealer: 'dl' };
+  const per = () => tab === 'hist' ? 0 : +$('#per').value;
+  const defKey = () => {
+    const w = per();
+    if (!w) return DEF[tab];
+    if (tab === 'co' || tab === 'ft') return `${tab}_d${w}`;
+    if (tab === 'duel') return '_duel_size';
+    return `${ZK[tab]}${w}`;
+  };
   const DEF = { co: 'total', ft: 'ft_total', duel: '_duel_size' };
   function rows() {
     const ms = +$('#minS').value, w = per();
     let r = DAY.rows;
     if (tab === 'co') r = r.filter(x => w ? x[`co_d${w}`] > 0 : x.cobuy);
     else if (tab === 'ft') r = r.filter(x => w ? x[`ft_d${w}`] > 0 : x.ft_cobuy);
-    else if (tab === 'duel') r = r.filter(x => x.duel && (!duelDir || x.duel === duelDir)).map(x => ({ ...x, _duel_size: Math.min(Math.abs(x.trust), Math.abs(x.foreign)) }));
-    else r = r.filter(x => x[tab] > 0).sort((a, b) => b[tab] - a[tab]).slice(0, 300).map((x, i) => ({ ...x, rank: i + 1 }));
-    if (ms) r = r.filter(x => (tab === 'co' ? x.co_streak : tab === 'ft' ? x.ft_streak : tab === 'duel' ? x.duel_streak : x[tab + '_streak']) >= ms);
+    else if (tab === 'duel') {
+      const dk = w ? `duel${w}` : 'duel', tk = w ? `t${w}` : 'trust', fk = w ? `f${w}` : 'foreign';
+      r = r.filter(x => x[dk] && (!duelDir || x[dk] === duelDir)).map(x => ({ ...x, _duel_size: Math.min(Math.abs(x[tk] || 0), Math.abs(x[fk] || 0)) }));
+    } else {
+      const vk = w ? `${ZK[tab]}${w}` : tab;
+      r = r.filter(x => x[vk] > 0).sort((a, b) => b[vk] - a[vk]).slice(0, 300).map((x, i) => ({ ...x, rank: i + 1 }));
+    }
+    if (ms) r = r.filter(x => (tab === 'co' ? x.co_streak : tab === 'ft' ? x.ft_streak : tab === 'duel' ? (w ? x[`duel_d${w}`] : x.duel_streak) : x[tab + '_streak']) >= ms);
     const k = sortK || defKey();
-    const tb = w ? `${tab === 'co' ? 'co' : 'ft'}_s${w}` : 'total';      // 同分時的次要排序
+    const tb = w && (tab === 'co' || tab === 'ft') ? `${tab}_s${w}` : 'total';      // 同分時的次要排序
     if (k) r = [...r].sort((a, b) => k === 'name' ? sortD * a.id.localeCompare(b.id) : sortD * ((a[k] ?? -1e18) - (b[k] ?? -1e18)) || (b[tb] || 0) - (a[tb] || 0));
     return r;
   }
@@ -217,13 +237,19 @@
   function render() {
     $('#duel-pick').hidden = tab !== 'duel';
     $('#minS').hidden = tab === 'hist';
-    $('#per').hidden = !(tab === 'co' || tab === 'ft');
+    $('#per').hidden = tab === 'hist';
     const TT = { co: ['三大同買', '外資、投信、自營商當天都買超的股票，依同買張數排序'],
                  ft: ['外資投信同買', '外資和投信當天都買超（不管自營商），同買張數＝外資＋投信，依此排序'],
                  duel: ['土洋對作', '投信與外資當天一買一賣，依兩邊較小的張數（對作量）排序'],
                  hist: ['每日同買', `最近 ${IDX.dates.length} 個交易日，點日期切換`] };
     let [h, sub] = TT[tab] || [`${W[tab]}買超`, `${W[tab]}當天買超前 300 名`];
-    if (per()) { h += `（近 ${per()} 日）`; sub = `近 ${per()} 個交易日內至少同買 1 天，依同買天數、同買張排序；外資、投信為 ${per()} 日合計`; }
+    const w = per();
+    if (w) {
+      h += `（近 ${w} 日）`;
+      sub = tab === 'co' || tab === 'ft' ? `近 ${w} 個交易日內至少同買 1 天，依同買天數、同買張排序；外資、投信為 ${w} 日合計`
+          : tab === 'duel' ? `近 ${w} 個交易日合計投信與外資方向相反，依兩邊較小的張數排序；對作天＝當天也是這個方向的天數`
+          : `近 ${w} 個交易日${W[tab]}合計買超前 300 名；買超天＝期間內買超的天數`;
+    }
     $('#h2').textContent = h; $('#h2sub').textContent = sub + '，單位：張' + (tab === 'hist' ? '' : '；連＝連買天數');
     if (tab === 'hist') return renderHist();
     const C = cols(), R = rows();

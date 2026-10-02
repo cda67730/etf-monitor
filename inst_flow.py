@@ -227,8 +227,9 @@ class InstFlow:
             pos = lambda k, i: V[k][i] is not None and V[k][i] > 0
             co = [all(pos(k, i) for k in KINDS) for i in range(len(win))]
             ft = [pos("foreign", i) and pos("trust", i) for i in range(len(win))]
-            if not any((today[k] or 0) > 0 for k in KINDS) and not any(co[-PERIODS[-1]:]) and not any(ft[-PERIODS[-1]:]):
-                continue                                           # 當日至少一個法人買超，或近 10 日有同買
+            recent = range(max(0, len(win) - PERIODS[-1]), len(win))
+            if not any(pos(k, i) for k in KINDS for i in recent):
+                continue                                           # 近 10 日內至少一個法人買超過
             name, mkt = s["names"].get(last) or (s["name"], s["market"])
             r = {"id": sid, "name": name, "market": mkt}
             for k in KINDS:
@@ -260,6 +261,11 @@ class InstFlow:
                 r[f"ft_s{w}"] = sum(val("foreign", i) + val("trust", i) for i in idx if ft[i])
                 for k, z in (("foreign", "f"), ("trust", "t"), ("dealer", "dl")):
                     r[f"{z}{w}"] = sum(val(k, i) for i in idx)
+                    r[f"{k}_d{w}"] = sum(1 for i in idx if pos(k, i))          # 期間內買超天數
+                # 期間土洋對作：以期間合計判斷方向，並算當天也是這個方向的天數
+                dw = 1 if r[f"t{w}"] > 0 and r[f"f{w}"] < 0 else -1 if r[f"f{w}"] > 0 and r[f"t{w}"] < 0 else 0
+                r[f"duel{w}"] = dw
+                r[f"duel_d{w}"] = sum(1 for i in idx if dw and duel[i] == dw)
             out.append(r)
         res = {"date": last, "window": [win[0], win[-1]], "n_days": len(win), "max_days": N, "rows": out}
         self._results[last] = res
