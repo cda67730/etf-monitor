@@ -22,30 +22,38 @@
   .ed .num { font-family: var(--num); font-variant-numeric: tabular-nums; }
 
   /* 行情列 */
-  .term { background: var(--term); color: var(--term-text); border-radius: 10px; padding: 18px 20px 0; overflow: hidden; }
-  .term-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px 20px; flex-wrap: wrap; }
-  .term h1 { font-weight: 700; font-size: 1.75rem; color: #fff; margin: 0; letter-spacing: .02em; }
-  .term .dek { font-size: .86rem; color: #8ea0b8; margin-top: 4px; }
+  .term { background: var(--term); color: var(--term-text); border-radius: 10px; padding: 14px 20px; }
+  .term-top { display: flex; justify-content: space-between; align-items: center; gap: 10px 20px; flex-wrap: wrap; }
+  .term h1 { font-weight: 700; font-size: 1.5rem; color: #fff; margin: 0; letter-spacing: .02em; }
+  .stat { display: flex; flex-wrap: wrap; gap: 2px 0; font-size: .8rem; color: #8ea0b8; margin-top: 4px; }
+  .stat > span { white-space: nowrap; }
+  .stat > span + span::before { content: "·"; margin: 0 8px; color: #4a5d78; }
+  .stat b { font-family: var(--num); font-variant-numeric: tabular-nums; color: #fff; font-weight: 600; }
+  .stat b.ok { color: #4ade80; } .stat b.bad { color: #ff6b6b; }
+  .miss-btn { border: 0; background: none; color: var(--accent); font-size: .8rem; padding: 0 0 0 6px; cursor: pointer; }
+  .miss-btn:focus-visible { outline: 1px solid var(--accent); }
+  .miss-list { margin-top: 8px; font-size: .8rem; color: var(--term-text); }
   .tabs { display: inline-flex; background: var(--term2); border: 1px solid var(--term-line); border-radius: 8px; padding: 3px; gap: 3px; }
   .tabs a { padding: 6px 20px; font-size: .92rem; color: var(--term-text); text-decoration: none; white-space: nowrap; border-radius: 6px; }
   .tabs a.on { background: var(--accent); color: #1a1205; font-weight: 700; }
   .tabs a:not(.on):hover { background: var(--term-line); color: #fff; }
   .tabs a:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
-  .info { display: flex; flex-wrap: wrap; gap: 0; margin: 16px -20px 0; border-top: 1px solid var(--term-line); background: var(--term2); }
-  .info .kv { display: inline-flex; align-items: baseline; gap: 6px; padding: 9px 20px; border-right: 1px solid var(--term-line); font-size: .82rem; }
-  .info .k { color: #8ea0b8; }
-  .info b { font-family: var(--num); font-variant-numeric: tabular-nums; font-size: 1rem; color: #fff; font-weight: 600; }
-  .info .ok b { color: #4ade80; } .info .miss.has b { color: #ff6b6b; }
-  .info details { display: inline; }
-  .info summary { cursor: pointer; color: var(--accent); list-style: none; display: inline; margin-left: 4px; }
-  .info summary::-webkit-details-marker { display: none; }
-  .info .miss-list { display: block; margin-top: 4px; color: var(--term-text); }
   @media (max-width: 640px) {
-    .term { border-radius: 0; margin: 0 -12px; padding: 16px 16px 0; }
-    .info { margin: 14px -16px 0; }
-    .info .kv { flex: 1 1 50%; padding: 8px 16px; border-bottom: 1px solid var(--term-line); }
-    .term h1 { font-size: 1.5rem; }
+    .term { border-radius: 0; margin: 0 -12px; padding: 12px 16px; }
+    .term h1 { font-size: 1.3rem; }
   }
+
+  /* 區塊導覽（橫向、捲動時貼頂） */
+  .secnav { position: sticky; top: 0; z-index: 5; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none;
+            margin-top: 12px; padding: 6px; background: rgba(255, 255, 255, .94); backdrop-filter: blur(6px);
+            border: 1px solid var(--rule); border-radius: 10px; box-shadow: 0 2px 8px rgba(15, 27, 45, .06); }
+  .secnav::-webkit-scrollbar { display: none; }
+  .secnav a { flex: 0 0 auto; padding: 6px 14px; border-radius: 6px; font-size: .88rem; color: var(--body); text-decoration: none; white-space: nowrap; }
+  .secnav a:hover { background: var(--hover); color: var(--ink); }
+  .secnav a.on { background: var(--term); color: #fff; font-weight: 600; }
+  .secnav a:focus-visible { outline: 2px solid var(--steel); outline-offset: 1px; }
+  .sec { scroll-margin-top: 64px; }
+  @media (max-width: 640px) { .secnav { margin: 0 -12px; border-radius: 0; border-width: 0 0 1px; } }
 
   /* 面板 */
   .panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 0 18px 16px; margin-top: 16px;
@@ -200,24 +208,22 @@
     <div class="term-top">
       <div>
         <h1>主動式 ETF 日報</h1>
-        <div class="dek">{{ '積極型：排除「國外為主」「高股息」的主動式 ETF' if scope == 'aggr' else '不分類：全部追蹤中的主動式 ETF' }}</div>
+        <div class="stat" role="status">
+          <span>資料日 <b>{{ etf_status.date or '—' }}</b></span><span>追蹤 <b>{{ etf_codes|length }}</b> 檔</span><span>已抓取 <b class="ok">{{ etf_status.found|length }}</b></span><span>未抓取 <b class="{{ 'bad' if etf_status.missing else '' }}">{{ etf_status.missing|length }}</b>{% if etf_status.missing %}<button type="button" class="miss-btn" aria-expanded="false" aria-controls="miss-list">明細</button>{% endif %}</span>
+        </div>
       </div>
       <nav class="tabs" aria-label="日報範圍">
-        <a href="/etf?scope=all" class="{{ 'on' if scope == 'all' else '' }}" {{ 'aria-current="page"' if scope == 'all' else '' }}>不分類</a>
-        <a href="/etf?scope=aggr" class="{{ 'on' if scope == 'aggr' else '' }}" {{ 'aria-current="page"' if scope == 'aggr' else '' }}>積極型</a>
+        <a href="/etf?scope=all" title="全部追蹤中的主動式 ETF" class="{{ 'on' if scope == 'all' else '' }}" {{ 'aria-current="page"' if scope == 'all' else '' }}>不分類</a>
+        <a href="/etf?scope=aggr" title="排除「國外為主」「高股息」" class="{{ 'on' if scope == 'aggr' else '' }}" {{ 'aria-current="page"' if scope == 'aggr' else '' }}>積極型</a>
       </nav>
     </div>
-    <!-- 第一區：資訊條 -->
-    <div class="info" role="status">
-      <span class="kv"><span class="k">資料日</span><b>{{ etf_status.date or '—' }}</b></span>
-      <span class="kv"><span class="k">追蹤</span><b>{{ etf_codes|length }}</b><span class="k">檔</span></span>
-      <span class="kv ok"><span class="k">已抓取</span><b>{{ etf_status.found|length }}</b></span>
-      <span class="kv miss {{ 'has' if etf_status.missing else '' }}"><span class="k">未抓取</span><b>{{ etf_status.missing|length }}</b>
-        {% if etf_status.missing %}<details><summary>明細</summary>
-          <span class="miss-list">{% for m in etf_status.missing %}{{ m.code if m.code is defined else m }} {{ m.name if m.name is defined else '' }}{{ '、' if not loop.last }}{% endfor %}</span></details>{% endif %}
-      </span>
-    </div>
+    {% if etf_status.missing %}<div class="miss-list" id="miss-list" hidden>未抓取：{% for m in etf_status.missing %}{{ m.code if m.code is defined else m }} {{ m.name if m.name is defined else '' }}{{ '、' if not loop.last }}{% endfor %}</div>{% endif %}
   </header>
+
+  <!-- 區塊導覽 -->
+  <nav class="secnav" aria-label="頁面區塊">
+    <a href="#rank" class="on">增減排行</a><a href="#first">首次買進</a><a href="#nav">淨值折溢價</a><a href="#cross">跨 ETF 持有</a>
+  </nav>
 
   <!-- 第二區：排行榜 -->
   <section class="sec panel" id="rank">
@@ -332,6 +338,23 @@
   const zh = n => (Math.round(n / 1000)).toLocaleString('zh-TW');
   const big = n => Math.round((n || 0) / 1000) !== 0;
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // ---- 未抓取明細 ----
+  const mb = document.querySelector('.miss-btn'), ml = document.getElementById('miss-list');
+  if (mb && ml) mb.addEventListener('click', () => { ml.hidden = !ml.hidden; mb.setAttribute('aria-expanded', !ml.hidden); });
+
+  // ---- 區塊導覽：依捲動位置標示目前區塊 ----
+  const navLinks = [...document.querySelectorAll('.secnav a')];
+  const secs = navLinks.map(a => document.querySelector(a.getAttribute('href')));
+  const markNav = () => {
+    let i = 0;
+    secs.forEach((s, k) => { if (s && s.getBoundingClientRect().top < 120) i = k; });
+    if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 4) i = secs.length - 1;
+    navLinks.forEach((a, k) => { a.classList.toggle('on', k === i); if (k === i) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); });
+    const nv = navLinks[i].parentElement, l = navLinks[i];
+    if (l.offsetLeft < nv.scrollLeft || l.offsetLeft + l.offsetWidth > nv.scrollLeft + nv.clientWidth) nv.scrollLeft = l.offsetLeft - 8;
+  };
+  addEventListener('scroll', markNav, { passive: true }); markNav();
 
   // ---- 手機版排行切換 ----
   const ranks = document.querySelector('.ranks');
