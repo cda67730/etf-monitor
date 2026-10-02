@@ -1,0 +1,29 @@
+name: debug docker pdf
+on:
+  push:
+    branches: [debug-report]
+    paths: ['.github/workflows/debug-docker.yml']
+permissions:
+  contents: write
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: { ref: etf-report, path: app }
+      - run: docker build -t etfm app 2>&1 | tail -40 > build.log; echo "exit ${PIPESTATUS[0]}" >> build.log
+      - run: |
+          docker run --rm -u root -v $PWD:/out etfm python -c "
+          from weasyprint import HTML
+          HTML(string='<html><body style=\"font-family: Noto Sans CJK TC\"><h1>主動式 ETF 日報 測試</h1><p>台積電 +1,234 張</p></body></html>').write_pdf('/out/smoke.pdf')
+          import etf_report, weasyprint; print('ok', weasyprint.__version__)
+          " > run.log 2>&1 || true
+          docker run --rm etfm fc-list :lang=zh family >> run.log 2>&1 || true
+          docker images etfm --format '{{.Size}}' >> run.log
+      - run: |
+          sudo apt-get install -y poppler-utils >/dev/null 2>&1; pdffonts smoke.pdf >> run.log 2>&1 || true
+          mkdir -p debug/docker && mv build.log run.log debug/docker/ && cp smoke.pdf debug/docker/ 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add debug/docker && git commit -m "docker smoke" && git push
