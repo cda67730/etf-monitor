@@ -37,6 +37,7 @@ TPEX_IND = {"01": "水泥工業", "02": "食品工業", "03": "塑膠工業", "0
             "28": "電子零組件業", "29": "電子通路業", "30": "資訊服務業", "31": "其他電子業", "32": "文化創意業",
             "33": "農業科技業", "35": "綠能環保", "36": "數位雲端", "37": "運動休閒", "38": "居家生活"}
 zh = lambda sh: round((sh or 0) / 1000)
+MAX_DAYS = int(os.getenv("REPORT_MAX_DAYS", "10"))     # 報告最多可回看幾個資料日
 
 
 def etf_style(name):
@@ -249,7 +250,8 @@ class Report:
         trend_cache = {}
         def trend(c):
             if c not in trend_cache:
-                trend_cache[c] = dbq.get_stock_trend(c, 30)
+                # 補產舊日期時，只取該日（含）以前的 30 個資料日
+                trend_cache[c] = [t for t in dbq.get_stock_trend(c, 45) if t["date"] <= date][-30:]
             return trend_cache[c]
         def streak(c, sign):
             n = 0
@@ -614,20 +616,28 @@ def create_router(templates, check_authentication):
             raise HTTPException(status_code=400, detail="日期格式 YYYY-MM-DD")
         return date
 
+    async def within(request, date):
+        """沒登入只能產生最近 MAX_DAYS 個資料日（避免任意日期都去呼叫 AI）"""
+        recent = (await run_in_threadpool(report.dbq.get_available_dates))[:MAX_DAYS]
+        if date not in recent and not await check_authentication(request):
+            raise HTTPException(status_code=403, detail=f"只提供最近 {MAX_DAYS} 個資料日的報告")
+
     @router.get("/report/etf.pdf")
     async def report_pdf(request: Request, date: str = Query(None), scope: str = Query("aggr"), refresh: bool = Query(False)):
         """主動式 ETF 日報 PDF；refresh=1 強制重寫（需登入）"""
         date = await resolve(date, scope)
         if refresh and not await check_authentication(request):
             raise HTTPException(status_code=401, detail="重新產生需要登入")
+        await within(request, date)
         pdf = await run_in_threadpool(report.pdf, date, scope, templates, refresh)
         fn = f"etf_report_{scope}_{date.replace('-', '')}.pdf"
         return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{fn}"'})
 
     @router.get("/api/report/etf")
-    async def report_json(date: str = Query(None), scope: str = Query("aggr")):
+    async def report_json(request: Request, date: str = Query(None), scope: str = Query("aggr")):
         """日報說明與事實清單（JSON），給 BookReview 等外部程式用"""
         date = await resolve(date, scope)
+        await within(request, date)
         rep = await run_in_threadpool(report.get, date, scope)
         return JSONResponse({"date": date, "scope": scope, "model": rep["model"], "created": rep["created"], "notes": rep["notes"],
                              "ai": rep["ai"], "facts": {k: v for k, v in rep["facts"].items() if not k.startswith("_")}})

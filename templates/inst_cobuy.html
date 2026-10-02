@@ -27,8 +27,17 @@
   .duel-pick button { border: 0; background: none; padding: 4px 12px; font-size: .84rem; border-radius: 6px; color: var(--body); white-space: nowrap; }
   .duel-pick button.on { background: #fff; color: var(--ink); font-weight: 700; box-shadow: 0 1px 2px rgba(15, 27, 45, .12); }
   /* 今日觀察 */
-  #obs { padding-bottom: 14px; }
-  .obs-head { font-size: 1.22rem; font-weight: 700; color: var(--ink); margin: 12px 0 8px; line-height: 1.45; }
+  #obs { padding-bottom: 10px; }
+  .obs-head { font-size: 1.22rem; font-weight: 700; color: var(--ink); line-height: 1.45; }
+  /* 抽屜：預設收合，只露出一句話結論 */
+  .obs-drawer > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0 6px; }
+  .obs-drawer > summary::-webkit-details-marker { display: none; }
+  .obs-drawer > summary:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; border-radius: 4px; }
+  .obs-tog { flex: 0 0 auto; font-size: .82rem; font-weight: 600; color: var(--steel); border: 1px solid var(--rule); border-radius: 999px; padding: 3px 12px; white-space: nowrap; }
+  .obs-tog::after { content: "展開 ▾"; }
+  .obs-drawer[open] .obs-tog::after { content: "收合 ▴"; }
+  .obs-drawer > summary:hover .obs-tog { background: var(--hover); border-color: var(--steel); }
+  .obs-drawer[open] > .obs-bul { margin-top: 6px; }
   .obs-bul { list-style: none; padding: 0; margin: 0 0 4px; }
   .obs-bul li { display: flex; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px dashed var(--rule); font-size: .92rem; }
   .obs-bul li:last-child { border-bottom: 0; }
@@ -52,8 +61,28 @@
   .obs-risk { margin-top: 12px; background: #fff8e6; border: 1px solid #f6dfa5; border-radius: 8px; padding: 8px 12px; font-size: .86rem; color: #6b4e00; }
   @media (max-width: 860px) { .watch { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 640px) { .watch { grid-template-columns: 1fr; } .obs-head { font-size: 1.08rem; } }
+  #box tr.flash td { background: #fff4cc !important; transition: background-color .4s; }
   .foot { color: var(--mute); font-size: .78rem; margin-top: 14px; line-height: 1.7; }
-  @media (max-width: 640px) { .filters input[type=search] { width: 100%; flex: 1 1 100%; } .tbl td.l:not(.name) { flex: 0 0 auto; } }
+  /* 手機也維持表格，只留重要欄位 */
+  @media (max-width: 640px) {
+    .ed #box .sort-m { display: none; }
+    .ed #box .tbl { display: table; width: 100%; table-layout: auto; font-size: .82rem; }
+    .ed #box .tbl thead { display: table-header-group; }
+    .ed #box .tbl tbody { display: table-row-group; }
+    .ed #box .tbl tr { display: table-row; padding: 0; }
+    .ed #box .tbl th, .ed #box .tbl td { display: table-cell; padding: 7px 4px; border-bottom: 1px solid #f1f4f8; text-align: right; white-space: nowrap; }
+    .ed #box .tbl th:first-child, .ed #box .tbl td:first-child { text-align: left; padding-left: 0; }
+    .ed #box .tbl th { font-size: .7rem; }
+    .ed #box .tbl td[data-l]::before { content: none; }
+    .ed #box .tbl td.name, .ed #box .tbl th.l { text-align: left; }
+    .ed #box .tbl td.name { flex: none; max-width: 6.5em; overflow: hidden; text-overflow: ellipsis; }
+    .ed #box .tbl td.name .code { display: block; margin: 0; font-size: .68rem; }
+    .ed #box .tbl .m-hide { display: none; }
+    .ed #box .tbl td.hist-top { white-space: normal; text-align: left; }
+    .ed #box .tbl th button.sort i { margin-left: 2px; }
+    .ed #box .hot { min-width: 1.4em; padding: 0 3px; }
+  }
+  @media (max-width: 640px) { .filters { width: 100%; } .filters .duel-pick { flex: 1 1 100%; } .filters input[type=search] { width: auto; min-width: 0; flex: 1 1 120px; } .tbl td.l:not(.name) { flex: 0 0 auto; } }
 </style>
 
 <article class="ed">
@@ -66,8 +95,12 @@
       <div class="term-ctl">
         <label class="visually-hidden" for="date">日期</label>
         <select class="sel" id="date"></select>
-        <a id="pdf" href="/report/inst.pdf" class="btn-pdf" target="_blank" rel="noopener"
-           title="下載今日觀察報告 PDF（當天第一次產生約需 1 分鐘）"><i class="fas fa-file-arrow-down"></i> 今日報告下載</a>
+        <span class="dl">
+          <label class="visually-hidden" for="dl-date">報告日期</label>
+          <select class="dl-sel" id="dl-date"></select>
+          <a id="pdf" href="/report/inst.pdf" class="btn-pdf" target="_blank" rel="noopener"
+             title="下載今日觀察報告 PDF（該日第一次產生約需 1 分鐘）"><i class="fas fa-file-arrow-down"></i> 今日報告下載</a>
+        </span>
         <a id="csv" href="/api/inst-cobuy.csv" class="btn-csv"><i class="fas fa-file-csv"></i> CSV</a>
       </div>
     </div>
@@ -77,12 +110,14 @@
     <div class="sec-head">
       <div><h2>今日觀察</h2><div class="sub" id="obs-sub">AI 依當日盤後資料整理，數字經程式核對；非投資建議</div></div>
     </div>
-    <div class="obs-head" id="obs-head"></div>
-    <ul class="obs-bul" id="obs-bul"></ul>
-    <div class="watch" id="obs-watch"></div>
-    <details class="obs-more">
-      <summary>看完整解讀</summary>
-      <div id="obs-body"></div>
+    <details class="obs-drawer" id="obs-drawer">
+      <summary><span class="obs-head" id="obs-head"></span><span class="obs-tog" aria-hidden="true"></span></summary>
+      <ul class="obs-bul" id="obs-bul"></ul>
+      <div class="watch" id="obs-watch"></div>
+      <details class="obs-more">
+        <summary>看完整解讀</summary>
+        <div id="obs-body"></div>
+      </details>
     </details>
   </section>
 
@@ -103,10 +138,12 @@
         <span class="duel-pick" id="duel-pick" hidden role="group" aria-label="對作方向">
           <button type="button" data-d="0" class="on">全部</button><button type="button" data-d="1">投信買・外資賣</button><button type="button" data-d="-1">外資買・投信賣</button>
         </span>
+        <select class="sel" id="per" aria-label="統計期間">
+          <option value="0">當日</option><option value="5">近 5 日</option><option value="10">近 10 日</option>
+        </select>
         <select class="sel" id="minS" aria-label="最少連續天數">
           <option value="0">連續天數不限</option><option value="2">連續 ≥2 天</option><option value="3">連續 ≥3 天</option><option value="5">連續 ≥5 天</option><option value="10">連續 ≥10 天</option>
         </select>
-        <input class="sel" type="search" id="q" placeholder="搜尋代號或名稱" aria-label="搜尋代號或名稱">
       </div>
     </div>
     <div id="box"><div class="loading">載入中…</div></div>
@@ -126,35 +163,44 @@
   let IDX = null, DAY = null, tab = 'co', sortK = null, sortD = -1, duelDir = 0;
 
   // 欄位：[key, 標題, 型態, 手機隱藏]；型態 name＝股票、sgn＝帶正負、streak＝天數標色、ck＝打勾、n＝一般數字
+  // 欄位：[key, 標題, 型態, 手機隱藏]；標題盡量短，手機只留最重要的欄位
   function cols() {
     const n = DAY.n_days;
+    const w = per();
+    if (w && (tab === 'co' || tab === 'ft')) {
+      const p = tab === 'co' ? 'co' : 'ft';
+      return [['name', '股票', 'name'], [`${p}_s${w}`, '同買張', 'big'], [`${p}_d${w}`, '同買天', 'streak'], [`${p}_streak`, '連續天', 'streak'],
+        [`f${w}`, '外資', 'sgn'], [`t${w}`, '投信', 'sgn'], [`dl${w}`, '自營', 'sgn', 1], [`${p}_days`, `${n}日`, 'n', 1]];
+    }
     if (tab === 'co') return [
-      ['name', '股票', 'name'], ['total', '同買張數', 'big'], ['co_streak', '同買連續天數', 'streak'], ['co_days', `${n}日同買天數`, 'n'],
-      ['foreign', '外資', 'sgn'], ['foreign_streak', '外資連買', 'streak', 1], ['trust', '投信', 'sgn'], ['trust_streak', '投信連買', 'streak', 1],
-      ['dealer', '自營', 'sgn'], ['dealer_streak', '自營連買', 'streak', 1]];
+      ['name', '股票', 'name'], ['total', '同買張', 'big'], ['co_streak', '連續天', 'streak'], ['co_days', `${n}日`, 'n', 1],
+      ['foreign', '外資', 'sgn'], ['foreign_streak', '外連', 'streak', 1], ['trust', '投信', 'sgn'], ['trust_streak', '投連', 'streak', 1],
+      ['dealer', '自營', 'sgn', 1], ['dealer_streak', '自連', 'streak', 1]];
     if (tab === 'ft') return [
-      ['name', '股票', 'name'], ['ft_total', '同買張數', 'big'], ['ft_streak', '同買連續天數', 'streak'], ['ft_days', `${n}日同買天數`, 'n'],
-      ['foreign', '外資', 'sgn'], ['foreign_streak', '外資連買', 'streak', 1], ['trust', '投信', 'sgn'], ['trust_streak', '投信連買', 'streak', 1],
-      ['dealer', '自營', 'sgn', 1], ['cobuy', '三大同買', 'ck', 1]];
+      ['name', '股票', 'name'], ['ft_total', '同買張', 'big'], ['ft_streak', '連續天', 'streak'], ['ft_days', `${n}日`, 'n', 1],
+      ['foreign', '外資', 'sgn'], ['foreign_streak', '外連', 'streak', 1], ['trust', '投信', 'sgn'], ['trust_streak', '投連', 'streak', 1],
+      ['dealer', '自營', 'sgn', 1], ['cobuy', '三大', 'ck', 1]];
     if (tab === 'duel') return [
-      ['name', '股票', 'name'], ['duel', '方向', 'dir'], ['_duel_size', '對作量', 'big'], ['trust', '投信', 'sgn'], ['foreign', '外資', 'sgn'],
-      ['duel_streak', '對作連續天數', 'streak'], ['dealer', '自營', 'sgn', 1], ['total', '三大合計', 'sgn', 1]];
+      ['name', '股票', 'name'], ['duel', '方向', 'dir', 1], ['_duel_size', '對作量', 'big', 1], ['trust', '投信', 'sgn'], ['foreign', '外資', 'sgn'],
+      ['duel_streak', '連續天', 'streak'], ['dealer', '自營', 'sgn', 1], ['total', '合計', 'sgn', 1]];
     const k = tab;
-    return [['rank', '#', 'n'], ['name', '股票', 'name'], [k, `${W[k]}買超`, 'big'], [k + '_streak', '連買天數', 'streak'],
-      [k + '_days', `${n}日買超天數`, 'n', 1], [k + '_sum', `${n}日累計`, 'sgn', 1], ['total', '三大合計', 'sgn', 1], ['cobuy', '三大同買', 'ck']];
+    return [['rank', '#', 'n', 1], ['name', '股票', 'name'], [k, '買超', 'big'], [k + '_streak', '連買天', 'streak'],
+      [k + '_days', `${n}日`, 'n', 1], [k + '_sum', `${n}日累計`, 'sgn', 1], ['total', '合計', 'sgn'], ['cobuy', '三大', 'ck', 1]];
   }
+  const per = () => (tab === 'co' || tab === 'ft') ? +$('#per').value : 0;
+  const defKey = () => { const w = per(); return w ? `${tab === 'co' ? 'co' : 'ft'}_d${w}` : DEF[tab]; };
   const DEF = { co: 'total', ft: 'ft_total', duel: '_duel_size' };
   function rows() {
-    const q = $('#q').value.trim(), ms = +$('#minS').value;
+    const ms = +$('#minS').value, w = per();
     let r = DAY.rows;
-    if (tab === 'co') r = r.filter(x => x.cobuy);
-    else if (tab === 'ft') r = r.filter(x => x.ft_cobuy);
+    if (tab === 'co') r = r.filter(x => w ? x[`co_d${w}`] > 0 : x.cobuy);
+    else if (tab === 'ft') r = r.filter(x => w ? x[`ft_d${w}`] > 0 : x.ft_cobuy);
     else if (tab === 'duel') r = r.filter(x => x.duel && (!duelDir || x.duel === duelDir)).map(x => ({ ...x, _duel_size: Math.min(Math.abs(x.trust), Math.abs(x.foreign)) }));
     else r = r.filter(x => x[tab] > 0).sort((a, b) => b[tab] - a[tab]).slice(0, 300).map((x, i) => ({ ...x, rank: i + 1 }));
-    if (q) r = r.filter(x => x.id.includes(q) || (x.name || '').includes(q));
     if (ms) r = r.filter(x => (tab === 'co' ? x.co_streak : tab === 'ft' ? x.ft_streak : tab === 'duel' ? x.duel_streak : x[tab + '_streak']) >= ms);
-    const k = sortK || DEF[tab];
-    if (k) r = [...r].sort((a, b) => k === 'name' ? sortD * a.id.localeCompare(b.id) : sortD * ((a[k] ?? -1e18) - (b[k] ?? -1e18)) || b.total - a.total);
+    const k = sortK || defKey();
+    const tb = w ? `${tab === 'co' ? 'co' : 'ft'}_s${w}` : 'total';      // 同分時的次要排序
+    if (k) r = [...r].sort((a, b) => k === 'name' ? sortD * a.id.localeCompare(b.id) : sortD * ((a[k] ?? -1e18) - (b[k] ?? -1e18)) || (b[tb] || 0) - (a[tb] || 0));
     return r;
   }
   function cell(x, [k, , t, mh]) {
@@ -167,27 +213,29 @@
     if (t === 'big') return `<td data-l="${lab}" class="big${k === '_duel_size' ? '' : ' up'}${m}">${num(v)}</td>`;
     return `<td data-l="${lab}" class="${m}">${num(v)}</td>`;
   }
-  const sortIcon = k => (sortK || DEF[tab]) !== k ? 'fa-sort' : sortD < 0 ? 'fa-sort-down' : 'fa-sort-up';
+  const sortIcon = k => (sortK || defKey()) !== k ? 'fa-sort' : sortD < 0 ? 'fa-sort-down' : 'fa-sort-up';
   function render() {
     $('#duel-pick').hidden = tab !== 'duel';
-    $('#minS').hidden = $('#q').hidden = tab === 'hist';
+    $('#minS').hidden = tab === 'hist';
+    $('#per').hidden = !(tab === 'co' || tab === 'ft');
     const TT = { co: ['三大同買', '外資、投信、自營商當天都買超的股票，依同買張數排序'],
                  ft: ['外資投信同買', '外資和投信當天都買超（不管自營商），同買張數＝外資＋投信，依此排序'],
                  duel: ['土洋對作', '投信與外資當天一買一賣，依兩邊較小的張數（對作量）排序'],
                  hist: ['每日同買', `最近 ${IDX.dates.length} 個交易日，點日期切換`] };
-    const [h, sub] = TT[tab] || [`${W[tab]}買超`, `${W[tab]}當天買超前 300 名`];
-    $('#h2').textContent = h; $('#h2sub').textContent = sub + '，單位：張';
+    let [h, sub] = TT[tab] || [`${W[tab]}買超`, `${W[tab]}當天買超前 300 名`];
+    if (per()) { h += `（近 ${per()} 日）`; sub = `近 ${per()} 個交易日內至少同買 1 天，依同買天數、同買張排序；外資、投信為 ${per()} 日合計`; }
+    $('#h2').textContent = h; $('#h2sub').textContent = sub + '，單位：張' + (tab === 'hist' ? '' : '；連＝連買天數');
     if (tab === 'hist') return renderHist();
     const C = cols(), R = rows();
     $('#box').innerHTML = `<div class="sort-m" role="group" aria-label="排序">排序 ${C.filter(c => c[2] !== 'name' && c[0] !== 'rank' && c[2] !== 'dir' && c[2] !== 'ck').slice(0, 4).map(([k, t]) =>
-        `<button type="button" class="sort${(sortK || DEF[tab]) === k ? ' on' : ''}" data-k="${k}">${t}<i class="fas ${sortIcon(k)}"></i></button>`).join('')}</div>
+        `<button type="button" class="sort${(sortK || defKey()) === k ? ' on' : ''}" data-k="${k}">${t}<i class="fas ${sortIcon(k)}"></i></button>`).join('')}</div>
       <table class="tbl"><thead><tr>${C.map(([k, t, ty, mh]) => {
-        const on = (sortK || DEF[tab]) === k;
+        const on = (sortK || defKey()) === k;
         const inner = k === 'rank' || ty === 'dir' ? t : `<button type="button" class="sort${on ? ' on' : ''}" data-k="${k}">${t}<i class="fas ${sortIcon(k)}"></i></button>`;
-        return `<th class="${ty === 'name' || ty === 'dir' ? 'l' : ''}"${on ? ` aria-sort="${sortD < 0 ? 'descending' : 'ascending'}"` : ''}>${inner}</th>`; }).join('')}</tr></thead>
-      <tbody>${R.map(x => `<tr>${C.map(c => cell(x, c)).join('')}</tr>`).join('') || `<tr><td class="l" colspan="${C.length}"><div class="empty">沒有符合條件的個股。</div></td></tr>`}</tbody></table>`;
+        return `<th class="${ty === 'name' || ty === 'dir' ? 'l' : ''}${mh ? ' m-hide' : ''}"${on ? ` aria-sort="${sortD < 0 ? 'descending' : 'ascending'}"` : ''}>${inner}</th>`; }).join('')}</tr></thead>
+      <tbody>${R.map(x => `<tr data-id="${esc(x.id)}">${C.map(c => cell(x, c)).join('')}</tr>`).join('') || `<tr><td class="l" colspan="${C.length}"><div class="empty">沒有符合條件的個股。</div></td></tr>`}</tbody></table>`;
     $('#box').querySelectorAll('button.sort').forEach(b => b.onclick = () => {
-      const k = b.dataset.k, cur = sortK || DEF[tab];
+      const k = b.dataset.k, cur = sortK || defKey();
       sortD = cur === k ? -sortD : -1; sortK = k; render();
     });
   }
@@ -219,8 +267,9 @@
       $('#obs-watch').querySelectorAll('.wcard').forEach(b => b.onclick = () => {
         const x = byId[b.dataset.code] || {};
         setTab(x.cobuy ? 'co' : x.ft_cobuy ? 'ft' : x.duel ? 'duel' : 'co');
-        $('#q').value = b.dataset.code; render();
-        document.getElementById('tabs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        $('#per').value = '0'; $('#minS').value = '0'; render();
+        const tr = $('#box').querySelector(`tr[data-id="${b.dataset.code}"]`);
+        if (tr) { tr.scrollIntoView({ behavior: 'smooth', block: 'center' }); tr.classList.add('flash'); setTimeout(() => tr.classList.remove('flash'), 2400); }
       });
       box.hidden = false;
     } catch (e) { box.hidden = true; }
@@ -237,7 +286,8 @@
       `土洋對作 <b>${du.length}</b> 檔`].map(s => `<span>${s}</span>`).join('');
     $('#n-co').textContent = co.length; $('#n-ft').textContent = ft.length; $('#n-duel').textContent = du.length;
     $('#csv').href = `/api/inst-cobuy.csv?date=${DAY.date}`;
-    $('#pdf').href = `/report/inst.pdf?date=${DAY.date}`;
+    if ([...$('#dl-date').options].some(o => o.value === DAY.date)) $('#dl-date').value = DAY.date;
+    $('#pdf').href = `/report/inst.pdf?date=${$('#dl-date').value || DAY.date}`;
     loadObs(DAY.date);
     render();
   }
@@ -247,13 +297,16 @@
     IDX = await r0.json();
     if (!IDX.dates.length) throw new Error('資料庫還沒有資料（首次啟動會自動匯入，約 1 分鐘後重新整理）');
     $('#date').innerHTML = IDX.dates.map(d => `<option value="${d}">${fd(d)}</option>`).join('');
+    $('#dl-date').innerHTML = IDX.dates.slice(0, 10).map(d => `<option value="${d}">${fd(d).slice(5)}</option>`).join('');
+    $('#dl-date').onchange = () => { $('#pdf').href = `/report/inst.pdf?date=${$('#dl-date').value}`; };
     await loadDay(IDX.dates[0]);
   }
   $('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; setTab(b.dataset.t); render(); };
   $('#duel-pick').onclick = e => { const b = e.target.closest('button'); if (!b) return; duelDir = +b.dataset.d;
     $('#duel-pick').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); render(); };
   $('#date').onchange = e => loadDay(e.target.value).catch(err => { $('#box').innerHTML = `<div class="empty">${esc(err.message)}</div>`; });
-  ['#q', '#minS'].forEach(s => $(s).addEventListener('input', render));
+  $('#minS').addEventListener('input', render);
+  $('#per').addEventListener('input', () => { sortK = null; sortD = -1; render(); });
   init().catch(e => { $('#stat').innerHTML = `<span>資料載入失敗：${esc(e.message)}</span>`; $('#box').innerHTML = ''; });
 })();
 </script>
