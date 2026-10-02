@@ -172,6 +172,6 @@
       <td class="{{ 'up' if nt > 0 else 'down' if nt < 0 else 'mute' }}">{{ ('▲ ' ~ (nt|n)) if nt > 0 else ('▼ ' ~ (nt|abs|n)) if nt < 0 else '持平' }}</td>
       <td class="l">{{ r.spark|safe }}</td></tr>
   {% endfor %}</tbody></table>
-  <div class="disc">以上為 AI 輔助整理的投資筆記，非投資建議，資料日期 {{ f['資料日'] }}，數據以官方公告為準，請自行查證，切勿直接投資。大盤與三大法人金額取自臺灣證券交易所盤後資料；說明由 {{ 'AI（' ~ model ~ '）撰寫並經程式核對數字' if model != 'template' else '程式依規則產生' }}；張數為各 ETF 揭露持股換算（1 張＝1,000 股）。</div>
+  <div class="disc">以上為 AI 輔助整理的投資筆記，非投資建議，資料日期 {{ f['資料日'] }}，數據以官方公告為準，請自行查證，切勿直接投資。大盤與三大法人金額取自臺灣證券交易所盤後資料；說明由 {{ ('AI（' ~ model.replace('+查證', '') ~ '）撰寫' ~ ('、經 Google 搜尋查證' if '+查證' in model else '') ~ '，並由程式核對數字') if model != 'template' else '程式依規則產生' }}；張數為各 ETF 揭露持股換算（1 張＝1,000 股）。</div>
 </section>
 </body></html>

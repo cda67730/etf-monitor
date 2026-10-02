@@ -3,13 +3,17 @@
 流程：
 1. 程式從資料庫與證交所／櫃買盤後資料算出「事實清單」（數字都在這一層決定）
 2. 把事實清單接上提示詞（templates/report_prompt.txt）交給 Gemini 寫說明
-3. 檢查說明裡的每個數字都能在事實清單找到；對不上的段落改用程式模板句子
-4. 用 WeasyPrint 把 templates/report_pdf.html 轉成 PDF
+3. 查證：把初稿連同事實清單再交給 Gemini（開 Google 搜尋）逐句核對，數字對照清單、
+   清單以外的敘述上網查證，查不到或有誤就改寫或刪掉（templates/verify_prompt.txt）
+   查證失敗（API 錯誤、回應無法解析）時不採用 AI 文字，全部改用程式模板句子
+4. 程式再檢查一次說明裡的每個數字都能在事實清單找到；對不上的段落改用程式模板句子
+5. 用 WeasyPrint 把 templates/report_pdf.html 轉成 PDF
 
 環境變數：
   GEMINI_API_KEY          沒設就全部用程式模板句子
   GEMINI_MODEL            預設 gemini-3.1-pro-preview
   GEMINI_FALLBACK_MODEL   主模型失敗時改用，預設 gemini-3.8-flash
+  GEMINI_VERIFY           預設 true；設 false 跳過第 3 步查證（不建議）
 """
 import datetime as dt
 import hashlib
@@ -28,6 +32,7 @@ logger = logging.getLogger(__name__)
 KEY = os.getenv("GEMINI_API_KEY", "").strip()
 MODELS = [m for m in (os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview").strip(),
                       os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.8-flash").strip()) if m]
+VERIFY = os.getenv("GEMINI_VERIFY", "true").strip().lower() not in ("0", "false", "no", "off")
 HERE = os.path.dirname(os.path.abspath(__file__))
 UA = {"User-Agent": "Mozilla/5.0 (etf-monitor report)"}
 TPEX_IND = {"01": "水泥工業", "02": "食品工業", "03": "塑膠工業", "04": "紡織纖維", "05": "電機機械", "06": "電器電纜",
@@ -365,36 +370,90 @@ class Report:
         return tpl.replace("{facts}", json.dumps(clean, ensure_ascii=False, indent=1))
 
     @staticmethod
-    def _gemini(model, prompt):
+    def _gemini(model, prompt, search=False):
+        """回傳 (JSON 物件, 搜尋紀錄)。search=True 時開 Google 搜尋（此時不指定 JSON 回應格式，從文字裡取出 JSON）"""
+        body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+        if search:
+            body["tools"] = [{"google_search": {}}]
+        else:
+            body["generationConfig"] = {"responseMimeType": "application/json"}
         r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                          headers={"x-goog-api-key": KEY, "Content-Type": "application/json"}, timeout=240,
-                          json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                                "generationConfig": {"responseMimeType": "application/json"}})
+                          headers={"x-goog-api-key": KEY, "Content-Type": "application/json"}, timeout=300, json=body)
         if r.status_code != 200:
             raise RuntimeError(f"HTTP {r.status_code}: {r.text[:300]}")
-        parts = (((r.json().get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
-        text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
-        return json.loads(text)
+        cand = (r.json().get("candidates") or [{}])[0]
+        parts = (cand.get("content") or {}).get("parts") or []
+        text = "".join(p.get("text", "") for p in parts if not p.get("thought")).strip()
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
+        if search and not text.startswith("{"):
+            i, j = text.find("{"), text.rfind("}")
+            if i < 0 or j < i:
+                raise ValueError(f"回應沒有 JSON：{text[:120]!r}")
+            text = text[i:j + 1]
+        gm = cand.get("groundingMetadata") or {}
+        meta = {"queries": gm.get("webSearchQueries") or [],
+                "sources": [c["web"].get("title") or c["web"].get("uri") for c in gm.get("groundingChunks") or [] if c.get("web")]}
+        return json.loads(text), meta
+
+    def verify(self, model, facts, draft):
+        """第二次呼叫：連同事實清單把初稿交回 Gemini，開 Google 搜尋逐句查證；回傳 (修正後的稿, 修改說明, 搜尋紀錄)"""
+        tpl = open(os.path.join(HERE, "templates", "verify_prompt.txt"), encoding="utf-8").read()
+        clean = {k: v for k, v in facts.items() if not k.startswith("_")}
+        p = (tpl.replace("{date}", str(facts.get("資料日", "")))
+                .replace("{facts}", json.dumps(clean, ensure_ascii=False, indent=1))
+                .replace("{draft}", json.dumps(draft, ensure_ascii=False, indent=1)))
+        res, meta = self._gemini(model, p, search=True)
+        fixed = res.get("draft") if isinstance(res, dict) else None
+        if not isinstance(fixed, dict) or not fixed:
+            raise ValueError("查證回應缺少 draft")
+        missing = [k for k in draft if k not in fixed]
+        if missing:
+            raise ValueError(f"查證回應少了欄位：{'、'.join(missing[:5])}")
+        return fixed, [str(c) for c in (res.get("changes") or [])], meta
 
     def write(self, facts):
-        """回傳 (ai, model, notes)；notes 記錄哪些段落被換成模板句子"""
+        """回傳 (ai, model, notes)；notes 記錄查證修改、搜尋關鍵字與哪些段落被換成模板句子"""
         tpl = self.fallback(facts)
         notes = []
         if not KEY:
             return tpl, "template", ["未設定 GEMINI_API_KEY，全部使用程式模板"]
         p = self.prompt(facts)
-        for model in MODELS:
+        draft, by = None, None
+        for model in MODELS:                                   # 1. 初稿
             try:
-                ai = self._gemini(model, p)
-                ai, fixed = merge_checked(facts, ai, tpl)
-                if fixed:
-                    notes.append(f"{model}：{len(fixed)} 處數字對不上，改用模板：{'、'.join(fixed[:8])}")
-                return ai, model, notes
+                draft, _ = self._gemini(model, p)
+                by = model
+                break
             except Exception as e:
-                notes.append(f"{model} 失敗：{str(e)[:200]}")
-                logger.warning(f"[report] {model} 失敗：{e}")
-        return tpl, "template", notes
+                notes.append(f"{model} 初稿失敗：{str(e)[:200]}")
+                logger.warning(f"[{self.TAG}] {model} 初稿失敗：{e}")
+        if draft is None:
+            return tpl, "template", notes
+        if VERIFY:                                             # 2. 查證（初稿模型優先，失敗換另一個）
+            done = False
+            for model in [by] + [m for m in MODELS if m != by]:
+                try:
+                    t0 = time.time()
+                    draft, changes, meta = self.verify(model, facts, draft)
+                    notes.append(f"{model} 查證：修改 {len(changes)} 處（{time.time() - t0:.0f} 秒）" +
+                                 ("：" + "；".join(c[:80] for c in changes[:10]) if changes else ""))
+                    if meta["queries"]:
+                        notes.append("搜尋：" + "、".join(meta["queries"][:10]))
+                    if meta["sources"]:
+                        notes.append("來源：" + "、".join(list(dict.fromkeys(meta["sources"]))[:10]))
+                    logger.info(f"[{self.TAG}] {facts.get('資料日')} {model} 查證完成，修改 {len(changes)} 處")
+                    by, done = (by if model == by else f"{by}／{model}") + "+查證", True
+                    break
+                except Exception as e:
+                    notes.append(f"{model} 查證失敗：{str(e)[:200]}")
+                    logger.warning(f"[{self.TAG}] {model} 查證失敗：{e}")
+            if not done:                                       # 沒查證過的文字不用
+                notes.append("查證全部失敗，不採用 AI 文字，改用程式模板")
+                return tpl, "template", notes
+        ai, fixed = merge_checked(facts, draft, tpl)          # 3. 程式核對數字
+        if fixed:
+            notes.append(f"{len(fixed)} 處數字對不上或查證後刪除，改用模板：{'、'.join(fixed[:8])}")
+        return ai, by, notes
 
     # ---- 對外
     def stored(self, date, scope):
