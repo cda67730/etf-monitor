@@ -27,7 +27,7 @@ cross = get(f"{B}/api/cross-holdings?scope=all&date={D}", "cross.json")
 get(f"{B}/api/first-buys?scope=all&date={D}", "first_buys.json")
 html = get(f"{B}/etf?scope=all", "etf_all.html", kind="text")
 codes = sorted(set(re.findall(r'data-stock="([^"]+)"', html or "")))
-for r in (cross or {}).get("rows", [])[:20]:
+for r in sorted((cross or {}).get("rows", []), key=lambda r: (-r["etf_count"], -r["total_shares"]))[:40]:
     codes.append(r["stock_code"])
 for c in sorted(set(codes)):
     get(f"{B}/api/stock-trend?scope=all&days=30&stock_code={c}", f"trend_{c}.json")
