@@ -1,8 +1,9 @@
 import requests, json
-H={"User-Agent":"Mozilla/5.0"}
-r=requests.post("https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes",data={"date":"2026/10/01","id":"","response":"json"},headers=H,timeout=60)
-j=r.json(); t=j["tables"][0]
-out=[str(j.get("date")), json.dumps(t.get("fields"),ensure_ascii=False)]+[json.dumps(x,ensure_ascii=False) for x in t["data"][:3]]
-for code in ("3293","6147","5347","3105","8069"):
-    out+= [json.dumps(x,ensure_ascii=False) for x in t["data"] if x[0]==code]
-open("debug/tpex_result.txt","w").write("\n".join(out)); print("\n".join(out))
+r=requests.post("https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes",data={"date":"2026/10/01","id":"","response":"json"},headers={"User-Agent":"Mozilla/5.0"},timeout=60)
+t=r.json()["tables"][0]; out={}
+for x in t["data"]:
+    try:
+        c=float(x[2].replace(",","")); d=float(x[3].strip().replace("+","").replace(",",""))
+        out[x[0]]=round(d/(c-d)*100,2) if c-d else 0.0
+    except Exception: pass
+json.dump(out,open("debug/report/tpex_pct.json","w"),ensure_ascii=False); print(len(out))
