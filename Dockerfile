@@ -13,9 +13,12 @@ ENV PIP_NO_CACHE_DIR=1
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # 安裝系統依賴
-RUN apt-get update && apt-get install -y \
+# 日報 PDF：WeasyPrint 需要 Pango，中文用思源黑體（fonts-noto-cjk）
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     curl \
+    libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libharfbuzz-subset0 \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 

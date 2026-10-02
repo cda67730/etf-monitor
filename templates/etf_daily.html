@@ -15,10 +15,14 @@
           <span>資料日 <b>{{ etf_status.date or '—' }}</b></span><span>追蹤 <b>{{ etf_codes|length }}</b> 檔</span><span>已抓取 <b class="ok">{{ etf_status.found|length }}</b></span><span>未抓取 <b class="{{ 'bad' if etf_status.missing else '' }}">{{ etf_status.missing|length }}</b>{% if etf_status.missing %}<button type="button" class="miss-btn" aria-expanded="false" aria-controls="miss-list">明細</button>{% endif %}</span>
         </div>
       </div>
+      <div class="term-ctl">
+      <a class="btn-pdf" href="/report/etf.pdf?scope={{ scope }}{% if dates %}&date={{ dates[0] }}{% endif %}" target="_blank" rel="noopener"
+         title="下載當日日報 PDF（含 AI 說明；當天第一次產生約需 1 分鐘）"><i class="fas fa-file-pdf"></i> PDF</a>
       <nav class="tabs" aria-label="日報範圍">
         <a href="/etf?scope=all" title="全部追蹤中的主動式 ETF" class="{{ 'on' if scope == 'all' else '' }}" {{ 'aria-current="page"' if scope == 'all' else '' }}>不分類</a>
         <a href="/etf?scope=aggr" title="排除「國外為主」「高股息」" class="{{ 'on' if scope == 'aggr' else '' }}" {{ 'aria-current="page"' if scope == 'aggr' else '' }}>積極型</a>
       </nav>
+      </div>
     </div>
     {% if etf_status.missing %}<div class="miss-list" id="miss-list" hidden>未抓取：{% for m in etf_status.missing %}{{ m.code if m.code is defined else m }} {{ m.name if m.name is defined else '' }}{{ '、' if not loop.last }}{% endfor %}</div>{% endif %}
   </header>
