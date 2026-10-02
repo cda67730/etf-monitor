@@ -1,5 +1,7 @@
 date 2026-10-01
 OK etf_day.json 2814
+OK decreased.html 213009
+OK isin_twse.html 8875693
 OK etf_day_aggr.json 2112
 OK etfs.json 2214
 OK cross.json 121010
@@ -68,10 +70,9 @@ OK hold_00405A.json 7226
 OK hold_00403A.json 7868
 OK hold_00994A.json 6438
 OK inst.json 432705
-FAIL twse_index.json https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20261001&type=IND&response=json Expecting value: line 1 column 1 (char 0)
+OK twse_index.json 28314
 OK twse_all.json 246803
 OK twse_bfi82u.json 1566
 OK twse_fmtqik.json 621
 FAIL tpex_daily.json https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQ?date=2026/10/01&type=EW&response=json Expecting value: line 1 column 1 (char 0)
-FAIL twse_company.json https://openapi.twse.com.tw/v1/opendata/t187ap03_L Expecting value: line 1 column 1 (char 0)
 OK tpex_company.json 1073220
