@@ -42,7 +42,7 @@
   - 注意：欄位名稱比對時「不含外資自營商」字樣會誤中排除條件（已修正過一次）
 - 定義：張＝股數/1000 四捨五入，≥1 張才算買超；只含 4 碼普通股／KY；連買天數上限 `N=40`；頁面可切換最近 20 個交易日（需 60 個交易日資料）
 - 目前：APScheduler 工作 `inst`（平日 18:20，`SCHED_INST`）寫入 PostgreSQL；啟動時背景匯入 `inst_cobuy/data/*.csv`（只補缺的日期）
-- 頁面樣式與 ETF 日報共用 `templates/_ed_css.html`；分頁：三大同買、外資投信同買（`ft_cobuy`／`ft_streak`／`ft_days`／`ft_total`）、土洋對作（`duel`：1＝投信買外資賣、-1＝外資買投信賣，`duel_streak` 同方向連續天數）、外資／投信／自營買超、每日同買；頁面不顯示上市櫃欄位；欄位標題用短字（同買張、連續天、外連、投連…），手機版仍維持表格，只留 股票／同買張／連續天／外資／投信；「今日觀察」是預設收合的抽屜（只露出一句話結論）
+- 頁面樣式與 ETF 日報共用 `templates/_ed_css.html`；分頁：三大同買、外資投信同買（`ft_cobuy`／`ft_streak`／`ft_days`／`ft_total`）、土洋對作（`duel`：1＝投信買外資賣、-1＝外資買投信賣，`duel_streak` 同方向連續天數）、外資／投信／自營買超、每日同買；頁面不顯示上市櫃欄位；欄位標題用短字（同買張、連續天、外連、投連…），手機版仍維持表格，只留 股票／同買張／連續天／外資／投信；「今日觀察」是預設收合的抽屜（只露出一句話結論）；預設分頁是「外資投信同買」
 - 所有分頁（每日同買除外）都有期間下拉（當日／近 5 日／近 10 日）：`compute()` 另算 `co_d{5,10}`（同買天數）、`co_s{5,10}`（同買日張數合計）、`ft_d*`、`ft_s*`、`f/t/dl{5,10}`（各法人淨買賣合計）、`foreign/trust/dealer_d{5,10}`（期間買超天數）、`duel{5,10}`（以期間合計判斷的對作方向）與 `duel_d{5,10}`；回傳的 rows 含近 10 日內任一法人買超過的股票（約 1,900 檔、1.4MB，靠 GZip 壓縮），各分頁自行過濾；頁面不提供搜尋框
 - 全站加 `GZipMiddleware`（BookReview 的 requests 會自動解壓，不影響）
 - 頁面 `/inst-cobuy`、API `/api/inst-cobuy/dates`、`/api/inst-cobuy?date=`、`/api/inst-cobuy.csv?date=`；預設公開，`INST_COBUY_PUBLIC=false` 改為需登入
@@ -84,8 +84,8 @@
 ## 期貨籌碼（fut_flow）
 - 來源：POST `https://www.taifex.com.tw/cht/3/futContractsDateDown`（queryStartDate／queryEndDate `YYYY/MM/DD`、commodityId 空白＝全部），回 CP950 CSV，一次最多查一年；免金鑰，Actions 機房連得到
 - 存 `fut_inst`（d, product, inst, net_trade, long_oi, short_oi, net_oi, net_oi_amt）；身份別原文「外資及陸資」「投信」「自營商」
-- 頁面 8 張圖（股票期貨、金融期貨、那斯達克100、道瓊、台指期、電子期貨、標普500、費城半導體）＝未平倉多空淨額（口，所有月份合計）；可切外資／投信／自營商、近 3 月～2 年；手機 2 欄小卡，點卡片放大
-- 排程 `fut` 平日 15:10、18:10（`SCHED_FUT`）；資料庫空的時候啟動即背景補兩年（約 1.2 萬筆，批次寫入）
+- 頁面 8 張圖（股票期貨、金融期貨、那斯達克100、道瓊、台指期、電子期貨、標普500、費城半導體）＝未平倉多空淨額（口，所有月份合計）；可切外資／投信／自營商，固定顯示近半年（120 個交易日）；手機 2 欄小卡，點卡片放大
+- 排程 `fut` 平日 15:10、18:10（`SCHED_FUT`）；資料庫空的時候啟動即背景補約一年（`BACKFILL_DAYS=400`，批次寫入）
 - 公開頁，不需登入
 
 ## 日報 PDF（etf_report.py）
@@ -98,6 +98,7 @@
 - Docker 需 Pango 與 `fonts-noto-cjk`（思源黑體）
 - 三大法人今日觀察（`inst_report.py`，繼承 `etf_report.Report`）：存同一張 `etf_report` 表（scope='inst'）；提示詞 `templates/inst_observe_prompt.txt`、PDF `templates/inst_report_pdf.html`
   - `GET /report/inst.pdf?date=`（YYYYMMDD 或 YYYY-MM-DD）、`GET /api/inst-cobuy/observe?date=`（只讀已產生的，不觸發 AI；沒有回 404，網頁區塊就隱藏）
+  - PDF 三大同買表列出前 `LIST_MAX`=45 檔（事實鍵 `_三大同買清單`，底線開頭不送 Gemini；舊報告缺這鍵時 render 只重算事實補上，不重呼叫 AI）
   - 排程 `inst_report` 平日 18:40、20:40（`SCHED_INST_REPORT`）；指紋含當日三大法人與主動 ETF 異動，資料沒變不重寫
 - 按鈕：ETF 日報頁「ETF 報告下載」、三大法人頁「今日報告下載」，旁邊有日期下拉（最近 10 個資料日）；沒登入只能產生最近 `REPORT_MAX_DAYS`（預設 10）個資料日，避免任意日期觸發 AI
 - 補產舊日期時，趨勢圖與連續天數只取該日（含）以前的資料

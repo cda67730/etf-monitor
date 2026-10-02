@@ -10,6 +10,7 @@ import etf_report as ER
 
 logger = logging.getLogger(__name__)
 SCOPE = "inst"
+LIST_MAX = 45        # PDF 三大同買表最多列幾檔
 
 
 def ymd(date):
@@ -95,6 +96,7 @@ class InstReport(ER.Report):
                      "投信連買5天以上": sum(1 for r in rows if r["trust_streak"] >= 5),
                      "外資連買5天以上": sum(1 for r in rows if r["foreign_streak"] >= 5)},
             "三大同買前15": [card(r, K3) for r in co[:15]],
+            "_三大同買清單": [card(r, K3) for r in co[:LIST_MAX]],      # PDF 表格用（底線開頭不送 AI）
             "連續同買2天以上": [card(r, K3) for r in sorted([r for r in co if r["co_streak"] >= 2], key=lambda r: (-r["co_streak"], -r["total"]))[:10]],
             "三大同買族群彙總": sec,
             "三大同買股價表現": {"有股價的檔數": sum(1 for r in co if price.get(r["id"]) is not None),
@@ -147,6 +149,11 @@ class InstReport(ER.Report):
         env.filters.setdefault("n", lambda v: "—" if v is None else f"{v:,.0f}")
         env.filters.setdefault("pct", lambda v: "—" if v is None else f"{v:+.2f}%")
         f = rep["facts"]
+        if "_三大同買清單" not in f:                    # 舊版報告只存前 15 檔：只重算事實補清單，不重呼叫 AI
+            try:
+                f = {**f, "_三大同買清單": self.build_facts(f["資料日"])["_三大同買清單"]}
+            except Exception as e:
+                logger.warning(f"[{self.TAG}] 補三大同買清單失敗：{e}")
         stock = {}
         for v in f.values():
             if isinstance(v, list):

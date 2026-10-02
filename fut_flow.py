@@ -19,7 +19,7 @@ from starlette.concurrency import run_in_threadpool
 logger = logging.getLogger(__name__)
 URL = "https://www.taifex.com.tw/cht/3/futContractsDateDown"
 UA = {"User-Agent": "Mozilla/5.0 (etf-monitor futures)"}
-BACKFILL_DAYS = 730
+BACKFILL_DAYS = 400      # 頁面只畫近半年，補一年多留餘裕
 INSTS = {"foreign": "外資及陸資", "trust": "投信", "dealer": "自營商"}
 # 頁面上的 8 張圖（順序照畫面兩排）：(期交所商品名稱, 短名)
 PRODUCTS = [
@@ -107,7 +107,7 @@ class FutStore:
             return f"寫入 {total} 筆，最新 {self.last_date()}"
 
     # ---------- 查詢 ----------
-    def series(self, inst="foreign", days=250):
+    def series(self, inst="foreign", days=120):
         key = (inst, days)
         if key in self._cache:
             return self._cache[key]
@@ -166,7 +166,7 @@ def create_router(templates):
         return templates.TemplateResponse("futures.html", {"request": request, "products": PRODUCTS, "insts": INSTS})
 
     @router.get("/api/futures")
-    async def futures_api(inst: str = Query("foreign"), days: int = Query(250, ge=20, le=750)):
+    async def futures_api(inst: str = Query("foreign"), days: int = Query(120, ge=20, le=750)):
         if not store:
             raise HTTPException(status_code=503, detail="資料庫無法使用")
         if inst not in INSTS:

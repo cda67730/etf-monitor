@@ -65,12 +65,6 @@
         <div class="tabs" role="tablist" aria-label="法人">
           {% for k, v in insts.items() %}<button type="button" role="tab" data-inst="{{ k }}"{% if loop.first %} class="on" aria-selected="true"{% endif %}>{{ '外資' if k == 'foreign' else v }}</button>{% endfor %}
         </div>
-        <select class="dl-sel" id="days" aria-label="期間">
-          <option value="60">近 3 月</option>
-          <option value="120">近 6 月</option>
-          <option value="250" selected>近 1 年</option>
-          <option value="500">近 2 年</option>
-        </select>
       </div>
     </div>
   </header>
@@ -87,7 +81,7 @@
   </div>
 
   <p class="note">
-    數字是<b>未平倉多空淨額（口）</b>，所有月份合計：正值＝淨多單（紅）、負值＝淨空單（綠）。卡片上的「日」「5 日」是淨額比前 1／5 個交易日的增減。
+    近半年走勢。數字是<b>未平倉多空淨額（口）</b>，所有月份合計：正值＝淨多單（紅）、負值＝淨空單（綠）。卡片上的「日」「5 日」是淨額比前 1／5 個交易日的增減。
     股票期貨是所有個股期貨口數加總（各檔契約大小不同，只看方向與變化）。點卡片可放大。資料來源：臺灣期貨交易所「三大法人－區分各期貨契約」，每個交易日約 15:00 後更新。
   </p>
 </article>
@@ -108,7 +102,8 @@
   const sgn = n => n == null ? '—' : (n > 0 ? '+' : '') + n.toLocaleString('en-US');
   const cls = n => n > 0 ? 'up' : n < 0 ? 'down' : '';
   const md = d => d.slice(5).replace('-', '/');
-  let inst = 'foreign', days = 250, data = null, charts = [], big = null;
+  let inst = 'foreign', days = 120,      // 固定顯示近半年
+      data = null, charts = [], big = null;
 
   function chart(cv, dates, vals, large) {
     return new Chart(cv, {
@@ -137,7 +132,7 @@
     charts.forEach(c => c.destroy()); charts = [];
     const { dates, products } = data;
     const stat = document.getElementById('stat');
-    if (!dates.length) { stat.innerHTML = '<span>尚無資料（首次部署會在背景補兩年資料，約 1 分鐘後重新整理）</span>'; return; }
+    if (!dates.length) { stat.innerHTML = '<span>尚無資料（首次部署會在背景補一年資料，約 1 分鐘後重新整理）</span>'; return; }
     const tx = products.find(p => p.short === '台指期');
     const name = inst === 'foreign' ? '外資' : data.inst_name;
     stat.innerHTML = `<span>資料日 <b>${dates[dates.length - 1].replace(/-/g, '/')}</b></span>` +
@@ -173,7 +168,6 @@
     document.querySelectorAll('.tabs button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); });
     inst = b.dataset.inst; load();
   }));
-  document.getElementById('days').addEventListener('change', e => { days = +e.target.value; load(); });
 
   const dlg = document.getElementById('dlg');
   document.querySelectorAll('.fcard').forEach((el, i) => el.addEventListener('click', () => {
