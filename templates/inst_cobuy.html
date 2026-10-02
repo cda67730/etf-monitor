@@ -66,8 +66,12 @@
       <div class="term-ctl">
         <label class="visually-hidden" for="date">日期</label>
         <select class="sel" id="date"></select>
-        <a id="pdf" href="/report/inst.pdf" class="btn-pdf" target="_blank" rel="noopener"
-           title="下載今日觀察報告 PDF（當天第一次產生約需 1 分鐘）"><i class="fas fa-file-arrow-down"></i> 今日報告下載</a>
+        <span class="dl">
+          <label class="visually-hidden" for="dl-date">報告日期</label>
+          <select class="dl-sel" id="dl-date"></select>
+          <a id="pdf" href="/report/inst.pdf" class="btn-pdf" target="_blank" rel="noopener"
+             title="下載今日觀察報告 PDF（該日第一次產生約需 1 分鐘）"><i class="fas fa-file-arrow-down"></i> 今日報告下載</a>
+        </span>
         <a id="csv" href="/api/inst-cobuy.csv" class="btn-csv"><i class="fas fa-file-csv"></i> CSV</a>
       </div>
     </div>
@@ -237,7 +241,8 @@
       `土洋對作 <b>${du.length}</b> 檔`].map(s => `<span>${s}</span>`).join('');
     $('#n-co').textContent = co.length; $('#n-ft').textContent = ft.length; $('#n-duel').textContent = du.length;
     $('#csv').href = `/api/inst-cobuy.csv?date=${DAY.date}`;
-    $('#pdf').href = `/report/inst.pdf?date=${DAY.date}`;
+    if ([...$('#dl-date').options].some(o => o.value === DAY.date)) $('#dl-date').value = DAY.date;
+    $('#pdf').href = `/report/inst.pdf?date=${$('#dl-date').value || DAY.date}`;
     loadObs(DAY.date);
     render();
   }
@@ -247,6 +252,8 @@
     IDX = await r0.json();
     if (!IDX.dates.length) throw new Error('資料庫還沒有資料（首次啟動會自動匯入，約 1 分鐘後重新整理）');
     $('#date').innerHTML = IDX.dates.map(d => `<option value="${d}">${fd(d)}</option>`).join('');
+    $('#dl-date').innerHTML = IDX.dates.slice(0, 10).map(d => `<option value="${d}">${fd(d).slice(5)}</option>`).join('');
+    $('#dl-date').onchange = () => { $('#pdf').href = `/report/inst.pdf?date=${$('#dl-date').value}`; };
     await loadDay(IDX.dates[0]);
   }
   $('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; setTab(b.dataset.t); render(); };

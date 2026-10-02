@@ -35,6 +35,12 @@
   .btn-pdf i { color: var(--accent); }
   .btn-pdf:hover { background: var(--term-line); color: #fff; }
   .btn-pdf:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  /* 報告下載：日期下拉＋按鈕 */
+  .dl { display: inline-flex; align-items: stretch; }
+  .dl-sel { border: 1px solid var(--term-line); border-right: 0; border-radius: 8px 0 0 8px; background: var(--term2); color: #fff;
+            font-family: var(--num); font-size: .88rem; padding: 0 6px 0 10px; cursor: pointer; }
+  .dl-sel:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+  .dl .btn-pdf { border-radius: 0 8px 8px 0; }
   .tabs { display: inline-flex; background: var(--term2); border: 1px solid var(--term-line); border-radius: 8px; padding: 3px; gap: 3px; }
   .tabs a { padding: 6px 20px; font-size: .92rem; color: var(--term-text); text-decoration: none; white-space: nowrap; border-radius: 6px; }
   .tabs a.on { background: var(--accent); color: #1a1205; font-weight: 700; }

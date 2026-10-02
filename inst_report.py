@@ -200,6 +200,9 @@ def create_router(templates, check_authentication):
         d = await resolve(date)
         if refresh and not await check_authentication(request):
             raise HTTPException(status_code=401, detail="重新產生需要登入")
+        recent = [dash(x) for x in (await run_in_threadpool(report.inst.dates_in_db))[-ER.MAX_DAYS:]]
+        if d not in recent and not await check_authentication(request):
+            raise HTTPException(status_code=403, detail=f"只提供最近 {ER.MAX_DAYS} 個交易日的報告")
         try:
             pdf = await run_in_threadpool(report.pdf, d, SCOPE, templates, refresh)
         except ValueError as e:

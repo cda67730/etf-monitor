@@ -88,7 +88,8 @@
 - 三大法人今日觀察（`inst_report.py`，繼承 `etf_report.Report`）：存同一張 `etf_report` 表（scope='inst'）；提示詞 `templates/inst_observe_prompt.txt`、PDF `templates/inst_report_pdf.html`
   - `GET /report/inst.pdf?date=`（YYYYMMDD 或 YYYY-MM-DD）、`GET /api/inst-cobuy/observe?date=`（只讀已產生的，不觸發 AI；沒有回 404，網頁區塊就隱藏）
   - 排程 `inst_report` 平日 18:40、20:40（`SCHED_INST_REPORT`）；指紋含當日三大法人與主動 ETF 異動，資料沒變不重寫
-- 按鈕：ETF 日報頁「ETF 報告下載」、三大法人頁「今日報告下載」
+- 按鈕：ETF 日報頁「ETF 報告下載」、三大法人頁「今日報告下載」，旁邊有日期下拉（最近 10 個資料日）；沒登入只能產生最近 `REPORT_MAX_DAYS`（預設 10）個資料日，避免任意日期觸發 AI
+- 補產舊日期時，趨勢圖與連續天數只取該日（含）以前的資料
 
 ## 外部依賴：BookReview（使用者電腦上的 n8n + FastAPI，`C:\Users\david\pyrag\BookReview\scripts\etf_report.py`）
 每天約 20:07 由 n8n 觸發，**直接解析本站 HTML**，改樣板或路由前務必確認不會壞：
