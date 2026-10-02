@@ -62,10 +62,20 @@
   .mm-lede { font-size: 1.08rem; line-height: 1.9; color: var(--ink); margin: 20px 0 6px; max-width: 46em; }
 
   /* 風險溫度計 */
-  .thermo { margin: 22px 0 8px; }
-  .thermo-cap { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;
-                font-size: .85rem; color: var(--mute); margin-bottom: 6px; }
-  .thermo-cap b { font-family: var(--serif); font-size: 1.1rem; }
+  .thermo { margin: 18px 0 8px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .thermo-cap { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+                font-size: .85rem; color: var(--mute); padding: 12px 0; cursor: pointer; list-style: none; user-select: none; }
+  .thermo-cap::-webkit-details-marker { display: none; }
+  .thermo-cap:hover b { text-decoration: underline; }
+  .thermo-cap:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
+  .thermo-title { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .thermo-cap b { font-family: var(--serif); font-size: 1.1rem; color: var(--ink); }
+  .thermo-hint { font-size: .82rem; color: var(--mute); }
+  .chev { color: var(--ink); transition: transform .15s ease; flex: none; }
+  .thermo[open] .chev { transform: rotate(90deg); }
+  .thermo:not([open]) .legend { display: none; }
+  .thermo[open] > .tg:last-child { padding-bottom: 10px; }
+  @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
   .legend { display: flex; gap: 14px; flex-wrap: wrap; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .lg-z { width: 14px; height: 8px; background: var(--z-red); border: 1px solid rgba(180,35,24,.35); }
@@ -159,7 +169,7 @@
   <header class="mm-head">
     <div>
       <h1>市場情緒指標</h1>
-      <p class="dek">美股短、中、長期 13 項風險指標，資料日 {{ rep.latest }}，每個交易日早上更新</p>
+      <p class="dek">短、中、長期 {{ rep['items']|length }} 項市場風險指標，資料日 {{ rep.latest }}，每個交易日早上更新</p>
     </div>
     {% if rep.spx %}
     <div class="mm-spx">
@@ -197,13 +207,14 @@
 
   <p class="mm-lede">{{ rep.headline }}</p>
 
-  <figure class="thermo" aria-label="風險溫度計">
-    <figcaption class="thermo-cap">
-      <b>風險溫度計</b>
+  <details class="thermo">
+    <summary class="thermo-cap">
+      <span class="thermo-title"><svg class="chev" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <b>風險溫度計</b><span class="thermo-hint">{{ rep['items']|length }} 項指標在各自刻度上的位置</span></span>
       <span class="legend">
         <span><i class="lg-z"></i>警戒區</span><span><i class="lg-cur"></i>目前</span><span><i class="lg-prev"></i>上一期</span>
       </span>
-    </figcaption>
+    </summary>
     {% for t in rep.terms %}
     <div class="tg">
       <div class="tg-title">{{ t.name }}（{{ t.span }}）</div>
@@ -226,7 +237,7 @@
       {% endfor %}
     </div>
     {% endfor %}
-  </figure>
+  </details>
 
 
   {% for t in rep.terms %}
