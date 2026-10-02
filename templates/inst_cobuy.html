@@ -26,6 +26,32 @@
   .duel-pick { display: inline-flex; border: 1px solid var(--rule); border-radius: 8px; padding: 3px; gap: 3px; background: var(--bg); }
   .duel-pick button { border: 0; background: none; padding: 4px 12px; font-size: .84rem; border-radius: 6px; color: var(--body); white-space: nowrap; }
   .duel-pick button.on { background: #fff; color: var(--ink); font-weight: 700; box-shadow: 0 1px 2px rgba(15, 27, 45, .12); }
+  /* 今日觀察 */
+  #obs { padding-bottom: 14px; }
+  .obs-head { font-size: 1.22rem; font-weight: 700; color: var(--ink); margin: 12px 0 8px; line-height: 1.45; }
+  .obs-bul { list-style: none; padding: 0; margin: 0 0 4px; }
+  .obs-bul li { display: flex; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px dashed var(--rule); font-size: .92rem; }
+  .obs-bul li:last-child { border-bottom: 0; }
+  .otag { flex: 0 0 auto; font-size: .7rem; font-weight: 700; color: #fff; border-radius: 4px; padding: 1px 7px; }
+  .otag.up { background: var(--up); } .otag.down { background: var(--down); } .otag.core { background: var(--steel); }
+  .otag.warn { background: var(--accent); color: #1a1205; } .otag.info { background: var(--mute); }
+  .watch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+  .wcard { border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; background: #fff; cursor: pointer; text-align: left; font: inherit; color: inherit; }
+  .wcard:hover { border-color: var(--steel); background: var(--hover); }
+  .wcard:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
+  .wcard .wt { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+  .wcard b { color: var(--ink); font-size: 1rem; } .wcard .code { color: var(--mute); font-size: .78rem; font-family: var(--num); margin-left: 4px; }
+  .wcard .wtag { font-size: .7rem; font-weight: 700; color: var(--steel); background: #e6eefb; border-radius: 4px; padding: 1px 7px; white-space: nowrap; }
+  .wcard p { margin: 0; font-size: .84rem; line-height: 1.6; color: var(--body); }
+  .obs-more { margin-top: 12px; }
+  .obs-more summary { cursor: pointer; color: var(--steel); font-weight: 600; font-size: .9rem; list-style: none; }
+  .obs-more summary::-webkit-details-marker { display: none; }
+  .obs-more summary::after { content: " ▾"; } .obs-more[open] summary::after { content: " ▴"; }
+  .obs-sec { margin-top: 10px; } .obs-sec h3 { font-size: .9rem; font-weight: 700; color: var(--ink); margin: 0 0 3px; }
+  .obs-sec p { margin: 0; font-size: .9rem; line-height: 1.75; }
+  .obs-risk { margin-top: 12px; background: #fff8e6; border: 1px solid #f6dfa5; border-radius: 8px; padding: 8px 12px; font-size: .86rem; color: #6b4e00; }
+  @media (max-width: 860px) { .watch { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 640px) { .watch { grid-template-columns: 1fr; } .obs-head { font-size: 1.08rem; } }
   .foot { color: var(--mute); font-size: .78rem; margin-top: 14px; line-height: 1.7; }
   @media (max-width: 640px) { .filters input[type=search] { width: 100%; flex: 1 1 100%; } .tbl td.l:not(.name) { flex: 0 0 auto; } }
 </style>
@@ -44,6 +70,19 @@
       </div>
     </div>
   </header>
+
+  <section class="sec panel" id="obs" hidden>
+    <div class="sec-head">
+      <div><h2>今日觀察</h2><div class="sub" id="obs-sub">AI 依當日盤後資料整理，數字經程式核對；非投資建議</div></div>
+    </div>
+    <div class="obs-head" id="obs-head"></div>
+    <ul class="obs-bul" id="obs-bul"></ul>
+    <div class="watch" id="obs-watch"></div>
+    <details class="obs-more">
+      <summary>看完整解讀</summary>
+      <div id="obs-body"></div>
+    </details>
+  </section>
 
   <nav class="secnav" id="tabs" role="tablist" aria-label="表格">
     <button type="button" role="tab" data-t="co" class="on">三大同買<span class="n" id="n-co"></span></button>
@@ -159,6 +198,32 @@
     tab = t; sortK = null; sortD = -1;
     document.querySelectorAll('#tabs button').forEach(b => { b.classList.toggle('on', b.dataset.t === t); b.setAttribute('aria-selected', b.dataset.t === t); });
   }
+  // ---- 今日觀察 ----
+  const TAGS = { up: '偏多', down: '偏空', core: '主軸', warn: '注意', info: '盤勢' };
+  async function loadObs(d) {
+    const box = $('#obs');
+    try {
+      const r = await fetch(`/api/inst-cobuy/observe?date=${d}`, { cache: 'no-store' });
+      if (!r.ok) throw new Error(r.status);
+      const o = (await r.json()).ai;
+      $('#obs-head').textContent = o.headline;
+      $('#obs-bul').innerHTML = (o.bullets || []).map(b => `<li><span class="otag ${esc(b.type)}">${TAGS[b.type] || ''}</span><span>${esc(b.text)}</span></li>`).join('');
+      const byId = Object.fromEntries((DAY ? DAY.rows : []).map(x => [x.id, x]));
+      $('#obs-watch').innerHTML = (o.watch || []).map(w => { const x = byId[w.code] || {};
+        return `<button type="button" class="wcard" data-code="${esc(w.code)}"><div class="wt"><span><b>${esc(x.name || w.code)}</b><span class="code">${esc(w.code)}</span></span><span class="wtag">${esc(w.tag)}</span></div><p>${esc(w.text)}</p></button>`; }).join('');
+      const S = [['flow', '法人總覽'], ['cobuy', '三大同買'], ['duel', '土洋對作'], ['streak', '連買觀察'], ['etf_link', '與主動 ETF 的呼應']];
+      $('#obs-body').innerHTML = S.filter(([k]) => o[k]).map(([k, t]) => `<div class="obs-sec"><h3>${t}</h3><p>${esc(o[k])}</p></div>`).join('') +
+        (o.risk ? `<div class="obs-risk"><b>提醒：</b>${esc(o.risk)}</div>` : '');
+      $('#obs-watch').querySelectorAll('.wcard').forEach(b => b.onclick = () => {
+        const x = byId[b.dataset.code] || {};
+        setTab(x.cobuy ? 'co' : x.ft_cobuy ? 'ft' : x.duel ? 'duel' : 'co');
+        $('#q').value = b.dataset.code; render();
+        document.getElementById('tabs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      box.hidden = false;
+    } catch (e) { box.hidden = true; }
+  }
+
   async function loadDay(d) {
     $('#box').innerHTML = '<div class="loading">載入中…</div>';
     const r = await fetch(`/api/inst-cobuy?date=${d}`, { cache: 'no-store' });
@@ -170,6 +235,7 @@
       `土洋對作 <b>${du.length}</b> 檔`].map(s => `<span>${s}</span>`).join('');
     $('#n-co').textContent = co.length; $('#n-ft').textContent = ft.length; $('#n-duel').textContent = du.length;
     $('#csv').href = `/api/inst-cobuy.csv?date=${DAY.date}`;
+    loadObs(DAY.date);
     render();
   }
   async function init() {
