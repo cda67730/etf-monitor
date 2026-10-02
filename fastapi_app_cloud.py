@@ -185,6 +185,8 @@ async def start_scheduler():
             extra.append(("mood", "市場情緒指標", market_mood.store.update, "SCHED_MOOD", "30 7 * * 2-6"))
         if etf_report.report:
             extra.append(("report", "日報 PDF（Gemini 說明）", etf_report.report.run_daily, "SCHED_REPORT", "50 20 * * 1-5"))
+        if inst_report.report:
+            extra.append(("inst_report", "三大法人今日觀察（Gemini）", inst_report.report.run_daily, "SCHED_INST_REPORT", "40 18,20 * * 1-5"))
         app_scheduler.setup(scraper=scraper, warrant_scraper=warrant_scraper, extra_jobs=extra)
     except Exception as e:
         logger.error(f"排程啟動失敗: {e}")
@@ -1647,6 +1649,10 @@ import etf_report
 if db_config:
     etf_report.init(db_config, db_query, _in_scope, inst_flow.flow)
 
+# ============ 三大法人今日觀察（inst_report，與日報 PDF 共用資料表）============
+import inst_report
+inst_report.init(etf_report.report)
+
 # ============ 保持所有原有的路由和中間件不變 ============
 
 # [所有原有的路由方法保持完全不變]
@@ -2289,6 +2295,7 @@ async def admin_etf_delete(request: Request, code: str):
 app.include_router(inst_flow.create_router(templates, check_authentication))
 app.include_router(market_mood.create_router(templates))
 app.include_router(etf_report.create_router(templates, check_authentication))
+app.include_router(inst_report.create_router(templates, check_authentication))
 
 # ============ 主要頁面路由 ============
 @app.get("/", response_class=HTMLResponse)
