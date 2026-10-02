@@ -1,0 +1,41 @@
+#10 5.362    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 806.6/806.6 kB 933.1 MB/s  0:00:00
+#10 5.367 Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+#10 5.370 Downloading sniffio-1.3.1-py3-none-any.whl (10 kB)
+#10 5.372 Downloading soupsieve-2.10-py3-none-any.whl (38 kB)
+#10 5.375 Downloading tinycss2-1.5.1-py3-none-any.whl (28 kB)
+#10 5.380 Downloading tinyhtml5-2.1.0-py3-none-any.whl (39 kB)
+#10 5.382 Downloading tzlocal-5.4.4-py3-none-any.whl (18 kB)
+#10 5.385 Downloading uvloop-0.23.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (4.0 MB)
+#10 5.403    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.0/4.0 MB 252.3 MB/s  0:00:00
+#10 5.406 Downloading watchfiles-1.3.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (458 kB)
+#10 5.409 Downloading webencodings-0.6.1-py3-none-any.whl (8.7 kB)
+#10 5.412 Downloading websockets-17.1-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (224 kB)
+#10 5.415 Downloading zopfli-0.4.3-cp310-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (829 kB)
+#10 5.418    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 829.4/829.4 kB 1.0 GB/s  0:00:00
+#10 5.421 Downloading pycparser-3.0-py3-none-any.whl (48 kB)
+#10 5.424 Downloading pytz-2026.4-py2.py3-none-any.whl (506 kB)
+#10 5.631 Installing collected packages: pytz, brotli, zopfli, xlrd, websockets, webencodings, uvloop, urllib3, tzlocal, typing-extensions, structlog, soupsieve, sniffio, six, pyyaml, python-multipart, python-dotenv, Pyphen, pydyf, pycparser, pyasn1, psycopg2-binary, protobuf, Pillow, MarkupSafe, idna, httptools, h11, gunicorn, fonttools, click, charset-normalizer, certifi, annotated-types, aiofiles, uvicorn, tinyhtml5, tinycss2, requests, pydantic-core, pyasn1-modules, proto-plus, jinja2, grpcio, googleapis-common-protos, cffi, beautifulsoup4, APScheduler, anyio, watchfiles, starlette, pydantic, grpcio-status, google-cloud-audit-log, cssselect2, cryptography, weasyprint, grpc-google-iam-v1, google-auth, fastapi, google-api-core, google-cloud-core, google-cloud-appengine-logging, google-cloud-logging
+#10 8.888 
+#10 8.890 Successfully installed APScheduler-3.10.4 MarkupSafe-3.0.3 Pillow-12.3.0 Pyphen-0.18.1 aiofiles-23.2.1 annotated-types-0.8.0 anyio-3.7.1 beautifulsoup4-4.15.0 brotli-1.2.0 certifi-2026.7.22 cffi-2.1.1 charset-normalizer-3.5.2 click-8.5.0 cryptography-41.0.7 cssselect2-0.10.1 fastapi-0.104.1 fonttools-4.66.1 google-api-core-2.30.3 google-auth-2.59.1 google-cloud-appengine-logging-1.10.0 google-cloud-audit-log-0.6.0 google-cloud-core-2.8.0 google-cloud-logging-3.8.0 googleapis-common-protos-1.75.0 grpc-google-iam-v1-0.14.4 grpcio-1.84.0 grpcio-status-1.62.3 gunicorn-21.2.0 h11-0.16.0 httptools-0.8.0 idna-3.20 jinja2-3.1.2 proto-plus-1.28.2 protobuf-4.25.9 psycopg2-binary-2.9.9 pyasn1-0.6.4 pyasn1-modules-0.4.2 pycparser-3.0 pydantic-2.5.0 pydantic-core-2.14.1 pydyf-0.12.1 python-dotenv-1.0.0 python-multipart-0.0.6 pytz-2026.4 pyyaml-6.0.3 requests-2.31.0 six-1.17.0 sniffio-1.3.1 soupsieve-2.10 starlette-0.27.0 structlog-23.2.0 tinycss2-1.5.1 tinyhtml5-2.1.0 typing-extensions-4.16.0 tzlocal-5.4.4 urllib3-2.8.0 uvicorn-0.24.0 uvloop-0.23.0 watchfiles-1.3.0 weasyprint-70.0 webencodings-0.6.1 websockets-17.1 xlrd-2.0.1 zopfli-0.4.3
+#10 8.890 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#10 DONE 10.1s
+
+#11 [6/8] RUN useradd --create-home --shell /bin/bash --uid 1000 appuser
+#11 DONE 0.1s
+
+#12 [7/8] COPY . .
+#12 DONE 0.1s
+
+#13 [8/8] RUN chown -R appuser:appuser /app &&     chmod -R 755 /app
+#13 DONE 0.2s
+
+#14 exporting to image
+#14 exporting layers
+#14 exporting layers 1.5s done
+#14 writing image sha256:17e6af36863da04047b7ff43c3303eef81c875f56ce8e3121af6636d9ed4025f done
+#14 naming to docker.io/library/etfm done
+#14 DONE 1.5s
+
+ [33m1 warning found (use docker --debug to expand):
+[0m - JSONArgsRecommended: JSON arguments recommended for CMD to prevent unintended behavior related to OS signals (line 51)
+exit 0
