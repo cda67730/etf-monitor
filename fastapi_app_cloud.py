@@ -137,6 +137,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 回應壓縮：三大法人 API 一天約 1.4MB JSON，壓縮後小很多
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+
 # ============ ETF 清單（etf_registry）============
 import etf_registry
 etf_registry.init(db_config)
