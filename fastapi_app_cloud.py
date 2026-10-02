@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 logger.info("開始初始化數據庫配置...")
 
 database_url = os.getenv("DATABASE_URL")
-logger.info(f"DATABASE_URL 環境變數: {database_url[:50] if database_url else 'None'}...")
+logger.info(f"DATABASE_URL 環境變數: {'已設定' if (database_url or '').strip() else 'None'}")
 
 try:
     from database_config import db_config

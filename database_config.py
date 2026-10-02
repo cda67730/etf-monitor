@@ -11,6 +11,12 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
+
+def _mask(url):
+    """記錄用：把連線字串裡的帳密遮掉（repo 公開、log 也可能被貼出去）"""
+    import re as _re
+    return _re.sub(r"//[^@/]*@", "//***:***@", url or "")[:80]
+
 class DatabaseConfig:
     """數據庫配置管理 - 改進版本，添加權證支持"""
     
@@ -21,7 +27,7 @@ class DatabaseConfig:
         # 檢查所有可能的環境變數
         self.database_url = self._get_database_url()
         
-        logger.info(f"最終使用的 DATABASE_URL: {self.database_url[:50] if self.database_url else 'None'}...")
+        logger.info(f"最終使用的 DATABASE_URL: {_mask(self.database_url) if self.database_url else 'None'}")
         
         self.db_type = self._detect_db_type()
         logger.info(f"檢測到數據庫類型: {self.db_type}")
@@ -52,9 +58,9 @@ class DatabaseConfig:
         
         logger.info("檢查環境變數...")
         for var_name in env_vars_to_check:
-            value = os.getenv(var_name)
+            value = (os.getenv(var_name) or "").strip().strip('"').strip("'")   # 貼上時常多出換行、空白或引號
             if value:
-                logger.info(f"找到環境變數 {var_name}: {value[:50]}...")
+                logger.info(f"找到環境變數 {var_name}: {_mask(value)}")
                 return value
             else:
                 logger.debug(f"環境變數 {var_name} 未設置")
@@ -91,7 +97,7 @@ class DatabaseConfig:
             logger.warning("database_url 為空，默認使用 SQLite")
             return "sqlite"
         
-        logger.info(f"分析數據庫 URL: {self.database_url[:50]}...")
+        logger.info(f"分析數據庫 URL: {_mask(self.database_url)}")
         
         if self.database_url.startswith(("postgresql://", "postgres://")):
             logger.info("檢測到 PostgreSQL URL")
@@ -103,7 +109,7 @@ class DatabaseConfig:
             logger.info("檢測到 SQLite 文件路徑")
             return "sqlite"
         else:
-            logger.warning(f"未知數據庫 URL 格式: {self.database_url[:50]}..., 默認使用 SQLite")
+            logger.warning(f"未知數據庫 URL 格式: {_mask(self.database_url)}，默認使用 SQLite")
             return "sqlite"
     
     def _initialize_database(self):
@@ -477,7 +483,7 @@ class DatabaseConfig:
         return {
             "db_type": self.db_type,
             "connection_status": self.connection_status,
-            "database_url_prefix": self.database_url[:50] if self.database_url else None,
+            "database_url_prefix": _mask(self.database_url) if self.database_url else None,
             "has_pool": self.pg_pool is not None,
             "sqlite_path": self.sqlite_path if self.db_type == "sqlite" else None
         }
