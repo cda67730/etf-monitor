@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<title>三大法人觀察 {{ dd }}</title>
+<style>
+  @page { size: A4; margin: 14mm 13mm 16mm;
+    @bottom-left { content: "資料來源：ETF持股監控系統、臺灣證券交易所、證券櫃檯買賣中心｜AI 輔助整理，非投資建議"; font-size: 7pt; color: #8a96a8; font-family: "Noto Sans CJK TC", sans-serif; }
+    @bottom-right { content: counter(page) " / " counter(pages); font-size: 7pt; color: #8a96a8; font-family: "Noto Sans CJK TC", sans-serif; } }
+  @page :first { margin-top: 0; }
+  * { box-sizing: border-box; }
+  body { font-family: "Noto Sans CJK TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; font-size: 9pt; color: #1e293b; line-height: 1.6; margin: 0; }
+  .num { font-variant-numeric: tabular-nums; }
+  .up { color: #e5383b; } .down { color: #12a150; } .mute { color: #6b7a8f; }
+  h2 { font-size: 12.5pt; color: #0f1b2d; margin: 0 0 6px; padding-left: 9px; border-left: 4px solid #f5a623; line-height: 1.25; }
+  h2 small { font-size: 8pt; color: #6b7a8f; font-weight: 400; margin-left: 6px; }
+  section { margin-top: 11px; }
+  p { margin: 0 0 6px; text-align: justify; }
+  .brk { break-before: page; }
+
+  /* 封面頁首 */
+  .mast { background: #0f1b2d; color: #c9d4e3; margin: 0 -13mm; padding: 13mm 13mm 10px; }
+  .mast .kick { font-size: 8pt; letter-spacing: .2em; color: #f5a623; font-weight: 700; }
+  .mast h1 { font-size: 22pt; color: #fff; margin: 2px 0 2px; font-weight: 900; letter-spacing: .02em; }
+  .mast .meta { font-size: 8.5pt; color: #8ea0b8; }
+  .mast .meta b { color: #fff; font-weight: 600; }
+  .head { background: #16263d; color: #fff; margin: 0 -13mm; padding: 10px 13mm 12px; font-size: 15pt; font-weight: 700; border-bottom: 3px solid #f5a623; }
+  .head small { display: block; font-size: 7.5pt; color: #8ea0b8; font-weight: 400; letter-spacing: .15em; margin-bottom: 2px; }
+
+  .kpis { display: flex; gap: 6px; margin-top: 12px; }
+  .kpi { flex: 1; border: 1px solid #e3e8ef; border-radius: 6px; padding: 6px 8px; }
+  .kpi .k { font-size: 7.5pt; color: #6b7a8f; }
+  .kpi .v { font-size: 13pt; font-weight: 700; color: #0f1b2d; line-height: 1.25; }
+  .kpi .s { font-size: 7.5pt; color: #6b7a8f; }
+
+  .bul { list-style: none; padding: 0; margin: 0; }
+  .bul li { display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px dotted #e3e8ef; }
+  .tag { flex: 0 0 auto; font-size: 7pt; font-weight: 700; color: #fff; border-radius: 3px; padding: 1px 0; width: 30px; text-align: center; height: 15px; margin-top: 2px; }
+  .tag.up { background: #e5383b; } .tag.down { background: #12a150; } .tag.core { background: #2b6cb0; } .tag.warn { background: #f5a623; color: #1a1205; } .tag.info { background: #6b7a8f; }
+
+  /* 排行 */
+  .cols { display: flex; gap: 14px; }
+  .cols > div { flex: 1; min-width: 0; }
+  h3 { font-size: 9.5pt; margin: 4px 0 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 7pt; color: #6b7a8f; font-weight: 600; text-align: right; padding: 3px 4px; background: #f4f6f9; border-bottom: 1px solid #e3e8ef; white-space: nowrap; }
+  td { padding: 2px 4px; border-bottom: 1px solid #eef1f5; text-align: right; font-variant-numeric: tabular-nums; vertical-align: middle; }
+  th.l, td.l { text-align: left; }
+  td.nm b { color: #0f1b2d; } td.nm .c { color: #8a96a8; font-size: 7pt; margin-left: 3px; }
+  .ind { font-size: 6.8pt; color: #6b7a8f; }
+  .rk td { position: relative; }
+  .bar { display: block; height: 3px; border-radius: 2px; margin-top: 1px; }
+  .no { display: inline-block; width: 14px; height: 14px; line-height: 14px; text-align: center; border-radius: 3px; font-size: 7pt; font-weight: 700; }
+  .no.t { color: #fff; } .buy .no.t { background: #e5383b; } .sell .no.t { background: #12a150; }
+
+  .notes { margin-top: 8px; }
+  .note { display: flex; gap: 8px; padding: 2px 0; font-size: 8.5pt; line-height: 1.5; border-bottom: 1px dotted #e3e8ef; break-inside: avoid; }
+  .note .who { flex: 0 0 72px; font-weight: 700; color: #0f1b2d; }
+  .note .who small { display: block; font-weight: 400; color: #8a96a8; font-size: 7pt; }
+
+  /* 新進股票卡片 */
+  .cards { display: flex; flex-wrap: wrap; gap: 6px; }
+  .card { width: calc(50% - 3px); border: 1px solid #e3e8ef; border-radius: 6px; padding: 6px 8px; break-inside: avoid; }
+  .card .t { display: flex; justify-content: space-between; align-items: baseline; }
+  .card .t b { font-size: 10pt; color: #0f1b2d; } .card .t .c { color: #8a96a8; font-size: 7.5pt; margin-left: 4px; }
+  .card .amt { color: #e5383b; font-weight: 700; }
+  .card .etf { font-size: 7pt; color: #2b6cb0; margin: 1px 0 3px; }
+  .card p { font-size: 8.3pt; margin: 0; text-align: left; }
+  .fresh { font-size: 6.5pt; background: #f5a623; color: #1a1205; border-radius: 3px; padding: 0 4px; font-weight: 700; margin-left: 4px; }
+
+  .pill { display: inline-block; min-width: 40px; padding: 0 4px; border-radius: 3px; font-weight: 600; }
+  .pill.up { background: #fde8e8; color: #e5383b; } .pill.down { background: #e3f6eb; color: #12a150; } .pill.flat { background: #f1f4f8; color: #6b7a8f; }
+  .pill.sm { min-width: 0; font-size: 7.5pt; padding: 0 4px; }
+  .ink { color: #0f1b2d; } .prem-hi { color: #b7791f; font-weight: 700; } .prem-lo { color: #2b6cb0; font-weight: 700; }
+  .xt td { padding: 1px 4px; font-size: 8.3pt; } .xt td svg { display: block; }
+  .disc { margin-top: 10px; font-size: 7.5pt; color: #6b7a8f; border-top: 1px solid #e3e8ef; padding-top: 6px; }
+  .box { background: #f6f8fb; border: 1px solid #e3e8ef; border-radius: 6px; padding: 8px 10px; }
+</style></head><body>
+
+<style>
+  .watch { display: flex; flex-wrap: wrap; gap: 6px; }
+  .wc { width: calc(33.33% - 4px); border: 1px solid #e3e8ef; border-radius: 6px; padding: 6px 8px; break-inside: avoid; }
+  .wc .t { display: flex; justify-content: space-between; align-items: baseline; }
+  .wc b { font-size: 10pt; color: #0f1b2d; } .wc .c { color: #8a96a8; font-size: 7.5pt; margin-left: 3px; }
+  .wtag { font-size: 6.8pt; font-weight: 700; color: #2b6cb0; background: #e6eefb; border-radius: 3px; padding: 0 5px; }
+  .wc p { font-size: 8.2pt; margin: 2px 0 0; text-align: left; }
+  .hot { display: inline-block; min-width: 16px; text-align: center; background: #fff4cc; color: #8a5a00; font-weight: 700; border-radius: 3px; padding: 0 3px; }
+  .dir { font-size: 6.8pt; font-weight: 700; border-radius: 3px; padding: 0 4px; }
+  .etfmark { font-size: 6.5pt; color: #2b6cb0; border: 1px solid #b9cdea; border-radius: 3px; padding: 0 3px; margin-left: 3px; }
+  .risk { background: #fff8e6; border: 1px solid #f6dfa5; border-radius: 6px; padding: 7px 10px; color: #6b4e00; margin-top: 10px; }
+</style></head><body>
+{% set k = f['檔數統計'] %}{% set m = f['大盤'] or {} %}{% set i = f['三大法人買賣超億元（上市）'] or {} %}
+<div class="mast">
+  <div class="kick">INSTITUTIONAL FLOW</div>
+  <h1>三大法人同買觀察</h1>
+  <div class="meta">資料日 <b>{{ dd }}</b>　·　統計區間 {{ f['統計區間'] }}　·　產製 {{ created }}</div>
+</div>
+<div class="head"><small>今日結論</small>{{ ai.headline }}</div>
+
+<div class="kpis">
+  {% if i %}  <div class="kpi"><div class="k">三大法人合計</div><div class="v num {{ 'up' if i['合計'] > 0 else 'down' }}">{{ '%+.2f'|format(i['合計']) }}</div><div class="s">億元（上市）</div></div>
+  <div class="kpi"><div class="k">外資／投信</div><div class="v num {{ 'up' if i['外資及陸資'] > 0 else 'down' }}">{{ '%+.2f'|format(i['外資及陸資']) }}</div><div class="s num">投信 {{ '%+.2f'|format(i['投信']) }} 億元</div></div>{% endif %}
+  <div class="kpi"><div class="k">三大同買</div><div class="v num up">{{ k['三大同買'] }}</div><div class="s">檔・連續 2 天以上 {{ k['連續同買2天以上'] }} 檔</div></div>
+  <div class="kpi"><div class="k">外資投信同買</div><div class="v num">{{ k['外資投信同買'] }}</div><div class="s">檔</div></div>
+  <div class="kpi"><div class="k">土洋對作</div><div class="v num" style="color:#b7791f">{{ k['土洋對作合計'] }}</div><div class="s">檔・投信買外資賣 {{ k['土洋對作_投信買外資賣'] }}</div></div>
+</div>
+
+<section>
+  <h2>今日重點</h2>
+  <ul class="bul">{% for b in ai.bullets %}
+    <li><span class="tag {{ b.type }}">{{ {'up':'偏多','down':'偏空','core':'主軸','warn':'注意','info':'盤勢'}[b.type] }}</span><span>{{ b.text }}</span></li>{% endfor %}
+  </ul>
+</section>
+<section><h2>法人總覽</h2><p>{{ ai.flow }}</p></section>
+<section>
+  <h2>觀察名單<small>值得留意的訊號，非投資建議</small></h2>
+  <div class="watch">{% for w in ai.watch %}{% set s = stock[w.code] %}
+    <div class="wc"><div class="t"><span><b>{{ s['簡稱'] }}</b><span class="c">{{ w.code }}</span></span><span class="wtag">{{ w.tag }}</span></div><p>{{ w.text }}</p></div>{% endfor %}
+  </div>
+</section>
+
+<section class="brk"><h2>三大同買</h2><p>{{ ai.cobuy }}</p>
+  <table style="margin-top:4px"><thead><tr><th class="l">#</th><th class="l">股票</th><th>同買張數</th><th>外資</th><th>投信</th><th>自營</th><th>同買連續</th><th>{{ nd }}日同買</th><th>股價</th></tr></thead><tbody>
+  {% for r in f['三大同買前15'] %}
+    <tr><td class="l"><span class="no {{ 't' if loop.index <= 3 }}" style="{{ 'background:#e5383b;color:#fff' if loop.index <= 3 }}">{{ loop.index }}</span></td>
+      <td class="l nm"><b>{{ r['簡稱'] }}</b><span class="c">{{ r['代號'] }}</span>{% if r.get('主動ETF當日淨加碼張') %}<span class="etfmark">ETF 加碼</span>{% endif %} <span class="ind">{{ r['產業別'] }}</span></td>
+      <td class="up"><b>{{ r['三大合計張']|n }}</b></td><td class="up">{{ r['外資張']|n }}</td><td class="up">{{ r['投信張']|n }}</td><td class="up">{{ r['自營張']|n }}</td>
+      <td>{% if r['同買連續天數'] >= 2 %}<span class="hot">{{ r['同買連續天數'] }}</span>{% else %}{{ r['同買連續天數'] }}{% endif %}</td><td>{{ r[nd ~ '日內同買天數'] }}</td>
+      <td>{% if r['股價漲跌幅%'] is not none %}<span class="pill sm {{ 'up' if r['股價漲跌幅%'] > 0 else 'down' if r['股價漲跌幅%'] < 0 else 'flat' }}">{{ r['股價漲跌幅%']|pct }}</span>{% else %}<span class="mute">—</span>{% endif %}</td></tr>
+  {% endfor %}</tbody></table>
+  <p class="mute" style="font-size:7.8pt;margin-top:5px">族群彙總：{% for name, s in f['三大同買族群彙總'].items() %}{{ name }} {{ s['檔數'] }} 檔（{{ s['三大合計張']|n }} 張）{{ '、' if not loop.last }}{% endfor %}</p>
+</section>
+
+<section><h2>外資投信同買<small>不含三大同買，自營商可能賣超</small></h2>
+  <table><thead><tr><th class="l">股票</th><th>外資＋投信</th><th>外資</th><th>投信</th><th>自營</th><th>連續天數</th><th>股價</th></tr></thead><tbody>
+  {% for r in f['外資投信同買前10（不含三大同買）'] %}
+    <tr><td class="l nm"><b>{{ r['簡稱'] }}</b><span class="c">{{ r['代號'] }}</span>{% if r.get('主動ETF當日淨加碼張') %}<span class="etfmark">ETF 加碼</span>{% endif %}</td>
+      <td class="up"><b>{{ r['外資加投信張']|n }}</b></td><td class="up">{{ r['外資張']|n }}</td><td class="up">{{ r['投信張']|n }}</td>
+      <td class="{{ 'up' if r['自營張'] > 0 else 'down' }}">{{ '%+d'|format(r['自營張']) }}</td><td>{{ r['外資投信同買連續天數'] }}</td>
+      <td>{% if r['股價漲跌幅%'] is not none %}<span class="pill sm {{ 'up' if r['股價漲跌幅%'] > 0 else 'down' if r['股價漲跌幅%'] < 0 else 'flat' }}">{{ r['股價漲跌幅%']|pct }}</span>{% else %}<span class="mute">—</span>{% endif %}</td></tr>
+  {% endfor %}</tbody></table>
+</section>
+
+<section style="break-inside: avoid"><h2>土洋對作</h2><p>{{ ai.duel }}</p>
+  <div class="cols" style="margin-top:4px">
+    {% for key, title, a, b in [('土洋對作_投信買外資賣前8', '投信買・外資賣', '投信張', '外資張'), ('土洋對作_外資買投信賣前8', '外資買・投信賣', '外資張', '投信張')] %}
+    <div><h3 style="color:{{ '#e5383b' if loop.first else '#2b6cb0' }}">{{ title }}</h3>
+      <table><thead><tr><th class="l">股票</th><th>{{ a[:2] }}買</th><th>{{ b[:2] }}賣</th><th>對作天數</th></tr></thead><tbody>
+      {% for r in f[key] %}
+        <tr><td class="l nm"><b>{{ r['簡稱'] }}</b><span class="c">{{ r['代號'] }}</span>{% if r.get('主動ETF當日淨加碼張') %}<span class="etfmark">ETF 加</span>{% elif r.get('主動ETF當日淨減碼張') %}<span class="etfmark">ETF 減</span>{% endif %}</td>
+          <td class="up">+{{ r[a]|n }}</td><td class="down">−{{ r[b]|abs|n }}</td>
+          <td>{% if r['對作連續天數'] >= 3 %}<span class="hot">{{ r['對作連續天數'] }}</span>{% else %}{{ r['對作連續天數'] }}{% endif %}</td></tr>
+      {% endfor %}</tbody></table></div>
+    {% endfor %}
+  </div>
+</section>
+
+<section style="break-inside: avoid"><h2>連買觀察</h2><p>{{ ai.streak }}</p>
+  <div class="cols" style="margin-top:4px">
+    {% for key, title, sk, dk, ck in [('投信連買最久前8', '投信連買最久', '投信連買天數', '投信當日張', '投信' ~ nd ~ '日累計張'), ('外資連買最久前8', '外資連買最久', '外資連買天數', '外資當日張', '外資' ~ nd ~ '日累計張')] %}
+    <div><h3>{{ title }}</h3>
+      <table><thead><tr><th class="l">股票</th><th>連買天數</th><th>當日</th><th>{{ nd }}日累計</th></tr></thead><tbody>
+      {% for r in f[key] %}
+        <tr><td class="l nm"><b>{{ r['簡稱'] }}</b><span class="c">{{ r['代號'] }}</span></td><td><span class="hot">{{ r[sk] }}</span></td>
+          <td class="up">{{ r[dk]|n }}</td><td>{{ r[ck]|n }}</td></tr>
+      {% endfor %}</tbody></table></div>
+    {% endfor %}
+  </div>
+</section>
+{% if ai.etf_link %}<section><h2>與主動 ETF 的呼應</h2><p>{{ ai.etf_link }}</p></section>{% endif %}
+<div class="risk"><b>提醒：</b>{{ ai.risk }}</div>
+<div class="disc">以上為 AI 輔助整理的投資筆記，非投資建議，資料日期 {{ dd }}，數據以官方公告為準，請自行查證，切勿直接投資。說明由 {{ "AI（" ~ model ~ "）撰寫並經程式核對數字" if model != "template" else "程式依規則產生" }}。資料來源：臺灣證券交易所 T86、BFI82U，證券櫃檯買賣中心三大法人買賣明細；張數＝股數 ÷ 1,000 四捨五入；外資含外資自營商；連買天數最多回溯 {{ nd }} 個交易日。</div>
+</body></html>

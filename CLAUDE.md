@@ -85,6 +85,10 @@
 - 外部資料：證交所 MI_INDEX（指數、漲跌家數、個股漲跌）、FMTQIK（成交金額）、BFI82U（三大法人金額）；櫃買上櫃行情用 POST `www/zh-tw/afterTrading/dailyQuotes`（可指定日期）；股票簡稱與產業別抓證交所 ISIN 清單存 `stock_meta`（7 天更新）
 - 排程 `report` 平日 20:50（`SCHED_REPORT`）替最新資料日產生積極型與不分類兩份
 - Docker 需 Pango 與 `fonts-noto-cjk`（思源黑體）
+- 三大法人今日觀察（`inst_report.py`，繼承 `etf_report.Report`）：存同一張 `etf_report` 表（scope='inst'）；提示詞 `templates/inst_observe_prompt.txt`、PDF `templates/inst_report_pdf.html`
+  - `GET /report/inst.pdf?date=`（YYYYMMDD 或 YYYY-MM-DD）、`GET /api/inst-cobuy/observe?date=`（只讀已產生的，不觸發 AI；沒有回 404，網頁區塊就隱藏）
+  - 排程 `inst_report` 平日 18:40、20:40（`SCHED_INST_REPORT`）；指紋含當日三大法人與主動 ETF 異動，資料沒變不重寫
+- 按鈕：ETF 日報頁「ETF 報告下載」、三大法人頁「今日報告下載」
 
 ## 外部依賴：BookReview（使用者電腦上的 n8n + FastAPI，`C:\Users\david\pyrag\BookReview\scripts\etf_report.py`）
 每天約 20:07 由 n8n 觸發，**直接解析本站 HTML**，改樣板或路由前務必確認不會壞：

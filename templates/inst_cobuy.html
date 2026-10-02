@@ -66,6 +66,8 @@
       <div class="term-ctl">
         <label class="visually-hidden" for="date">日期</label>
         <select class="sel" id="date"></select>
+        <a id="pdf" href="/report/inst.pdf" class="btn-pdf" target="_blank" rel="noopener"
+           title="下載今日觀察報告 PDF（當天第一次產生約需 1 分鐘）"><i class="fas fa-file-arrow-down"></i> 今日報告下載</a>
         <a id="csv" href="/api/inst-cobuy.csv" class="btn-csv"><i class="fas fa-file-csv"></i> CSV</a>
       </div>
     </div>
@@ -235,6 +237,7 @@
       `土洋對作 <b>${du.length}</b> 檔`].map(s => `<span>${s}</span>`).join('');
     $('#n-co').textContent = co.length; $('#n-ft').textContent = ft.length; $('#n-duel').textContent = du.length;
     $('#csv').href = `/api/inst-cobuy.csv?date=${DAY.date}`;
+    $('#pdf').href = `/report/inst.pdf?date=${DAY.date}`;
     loadObs(DAY.date);
     render();
   }

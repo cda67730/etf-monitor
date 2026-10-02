@@ -348,9 +348,17 @@ class Report:
         return facts
 
     # ---- 寫說明
-    @staticmethod
-    def prompt(facts):
-        tpl = open(os.path.join(HERE, "templates", "report_prompt.txt"), encoding="utf-8").read()
+    PROMPT = "report_prompt.txt"
+    TAG = "report"
+
+    def fallback(self, facts):
+        return fallback_text(facts)
+
+    def render(self, rep, templates):
+        return render_html(rep, templates)
+
+    def prompt(self, facts):
+        tpl = open(os.path.join(HERE, "templates", self.PROMPT), encoding="utf-8").read()
         clean = {k: v for k, v in facts.items() if not k.startswith("_")}
         return tpl.replace("{facts}", json.dumps(clean, ensure_ascii=False, indent=1))
 
@@ -369,7 +377,7 @@ class Report:
 
     def write(self, facts):
         """回傳 (ai, model, notes)；notes 記錄哪些段落被換成模板句子"""
-        tpl = fallback_text(facts)
+        tpl = self.fallback(facts)
         notes = []
         if not KEY:
             return tpl, "template", ["未設定 GEMINI_API_KEY，全部使用程式模板"]
@@ -387,16 +395,23 @@ class Report:
         return tpl, "template", notes
 
     # ---- 對外
+    def stored(self, date, scope):
+        """只讀資料庫裡已產生的版本（不呼叫 AI）；沒有就回 None"""
+        row = self._q("SELECT fp, model, facts, ai, notes, created FROM etf_report WHERE d = ? AND scope = ?", (date, scope), fetch="one")
+        if not row:
+            return None
+        return {"fp": row["fp"], "facts": json.loads(row["facts"]), "ai": json.loads(row["ai"]), "model": row["model"],
+                "notes": json.loads(row["notes"] or "[]"), "created": row["created"]}
+
     def get(self, date, scope, refresh=False):
         """取得（必要時產生）報告；同一天同一範圍資料沒變就沿用資料庫裡的版本"""
         lock = self.locks.setdefault((date, scope), threading.Lock())
         with lock:
             fp = self.fingerprint(date, scope)
             if not refresh:
-                row = self._q("SELECT fp, model, facts, ai, notes, created FROM etf_report WHERE d = ? AND scope = ?", (date, scope), fetch="one")
+                row = self.stored(date, scope)
                 if row and row["fp"] == fp:
-                    return {"facts": json.loads(row["facts"]), "ai": json.loads(row["ai"]), "model": row["model"],
-                            "notes": json.loads(row["notes"] or "[]"), "created": row["created"]}
+                    return row
             t0 = time.time()
             facts = self.build_facts(date, scope)
             ai, model, notes = self.write(facts)
@@ -406,15 +421,15 @@ class Report:
                     "ai = EXCLUDED.ai, notes = EXCLUDED.notes, created = EXCLUDED.created",
                     (date, scope, fp, model, json.dumps(facts, ensure_ascii=False), json.dumps(ai, ensure_ascii=False),
                      json.dumps(notes, ensure_ascii=False), created))
-            logger.info(f"[report] {date} {scope} 產生完成（{model}，{time.time() - t0:.0f} 秒）{'；' + '；'.join(notes) if notes else ''}")
+            logger.info(f"[{self.TAG}] {date} {scope} 產生完成（{model}，{time.time() - t0:.0f} 秒）{'；' + '；'.join(notes) if notes else ''}")
             return {"facts": facts, "ai": ai, "model": model, "notes": notes, "created": created}
 
     def pdf(self, date, scope, templates, refresh=False):
         rep = self.get(date, scope, refresh)
-        key = (date, scope, rep["created"])
+        key = (date, scope, hashlib.md5(json.dumps([rep["created"], rep["model"], rep["ai"]], ensure_ascii=False, sort_keys=True).encode()).hexdigest())
         if key not in self._pdf:
             from weasyprint import HTML
-            html = render_html(rep, templates)
+            html = self.render(rep, templates)
             self._pdf = {k: v for k, v in self._pdf.items() if k[:2] != (date, scope)}
             self._pdf[key] = HTML(string=html, base_url=HERE).write_pdf()
         return self._pdf[key]
