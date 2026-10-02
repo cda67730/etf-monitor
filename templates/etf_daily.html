@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block title %}主動式ETF日報（{{ scope_label }}） - ETF持股明細監控系統{% endblock %}
+
+{% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  /* 與市場情緒頁同一套視覺：研究報告式單欄，數字等寬對齊 */
+  .ed {
+    --paper: #fff; --ground: #f3f5f7; --ink: #17212b; --body: #33414e; --mute: #6a7886; --rule: #dde3e9;
+    --steel: #1f5fad; --up: #c92a2a; --down: #2b8a3e; --amber: #b7791f;
+    --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+    --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    --num: "IBM Plex Sans", "Noto Sans TC", sans-serif;
+    font-family: var(--sans); color: var(--body); max-width: 1040px; margin: 0 auto 64px;
+  }
+  .ed .num { font-family: var(--num); font-variant-numeric: tabular-nums; }
+  .ed b { color: var(--ink); }
+
+  /* 刊頭與分頁 */
+  .ed-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+             padding: 6px 0 14px; border-bottom: 2px solid var(--ink); }
+  .ed-head h1 { font-family: var(--serif); font-weight: 800; font-size: 2.2rem; color: var(--ink); margin: 0; line-height: 1.15; }
+  .ed-head .dek { color: var(--mute); font-size: .92rem; margin-top: 6px; }
+  .tabs { display: inline-flex; border: 1px solid var(--ink); border-radius: 6px; overflow: hidden; }
+  .tabs a { padding: 7px 18px; font-size: .95rem; color: var(--ink); text-decoration: none; white-space: nowrap; }
+  .tabs a + a { border-left: 1px solid var(--ink); }
+  .tabs a.on { background: var(--ink); color: #fff; font-weight: 600; }
+  .tabs a:not(.on):hover { background: var(--ground); }
+  .tabs a:focus-visible { outline: 2px solid var(--steel); outline-offset: -2px; }
+
+  /* 第一區：資訊條 */
+  .info { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 22px; font-size: .86rem; color: var(--mute);
+          padding: 9px 0; border-bottom: 1px solid var(--rule); }
+  .info b { font-family: var(--num); font-size: .95rem; }
+  .info .ok b { color: var(--down); } .info .miss b { color: var(--up); }
+  .info details { display: inline; }
+  .info summary { cursor: pointer; color: var(--steel); list-style: none; display: inline; }
+  .info summary::-webkit-details-marker { display: none; }
+  .info .miss-list { display: block; margin-top: 4px; color: var(--body); }
+
+  .ed h2 { font-family: var(--serif); font-weight: 800; font-size: 1.45rem; color: var(--ink); margin: 0; }
+  .sec { margin-top: 36px; }
+  .sec-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap;
+              padding-bottom: 8px; border-bottom: 1px solid var(--ink); }
+  .sec-head .sub { font-size: .84rem; color: var(--mute); margin-top: 2px; }
+  .btn-ed { border: 1px solid var(--ink); background: #fff; color: var(--ink); font-size: .88rem; padding: 6px 14px;
+            border-radius: 4px; cursor: pointer; white-space: nowrap; }
+  .btn-ed:hover { background: var(--ink); color: #fff; }
+  .btn-ed:focus-visible, .sel:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
+  .sel { border: 1px solid var(--rule); border-radius: 4px; padding: 5px 8px; font-size: .9rem; color: var(--ink);
+         background: #fff; font-family: var(--num); }
+
+  /* 第二區：排行榜 */
+  .ranks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 36px; }
+  .rank-switch { display: none; }
+  @media (max-width: 767.98px) {
+    .ranks { grid-template-columns: 1fr; }
+    .rank-switch { display: inline-flex; margin-top: 12px; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+    .rank-switch button { border: 0; background: #fff; padding: 6px 16px; font-size: .9rem; color: var(--body); }
+    .rank-switch button.on { background: var(--ink); color: #fff; font-weight: 600; }
+    .ranks[data-show="buy"] .rank.sell, .ranks[data-show="sell"] .rank.buy { display: none; }
+    .ranks .rank h3 { display: none; }
+  }
+  .rank h3 { font-size: 1rem; font-weight: 700; margin: 14px 0 4px; display: flex; align-items: center; gap: 8px; }
+  .rank h3 .bar { width: 4px; height: 16px; background: var(--c); border-radius: 1px; }
+  .rank.buy { --c: var(--up); } .rank.sell { --c: var(--down); }
+  .rank ol { list-style: none; padding: 0; margin: 0; }
+  .rank li { display: grid; grid-template-columns: 1.6em minmax(0, 1fr) auto; gap: 2px 10px; align-items: baseline;
+             padding: 8px 0; border-bottom: 1px solid #eef1f4; }
+  .rank .no { font-family: var(--num); color: var(--mute); font-size: .85rem; }
+  .rank .stk { min-width: 0; }
+  .rank .stk b { font-weight: 600; } .rank .stk .code { font-family: var(--num); color: var(--mute); font-size: .82rem; margin-left: 6px; }
+  .rank .meta { grid-column: 2; font-size: .78rem; color: var(--mute); }
+  .rank .amt { font-family: var(--num); font-weight: 600; color: var(--c); text-align: right; white-space: nowrap; }
+  .rank .amt small { font-weight: 400; color: var(--mute); margin-left: 2px; }
+  .empty { color: var(--mute); font-size: .9rem; padding: 16px 0; }
+
+  /* 表格（淨值表、跨 ETF、明細）：桌機為表格，手機改兩行 */
+  .tbl { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  .tbl th { font-size: .78rem; color: var(--mute); font-weight: 500; text-align: right; padding: 8px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  .tbl td { padding: 9px 8px; border-bottom: 1px solid #eef1f4; text-align: right; font-family: var(--num); font-variant-numeric: tabular-nums; }
+  .tbl th:first-child, .tbl td:first-child { text-align: left; padding-left: 0; }
+  .tbl td.name { font-family: var(--sans); }
+  .tbl td.name b { font-weight: 600; } .tbl td.name .code { color: var(--mute); font-size: .8rem; margin-left: 6px; font-family: var(--num); }
+  .tbl tr.click { cursor: pointer; } .tbl tr.click:hover td { background: var(--ground); }
+  .up { color: var(--up); } .down { color: var(--down); } .muted { color: var(--mute); }
+  .chip { display: inline-block; font-size: .72rem; padding: 0 6px; border-radius: 3px; background: var(--ground); color: var(--body); margin-left: 4px; font-family: var(--sans); }
+  .etfn { font-family: var(--num); font-weight: 600; color: var(--ink); }
+  @media (max-width: 640px) {
+    .tbl thead { display: none; }
+    .tbl, .tbl tbody { display: block; }
+    .tbl tr { display: flex; flex-wrap: wrap; gap: 2px 16px; padding: 9px 0; border-bottom: 1px solid #eef1f4; }
+    .tbl td { border: 0; padding: 0; }
+    .tbl td.name { flex: 1 1 100%; }
+    .tbl td[data-l]::before { content: attr(data-l) " "; font-family: var(--sans); font-size: .74rem; color: var(--mute); }
+    .tbl td.m-hide { display: none; }
+    .tbl td { text-align: left; }
+  }
+
+  .more { margin-top: 10px; }
+  .loading { color: var(--mute); font-size: .9rem; padding: 18px 0; }
+
+  /* 看詳細面板 */
+  .ed-dlg { border: 0; padding: 0; width: min(980px, 96vw); max-width: 96vw; max-height: 90vh; border-radius: 8px;
+            box-shadow: 0 20px 60px rgba(15, 23, 32, .35); }
+  .ed-dlg::backdrop { background: rgba(15, 23, 32, .55); }
+  .dlg-head { position: sticky; top: 0; background: #fff; z-index: 2; padding: 14px 18px 10px; border-bottom: 1px solid var(--rule); }
+  .dlg-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .dlg-top h4 { font-family: var(--serif); font-weight: 600; font-size: 1.15rem; color: var(--ink); margin: 0; }
+  .dlg-x { border: 0; background: none; font-size: 1.7rem; line-height: 1; color: var(--mute); cursor: pointer; padding: 0 4px; }
+  .dlg-ctl { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; font-size: .85rem; color: var(--mute); }
+  .dlg-ctl .sel { max-width: 100%; }
+  .dlg-sum { font-size: .82rem; color: var(--mute); margin-top: 8px; }
+  .dlg-body { padding: 4px 18px 18px; overflow: auto; }
+  @media (max-width: 640px) {
+    .ed-dlg { width: 100vw; max-width: 100vw; height: 100%; max-height: 100%; border-radius: 0; margin: 0; }
+    .ed-head h1 { font-size: 1.8rem; }
+  }
+  @media (prefers-reduced-motion: no-preference) { .tabs a, .btn-ed { transition: background-color .12s, color .12s; } }
+</style>
+
+{% set fmt_zhang = '{:,.0f}' %}
+<article class="ed">
+  <header class="ed-head">
+    <div>
+      <h1>主動式 ETF 日報</h1>
+      <div class="dek">{{ '排除「國外為主」「高股息」，看偏成長型主動式 ETF 的動向' if scope == 'aggr' else '全部追蹤中的主動式 ETF' }}</div>
+    </div>
+    <nav class="tabs" aria-label="日報範圍">
+      <a href="/etf?scope=all" class="{{ 'on' if scope == 'all' else '' }}" {{ 'aria-current="page"' if scope == 'all' else '' }}>不分類</a>
+      <a href="/etf?scope=aggr" class="{{ 'on' if scope == 'aggr' else '' }}" {{ 'aria-current="page"' if scope == 'aggr' else '' }}>積極型</a>
+    </nav>
+  </header>
+
+  <!-- 第一區：資訊條 -->
+  <div class="info" role="status">
+    <span>最新資料日 <b>{{ etf_status.date or '—' }}</b></span>
+    <span class="ok">已抓取 <b>{{ etf_status.found|length }}</b> 檔</span>
+    <span class="miss">未抓取 <b>{{ etf_status.missing|length }}</b> 檔
+      {% if etf_status.missing %}<details><summary>（看是哪幾檔）</summary>
+        <span class="miss-list">{% for m in etf_status.missing %}{{ m.code if m.code is defined else m }} {{ m.name if m.name is defined else '' }}{{ '、' if not loop.last }}{% endfor %}</span></details>{% endif %}
+    </span>
+    <span>共 {{ etf_codes|length }} 檔{{ '積極型' if scope == 'aggr' else '' }} ETF</span>
+  </div>
+
+  <!-- 第二區：排行榜 -->
+  <section class="sec" id="rank">
+    <div class="sec-head">
+      <div><h2>增減排行</h2><div class="sub">{{ etf_status.date or '' }} 各 ETF 加總，單位：張</div></div>
+    </div>
+    <div class="rank-switch" role="tablist" aria-label="切換排行">
+      <button type="button" class="on" data-show="buy" role="tab" aria-selected="true">加碼排行</button>
+      <button type="button" data-show="sell" role="tab" aria-selected="false">減碼排行</button>
+    </div>
+    <div class="ranks" data-show="buy">
+      {% for side, title, sign in [('buy', '加碼排行（新增＋加碼）', '+'), ('sell', '減碼排行（減碼＋出清）', '−')] %}
+      <div class="rank {{ side }}">
+        <h3><span class="bar"></span>{{ title }}</h3>
+        {% if rankings[side] %}
+        <ol>
+          {% for r in rankings[side] %}
+          <li>
+            <span class="no">{{ loop.index }}</span>
+            <span class="stk"><b>{{ r.stock_name }}</b><span class="code">{{ r.stock_code }}</span></span>
+            <span class="amt">{{ sign }}{{ fmt_zhang.format(r.shares / 1000) }}<small>張</small></span>
+            <span class="meta" title="{{ ', '.join(r.etfs) }}">{{ r.etf_count }} 檔 ETF{% if side == 'buy' and r.n_new %}，{{ r.n_new }} 檔新進{% endif %}{% if side == 'sell' and r.n_removed %}，{{ r.n_removed }} 檔出清{% endif %}</span>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}<div class="empty">這一天沒有{{ '加碼' if side == 'buy' else '減碼' }}紀錄。</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- 第三區：淨值表 -->
+  <section class="sec" id="nav">
+    <div class="sec-head">
+      <div><h2>淨值與折溢價</h2><div class="sub">{{ premium_data[0].date if premium_data and premium_data[0].date is defined else etf_status.date or '' }}，點任一列可看該 ETF 持股</div></div>
+      <button type="button" class="btn-ed" id="open-detail">看詳細</button>
+    </div>
+    {% if premium_data %}
+    <table class="tbl">
+      <thead><tr><th>ETF</th><th>收盤價</th><th>淨值</th><th>折溢價</th><th>漲跌</th></tr></thead>
+      <tbody>
+        {% for p in premium_data %}
+        <tr class="click" data-etf="{{ p.code }}" tabindex="0">
+          <td class="name"><b>{{ p.name }}</b><span class="code">{{ p.code }}</span></td>
+          <td data-l="收盤">{{ "%.2f"|format(p.close) }}</td>
+          <td data-l="淨值">{{ "%.2f"|format(p.nav) }}</td>
+          <td data-l="折溢價" class="{{ 'up' if p.premium_pct > 0.5 else 'down' if p.premium_pct < -0.5 else '' }}">{{ "%+.2f"|format(p.premium_pct) }}%</td>
+          <td data-l="漲跌" class="{{ 'up' if p.change_pct > 0 else 'down' if p.change_pct < 0 else '' }}">{{ "%+.2f"|format(p.change_pct) }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="empty">這一天還沒有折溢價資料。</div>{% endif %}
+  </section>
+
+  <!-- 第四區：跨 ETF -->
+  <section class="sec" id="cross">
+    <div class="sec-head">
+      <div><h2>跨 ETF 共同持有</h2><div class="sub">被 2 檔以上 ETF 同時持有的股票，單位：張</div></div>
+      <label class="dlg-ctl" style="margin:0">日期
+        <select class="sel" id="cross-date">{% for d in dates[:60] %}<option value="{{ d }}">{{ d }}</option>{% endfor %}</select>
+      </label>
+    </div>
+    <div id="cross-box"><div class="loading">載入中…</div></div>
+  </section>
+</article>
+
+<!-- 看詳細：單一 ETF 當日持股 -->
+<dialog class="ed-dlg" id="detail" aria-labelledby="dlg-title">
+  <div class="dlg-head">
+    <div class="dlg-top"><h4 id="dlg-title">ETF 持股明細</h4>
+      <button type="button" class="dlg-x" aria-label="關閉" onclick="document.getElementById('detail').close()">×</button></div>
+    <div class="dlg-ctl">
+      <label>ETF <select class="sel" id="dlg-etf">{% for c in etf_codes %}<option value="{{ c }}">{{ c }} {{ etf_info.get(c, '') }}</option>{% endfor %}</select></label>
+      <label>日期 <select class="sel" id="dlg-date">{% for d in dates[:120] %}<option value="{{ d }}">{{ d }}</option>{% endfor %}</select></label>
+    </div>
+    <div class="dlg-sum" id="dlg-sum"></div>
+  </div>
+  <div class="dlg-body" id="dlg-body"></div>
+</dialog>
+
+<script>
+(() => {
+  const SCOPE = {{ scope | tojson }};
+  const zh = n => (Math.round(n / 1000)).toLocaleString('zh-TW');
+  const big = n => Math.round((n || 0) / 1000) !== 0;
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // ---- 手機版排行切換 ----
+  const ranks = document.querySelector('.ranks');
+  document.querySelectorAll('.rank-switch button').forEach(b => b.addEventListener('click', () => {
+    ranks.dataset.show = b.dataset.show;
+    document.querySelectorAll('.rank-switch button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); });
+  }));
+
+  // ---- 跨 ETF ----
+  const crossBox = document.getElementById('cross-box'), crossSel = document.getElementById('cross-date');
+  let crossAll = false, crossRows = [];
+  function renderCross() {
+    if (!crossRows.length) { crossBox.innerHTML = '<div class="empty">這一天沒有共同持有的股票。</div>'; return; }
+    const rows = crossAll ? crossRows : crossRows.slice(0, 30);
+    crossBox.innerHTML = `<table class="tbl"><thead><tr><th>股票</th><th>ETF 數</th><th>合計持股</th><th>加碼</th><th>減碼</th></tr></thead><tbody>${
+      rows.map(r => `<tr>
+        <td class="name"><b>${esc(r.stock_name)}</b><span class="code">${esc(r.stock_code)}</span></td>
+        <td data-l="ETF 數" title="${esc((r.etf_details || []).map(e => e.etf_code).join(', '))}"><span class="etfn">${r.etf_count}</span></td>
+        <td data-l="合計">${zh(r.total_shares)}</td>
+        <td data-l="加碼" class="${big(r.total_increase) ? 'up' : 'muted'}">${big(r.total_increase) ? '+' + zh(r.total_increase) : '—'}</td>
+        <td data-l="減碼" class="${big(r.total_decrease) ? 'down' : 'muted'}">${big(r.total_decrease) ? '−' + zh(r.total_decrease) : '—'}</td>
+      </tr>`).join('')}</tbody></table>` +
+      (crossRows.length > 30 ? `<div class="more"><button type="button" class="btn-ed" id="cross-more">${crossAll ? '收合，只看前 30 檔' : `顯示全部 ${crossRows.length} 檔`}</button></div>` : '');
+    const m = document.getElementById('cross-more');
+    if (m) m.onclick = () => { crossAll = !crossAll; renderCross(); };
+  }
+  async function loadCross() {
+    crossBox.innerHTML = '<div class="loading">載入中…</div>';
+    try {
+      const r = await fetch(`/api/cross-holdings?date=${encodeURIComponent(crossSel.value)}&scope=${SCOPE}`);
+      if (!r.ok) throw new Error(r.status);
+      crossRows = ((await r.json()).rows || []).sort((a, b) => b.etf_count - a.etf_count || b.total_shares - a.total_shares);
+      crossAll = false; renderCross();
+    } catch (e) { crossBox.innerHTML = '<div class="empty">讀取失敗，請重新整理頁面再試一次。</div>'; }
+  }
+  crossSel.addEventListener('change', loadCross);
+  loadCross();
+
+  // ---- 看詳細 ----
+  const dlg = document.getElementById('detail'), selEtf = document.getElementById('dlg-etf'), selDate = document.getElementById('dlg-date');
+  const body = document.getElementById('dlg-body'), sum = document.getElementById('dlg-sum');
+  const TYPE = { NEW: '新進', INCREASED: '加碼', DECREASED: '減碼', REMOVED: '出清' };
+  async function loadDetail() {
+    body.innerHTML = '<div class="loading">載入中…</div>'; sum.textContent = '';
+    document.getElementById('dlg-title').textContent = selEtf.options[selEtf.selectedIndex].text;
+    try {
+      const r = await fetch(`/api/etf-holdings?etf_code=${encodeURIComponent(selEtf.value)}&date=${encodeURIComponent(selDate.value)}`);
+      const j = await r.json();
+      const h = (j.holdings || []).sort((a, b) => b.weight - a.weight);
+      if (!h.length) { body.innerHTML = '<div class="empty">這一天沒有這檔 ETF 的持股資料，請換一個日期。</div>'; return; }
+      const cnt = t => h.filter(x => x.change_type === t).length;
+      sum.textContent = `共 ${h.length} 檔持股：新進 ${cnt('NEW')}、加碼 ${cnt('INCREASED')}、減碼 ${cnt('DECREASED')}、出清 ${cnt('REMOVED')}`;
+      body.innerHTML = `<table class="tbl"><thead><tr><th>股票</th><th>權重</th><th>持股</th><th>增減</th><th>狀態</th></tr></thead><tbody>${
+        h.map(x => {
+          const d = big(x.shares_increase) ? `<span class="up">+${zh(x.shares_increase)}</span>` : big(x.shares_decrease) ? `<span class="down">−${zh(x.shares_decrease)}</span>` : '<span class="muted">—</span>';
+          const unit = x.unit && x.unit !== '股' ? x.unit : '張';
+          const qty = x.unit && x.unit !== '股' ? Number(x.shares).toLocaleString('zh-TW') : zh(x.shares);
+          return `<tr><td class="name"><b>${esc(x.stock_name)}</b><span class="code">${esc(x.stock_code)}</span></td>
+            <td data-l="權重">${Number(x.weight).toFixed(2)}%</td><td data-l="持股">${qty} ${unit}</td>
+            <td data-l="增減">${d}</td><td data-l="狀態" class="m-hide">${TYPE[x.change_type] ? `<span class="chip">${TYPE[x.change_type]}</span>` : ''}</td></tr>`;
+        }).join('')}</tbody></table>`;
+    } catch (e) { body.innerHTML = '<div class="empty">讀取失敗，請稍後再試。</div>'; }
+  }
+  function openDetail(code) {
+    if (code) selEtf.value = code;
+    if (!dlg.open) dlg.showModal();
+    loadDetail();
+  }
+  selEtf.addEventListener('change', loadDetail);
+  selDate.addEventListener('change', loadDetail);
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+  document.getElementById('open-detail').addEventListener('click', () => openDetail());
+  document.querySelectorAll('tr[data-etf]').forEach(tr => {
+    tr.addEventListener('click', () => openDetail(tr.dataset.etf));
+    tr.addEventListener('keydown', e => { if (e.key === 'Enter') openDetail(tr.dataset.etf); });
+  });
+})();
+</script>
+{% endblock %}

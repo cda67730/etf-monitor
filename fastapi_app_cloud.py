@@ -693,6 +693,38 @@ class DatabaseQuery:
             logger.error(f"獲取持股變化資料錯誤: {e}")
             return []
 
+    def get_change_rankings(self, date: str, limit: int = 15) -> Dict[str, List[Dict[str, Any]]]:
+        """當日新增／加碼排行與減碼／出清排行（以股票彙總各 ETF，單位：股）"""
+        out = {"buy": [], "sell": []}
+        if not self.db_available or not date:
+            return out
+        try:
+            ph = self._get_placeholder()
+            rows = self.execute_query(
+                f"SELECT etf_code, stock_code, stock_name, change_type, old_shares, new_shares FROM holdings_changes "
+                f"WHERE change_date = {ph} AND {self._scope_sql('etf_code')}", (date,), fetch="all") or []
+            agg: Dict[tuple, Dict[str, Any]] = {}
+            for r in rows:
+                side = "buy" if r["change_type"] in ("NEW", "INCREASED") else "sell"
+                diff = abs((r["new_shares"] or 0) - (r["old_shares"] or 0))
+                if not diff:
+                    continue
+                a = agg.setdefault((side, r["stock_code"]), {"stock_code": r["stock_code"], "stock_name": r["stock_name"],
+                                                             "shares": 0, "etfs": [], "n_new": 0, "n_removed": 0})
+                a["shares"] += diff
+                a["etfs"].append(r["etf_code"])
+                a["n_new"] += r["change_type"] == "NEW"
+                a["n_removed"] += r["change_type"] == "REMOVED"
+            for (side, _), a in agg.items():
+                a["etf_count"] = len(a["etfs"])
+                out[side].append(a)
+            for side in out:
+                out[side].sort(key=lambda x: (-x["shares"], -x["etf_count"]))
+                out[side] = out[side][:limit]
+        except Exception as e:
+            logger.error(f"增減排行錯誤: {e}")
+        return out
+
     def get_removed_holdings(self, date: str) -> List[Dict[str, Any]]:
         """當日被出清（REMOVED）的持股，限目前日報範圍"""
         if not self.db_available or not date:
@@ -1546,6 +1578,25 @@ async def api_etf_holdings(
         return {"etf_code": etf_code, "etf_name": "", "date": date, "holdings": [], "error": str(e)}
 
 
+@app.get("/api/cross-holdings")
+async def api_cross_holdings(date: str = Query(None, description="日期 YYYY-MM-DD，不填取最新")):
+    """API：跨 ETF 重複持股（依目前日報範圍）；單位：股"""
+    from starlette.concurrency import run_in_threadpool
+    if not date:
+        dates = await run_in_threadpool(db_query.get_available_dates)
+        date = dates[0] if dates else None
+    scope = _etf_scope.get()
+
+    def _run():  # 在背景執行緒裡也套用同樣的日報範圍
+        token = _etf_scope.set(scope)
+        try:
+            return db_query.get_cross_holdings(date)
+        finally:
+            _etf_scope.reset(token)
+    rows = await run_in_threadpool(_run) if date else []
+    return {"date": date, "scope": scope, "rows": rows}
+
+
 @app.get("/api/etfs")
 async def api_etfs(scope: str = Query("all", description="all＝全部啟用；aggr＝積極型；every＝含停用")):
     """API：追蹤中的 ETF 清單（免登入，給 BookReview 等外部程式用）"""
@@ -2146,8 +2197,11 @@ async def home(request: Request):
         etf_info = db_query.get_etf_codes_with_names()
         etf_status = db_query.get_etf_data_status(dates[0] if dates else None)
         premium_data = db_query.get_premium_data(dates[0] if dates else None)
+        rankings = db_query.get_change_rankings(dates[0] if dates else None)
 
-        return templates.TemplateResponse("index.html", {
+        return templates.TemplateResponse("etf_daily.html", {
+            "rankings": rankings,
+            "scope": _etf_scope.get(),
             "request": request,
             "dates": dates,
             "etf_codes": etf_codes,
