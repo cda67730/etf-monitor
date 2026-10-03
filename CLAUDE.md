@@ -84,8 +84,8 @@
 ## 期貨籌碼（fut_flow）
 - 來源：POST `https://www.taifex.com.tw/cht/3/futContractsDateDown`（queryStartDate／queryEndDate `YYYY/MM/DD`、commodityId 空白＝全部），回 CP950 CSV，一次最多查一年；免金鑰，Actions 機房連得到
 - 存 `fut_inst`（d, product, inst, net_trade, long_oi, short_oi, net_oi, net_oi_amt）；身份別原文「外資及陸資」「投信」「自營商」
-- 頁面 8 張圖（股票期貨、金融期貨、那斯達克100、道瓊、台指期、電子期貨、標普500、費城半導體）＝未平倉多空淨額（口，所有月份合計）；可切外資／投信／自營商，固定顯示近半年（120 個交易日）；手機 2 欄小卡，點卡片放大
-- 排程 `fut` 平日 15:10、18:10（`SCHED_FUT`）；資料庫空的時候啟動即背景補約一年（`BACKFILL_DAYS=400`，批次寫入）
+- 頁面 8 張圖（股票期貨、金融期貨、那斯達克100、道瓊、台指期、電子期貨、標普500、費城半導體）＝未平倉多空淨額（口，所有月份合計）；可切外資／投信／自營商，固定顯示近半年（120 個交易日，資料庫保留全部歷史不刪）；每張圖最後一天實心點、前一天空心點，旁邊標「較昨日 ±N」（`dayDiff` 外掛）；手機 2 欄小卡，點卡片放大
+- 排程 `fut` 平日 15:10、18:10（`SCHED_FUT`）；資料庫空的時候啟動即背景補兩年（`BACKFILL_DAYS=730`，批次寫入）
 - 公開頁，不需登入
 
 ## 日報 PDF（etf_report.py）

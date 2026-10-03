@@ -19,7 +19,7 @@ from starlette.concurrency import run_in_threadpool
 logger = logging.getLogger(__name__)
 URL = "https://www.taifex.com.tw/cht/3/futContractsDateDown"
 UA = {"User-Agent": "Mozilla/5.0 (etf-monitor futures)"}
-BACKFILL_DAYS = 400      # 頁面只畫近半年，補一年多留餘裕
+BACKFILL_DAYS = 730      # 首次補兩年；資料只增不刪，頁面只畫近半年
 INSTS = {"foreign": "外資及陸資", "trust": "投信", "dealer": "自營商"}
 # 頁面上的 8 張圖（順序照畫面兩排）：(期交所商品名稱, 短名)
 PRODUCTS = [

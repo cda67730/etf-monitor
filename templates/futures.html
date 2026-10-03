@@ -105,8 +105,36 @@
   let inst = 'foreign', days = 120,      // 固定顯示近半年
       data = null, charts = [], big = null;
 
+  // 在最後一天畫實心點、前一天畫空心點，旁邊標「較昨日 ±N」
+  const dayDiff = {
+    id: 'dayDiff',
+    afterDatasetsDraw(ch, _a, o) {
+      const pts = ch.getDatasetMeta(0).data, vals = ch.data.datasets[0].data;
+      const idx = vals.map((v, i) => v == null ? -1 : i).filter(i => i >= 0);
+      if (idx.length < 2) return;
+      const i = idx[idx.length - 1], j = idx[idx.length - 2], d = vals[i] - vals[j];
+      const p = pts[i], q = pts[j], col = d > 0 ? RED : d < 0 ? GREEN : '#6b7a8f', c = ch.ctx, a = ch.chartArea;
+      c.save();
+      c.beginPath(); c.arc(q.x, q.y, o.large ? 3.5 : 2.5, 0, 2 * Math.PI);
+      c.fillStyle = '#fff'; c.fill(); c.lineWidth = 1.5; c.strokeStyle = '#6b7a8f'; c.stroke();
+      c.beginPath(); c.arc(p.x, p.y, o.large ? 4.5 : 3.5, 0, 2 * Math.PI);
+      c.fillStyle = col; c.fill(); c.lineWidth = 1.5; c.strokeStyle = '#fff'; c.stroke();
+      const txt = (o.large ? '較昨日 ' : '') + sgn(d);
+      c.font = `600 ${o.large ? 13 : 11}px "IBM Plex Sans", "Noto Sans TC", sans-serif`;
+      const w = c.measureText(txt).width + 8, h = o.large ? 19 : 16;
+      const x = Math.max(a.left, p.x - w - 6);
+      let y = p.y < (a.top + a.bottom) / 2 ? p.y + 6 : p.y - h - 6;
+      y = Math.min(Math.max(y, a.top), a.bottom - h);
+      c.fillStyle = 'rgba(255,255,255,.92)'; c.strokeStyle = col; c.lineWidth = 1;
+      c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, 4) : c.rect(x, y, w, h); c.fill(); c.stroke();
+      c.fillStyle = col; c.textBaseline = 'middle'; c.textAlign = 'left'; c.fillText(txt, x + 4, y + h / 2 + .5);
+      c.restore();
+    }
+  };
+
   function chart(cv, dates, vals, large) {
     return new Chart(cv, {
+      plugins: [dayDiff],
       type: 'line',
       data: { labels: dates.map(md), datasets: [{
         data: vals, borderWidth: large ? 2 : 1.5, pointRadius: 0, pointHoverRadius: 3, tension: .15, spanGaps: true,
@@ -115,7 +143,8 @@
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { display: false },
+        layout: { padding: { top: 4, right: 4 } },
+        plugins: { legend: { display: false }, dayDiff: { large },
           tooltip: { displayColors: false, callbacks: { title: it => dates[it[0].dataIndex], label: it => '淨額 ' + sgn(it.parsed.y) + ' 口' } } },
         scales: {
           x: { display: large, grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#6b7a8f', font: { size: 11 } } },
@@ -132,7 +161,7 @@
     charts.forEach(c => c.destroy()); charts = [];
     const { dates, products } = data;
     const stat = document.getElementById('stat');
-    if (!dates.length) { stat.innerHTML = '<span>尚無資料（首次部署會在背景補一年資料，約 1 分鐘後重新整理）</span>'; return; }
+    if (!dates.length) { stat.innerHTML = '<span>尚無資料（首次部署會在背景補兩年資料，約 1 分鐘後重新整理）</span>'; return; }
     const tx = products.find(p => p.short === '台指期');
     const name = inst === 'foreign' ? '外資' : data.inst_name;
     stat.innerHTML = `<span>資料日 <b>${dates[dates.length - 1].replace(/-/g, '/')}</b></span>` +
