@@ -74,6 +74,7 @@
    - 分類：國內主動、國外為主、高股息（可擴充）
    - 首次部署把寫死的代號匯入，預設「國內主動」，由使用者在管理頁調整
    - 爬蟲改讀啟用中的 ETF；新增代號時先試抓
+   - 之後要用程式補進新 ETF：寫在 `etf_registry.ADDITIONS`（批次名稱→{代號: (名稱, 分類)}），啟動時每批只匯入一次（記在 `etf_registry_migrations`），已存在的不動、使用者刪掉的不會再加回；2026-10-04 補 8 檔台股主動式（00400A、00401A、00407A、00408A、00410A、00986A、00987A、00998A）
 4. ✅ **三大法人改存 PostgreSQL**：`inst_daily`（trade_date, stock_id, name, market, foreign_net, trust_net, dealer_net）、`inst_no_trading`；頁面 `/inst-cobuy`、API `/api/inst-cobuy`、CSV 下載；首次啟動匯入 `inst_cobuy/data/*.csv`；之後移除 GitHub Actions 與 Pages
    - 環境變數 `INST_COBUY_PUBLIC=true` 時該頁免登入（為了 AdSense）
 5. ✅ **首頁分流** `/`（原首頁移到 `/etf`），四張卡片：

@@ -31,6 +31,21 @@ DEFAULT_ETFS = {
     '00406A': '中信台灣收益主動式ETF',
 }
 
+# 之後補進來的 ETF：每批只匯入一次（記在 etf_registry_migrations），已存在的代號不動，
+# 使用者之後在管理頁刪掉也不會被加回來。代號: (名稱, 分類)
+ADDITIONS = {
+    "2026-10-04": {
+        "00400A": ("國泰動能高息主動式ETF", "高股息"),
+        "00401A": ("摩根台灣鑫收主動式ETF", "高股息"),
+        "00407A": ("凱基台灣主動式ETF", "國內主動"),
+        "00408A": ("第一金優股息主動式ETF", "高股息"),
+        "00410A": ("永豐台灣科技趨勢主動式ETF", "國內主動"),
+        "00986A": ("台新龍頭成長主動式ETF", "國內主動"),
+        "00987A": ("台新優勢成長主動式ETF", "國內主動"),
+        "00998A": ("復華金融股息主動式ETF", "高股息"),
+    },
+}
+
 _CACHE_SEC = 30
 
 
@@ -73,6 +88,26 @@ class ETFRegistry:
                 self._q("INSERT INTO etf_registry (etf_code, etf_name, category, enabled, sort_order) "
                         "VALUES (?, ?, ?, 1, ?)", (code, name, "國內主動", i))
             logger.info(f"✅ etf_registry 首次建立，匯入 {len(DEFAULT_ETFS)} 檔 ETF")
+        self._apply_additions()
+
+    def _apply_additions(self):
+        self._q("CREATE TABLE IF NOT EXISTS etf_registry_migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        done = {r["name"] for r in (self._q("SELECT name FROM etf_registry_migrations", fetch="all") or [])}
+        for batch, items in ADDITIONS.items():
+            if batch in done:
+                continue
+            have = {r["etf_code"] for r in (self._q("SELECT etf_code FROM etf_registry", fetch="all") or [])}
+            mx = self._q("SELECT COALESCE(MAX(sort_order), -1) AS m FROM etf_registry", fetch="one")["m"]
+            added = []
+            for code, (name, cat) in items.items():
+                if code in have:
+                    continue
+                mx += 1
+                self._q("INSERT INTO etf_registry (etf_code, etf_name, category, enabled, sort_order) VALUES (?, ?, ?, 1, ?)",
+                        (code, name, cat, mx))
+                added.append(code)
+            self._q("INSERT INTO etf_registry_migrations (name) VALUES (?)", (batch,))
+            logger.info(f"✅ etf_registry 補入 {batch}：{'、'.join(added) or '（都已存在）'}")
 
     def _invalidate(self):
         self._cache = None
