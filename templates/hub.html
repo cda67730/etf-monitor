@@ -26,6 +26,7 @@
   .c-mood { --hub-c: #e8590c; --hub-bg: #fff0e6; }
   .hub-stats.q4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; }
   @media (max-width: 480px) { .hub-stats.q4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .fg-xf b { color: #0b7a3e; } .fg-f b { color: #12a150; } .fg-n b { color: #6c757d; } .fg-g b { color: #e8590c; } .fg-xg b { color: #e5383b; }
   .hub-card.soon { background: #fafafa; border-style: dashed; }
 </style>
 
@@ -80,8 +81,15 @@
     </div>
     {% set mi = {} %}{% for x in mood['items'] %}{% set _ = mi.update({x.id: x}) %}{% endfor %}
     <div class="hub-stats q4">
-      {% for k, lb in [('vix', 'VIX'), ('cnn_fg', '恐懼貪婪'), ('tw_vix', '台股 VIX')] %}{% set x = mi.get(k) %}
+      {% for k, lb in [('vix', 'VIX'), ('cnn_fg', ''), ('tw_vix', '台股 VIX')] %}{% set x = mi.get(k) %}
+      {% if k == 'cnn_fg' %}
+      {# 恐懼貪婪：不放標題，只寫現狀並依區間上色（恐懼綠、貪婪紅） #}
+      {% set fv = (x.display|int) if x and x.display not in ('—', None) else none %}
+      {% set fg = none if fv is none else ('fg-xf', '極度恐懼') if fv < 25 else ('fg-f', '恐懼') if fv < 45 else ('fg-n', '中性') if fv <= 55 else ('fg-g', '貪婪') if fv < 75 else ('fg-xg', '極度貪婪') %}
+      <div class="{{ fg[0] if fg }}" title="CNN 恐懼貪婪指數 {{ fv if fv is not none else '' }}"><b>{{ fg[1] if fg else '—' }}</b></div>
+      {% else %}
       <div><b class="{{ 'text-danger' if x and x.signal == 'red' else 'text-warning' if x and x.signal == 'yellow' else '' }}">{{ x.display if x else '—' }}</b><span>{{ lb }}{% if x and x.signal not in ('gray',) %}・{{ x.get('sub') or x.label }}{% endif %}</span></div>
+      {% endif %}
       {% endfor %}
       <div><b class="{{ 'text-danger' if retail and retail.pct > 0 else 'text-success' if retail and retail.pct < 0 else '' }}">{{ '%+.1f%%'|format(retail.pct) if retail else '—' }}</b><span>散戶多空比（小台）</span></div>
     </div>
