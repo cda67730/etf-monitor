@@ -146,6 +146,12 @@ class FutStore:
         cur["chg"] = cur["net"] + int(rows[1]["inst"]) if len(rows) > 1 else None
         return cur
 
+    def retail_series(self, product="微型臺指期貨", days=400):
+        """市場情緒頁用：[(日期, 散戶淨口數, {})]"""
+        rows = self._q("SELECT d, SUM(net_oi) AS inst FROM fut_inst WHERE product = ? GROUP BY d ORDER BY d DESC LIMIT ?",
+                       (product, int(days)), fetch="all") or []
+        return [(r["d"], -int(r["inst"]), {}) for r in reversed(rows)]
+
     def last_date(self):
         r = self._q("SELECT MAX(d) AS d FROM fut_inst", fetch="one") or {}
         return r.get("d")

@@ -19,6 +19,8 @@ from starlette.concurrency import run_in_threadpool
 import mood_fetch as F
 
 logger = logging.getLogger(__name__)
+# 其他模組提供的序列（例如期貨籌碼的微台散戶淨口數）：{指標 id: 回傳 [(d, v, extra)] 的函式}，由主程式註冊
+EXTRA = {}
 TERMS = [("short", "短期", "天－週", "判斷短線是否過熱、會不會回檔"),
          ("mid", "中期", "週－月", "判斷槓桿、資金與廣度是否出現趨勢轉折"),
          ("long", "長期", "月－年", "判斷評價與景氣是否來到結構性循環頭部")]
@@ -104,7 +106,13 @@ class MoodStore:
     def report(self):
         if self._cache and time.time() - self._cache_at < 600:
             return self._cache
-        self._cache = build_report(self.series(), self.last_errors)
+        S = self.series()
+        for k, fn in EXTRA.items():
+            try:
+                S[k] = fn() or []
+            except Exception as e:
+                logger.error(f"[mood] {k} 讀取失敗：{e}")
+        self._cache = build_report(S, self.last_errors)
         self._cache_at = time.time()
         return self._cache
 
@@ -181,6 +189,7 @@ IND = [
     ("cnn_fg", "short", "CNN 恐懼貪婪指數", "", ">75 極度貪婪", "日", 365),
     ("tw_vix", "short", "台股 VIX（臺指選擇權波動率指數）", "", "<15 自滿／>30 恐慌", "日", 365),
     ("put_call", "short", "CBOE 個股賣權買權比", "", "<0.55 自滿", "日", 120),
+    ("tmf_retail", "short", "微台散戶淨多空（微型臺指期貨）", "口", "近一年前 20% 高檔＝散戶過度偏多（反向指標）", "日", 365),
     ("aaii", "short", "AAII 散戶情緒（看多比）", "%", "看多 >45% 或多空差 >+20", "週", 400),
     ("margin", "mid", "FINRA 保證金負債", "", "年增 >+30%", "月", 400),
     ("margin_gdp", "mid", "保證金負債佔 GDP", "%", ">4.0%", "月", 400),
@@ -193,7 +202,7 @@ IND = [
     ("lei", "long", "美國經濟諮商理事會領先指標", "", "近 6 個月 < -4%", "月", 3650),
 ]
 STALE = {"日": 6, "週": 12, "月": 75}
-SHORT = {"vix": "VIX 恐慌指數", "tw_vix": "台股 VIX", "cnn_fg": "CNN 恐懼貪婪", "aaii": "AAII 散戶看多", "put_call": "個股賣權買權比",
+SHORT = {"vix": "VIX 恐慌指數", "tw_vix": "台股 VIX", "cnn_fg": "CNN 恐懼貪婪", "aaii": "AAII 散戶看多", "put_call": "個股賣權買權比", "tmf_retail": "微台散戶淨多空",
          "margin": "FINRA 保證金負債", "margin_gdp": "保證金佔 GDP", "ipo": "IPO 募資額", "ad_line": "NYSE 騰落線",
          "bofa": "美銀牛熊指標", "buffett": "巴菲特指標", "cape": "席勒本益比 CAPE", "t10y2y": "美債 10Y−2Y 利差",
          "lei": "領先指標 LEI"}
@@ -208,6 +217,7 @@ SOURCES = {
     "tw_vix": ("臺灣期貨交易所", "https://www.taifex.com.tw/cht/7/vixDaily3MNew"),
     "cnn_fg": ("CNN", "https://www.cnn.com/markets/fear-and-greed"),
     "aaii": ("AAII", "https://www.aaii.com/sentimentsurvey"),
+    "tmf_retail": ("臺灣期貨交易所（全市場減三大法人）", "https://www.taifex.com.tw/cht/3/futContractsDate"),
     "put_call": ("CBOE", "https://www.cboe.com/us/options/market_statistics/daily/"),
     "margin": ("FINRA", "https://www.finra.org/rules-guidance/key-topics/margin-accounts/margin-statistics"),
     "margin_gdp": ("FINRA ÷ GDP（multpl）", "https://www.multpl.com/us-gdp"),
@@ -337,6 +347,20 @@ def _judge(i, rows, S, D):
         r["lines"] = [(0, "倒掛 0")]
         if v < 0: r.update(signal="red", label="倒掛")
         r["note"] = f"10 年期減 2 年期 {v:+.2f} 個百分點。" + ("殖利率曲線倒掛，歷史上常領先衰退。" if v < 0 else "曲線正斜率，沒有倒掛。")
+    elif i == "tmf_retail":
+        hist = [x[1] for x in rows[-250:]]
+        rank = sum(1 for x in hist if x <= v) / len(hist) * 100      # 在近一年的百分位
+        r["display"] = f"{'淨多' if v >= 0 else '淨空'} {abs(v):,.0f}"
+        r["sub"] = f"單位：口・近一年第 {rank:.0f} 百分位"
+        r["lines"] = [(0, "0")]
+        if v > 0 and rank >= 80: r.update(signal="red", label="散戶過度偏多")
+        elif v > 0 and rank >= 60: r.update(signal="yellow", label="散戶偏多")
+        elif v < 0 and rank <= 20: r.update(label="散戶偏空")
+        r["note"] = (f"{d} 散戶在微台{'淨多' if v >= 0 else '淨空'} {abs(v):,.0f} 口（三大法人淨額的相反數），"
+                     f"在近一年 {len(hist)} 個交易日中排第 {rank:.0f} 百分位。" +
+                     ("散戶大舉站在多方，常見於短線過熱，反向看是警訊。" if r["signal"] == "red" else
+                      "散戶偏多但還沒到極端。" if r["signal"] == "yellow" else
+                      "散戶偏空，反向看短線不算過熱。" if v < 0 else "散戶部位不極端。"))
     elif i == "lei":
         six = (e or {}).get("six_month")
         r["display"] = f"{v:.1f}"
@@ -384,6 +408,10 @@ def _track_value(i, rows):
 
 
 def build_report(S, errors=None):
+    tr = [x[1] for x in (S.get("tmf_retail") or [])[-250:]]
+    if tr:                                                # 微台散戶的溫度計刻度依近一年高低點
+        lo, hi = min(tr + [0]), max(tr + [0])
+        TRACK["tmf_retail"] = (lo, hi, [(lo + (hi - lo) * .8, hi, "red", "過度偏多")] if hi > 0 else [], "口")
     D = derive(S)
     allS = {**S, **D}
     items, terms = [], {t[0]: {"key": t[0], "name": t[1], "span": t[2], "desc": t[3], "items": []} for t in TERMS}

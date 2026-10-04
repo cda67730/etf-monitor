@@ -204,7 +204,7 @@
       <div class="fig">
         <span class="big">{{ x.display }}</span>
         {% if x.change is defined and x.change is not none %}
-        <span class="chg">{{ x.arrow }} {{ "%+.2f"|format(x.change) if (x.change|abs) < 1000 else "{:+,.0f}".format(x.change) }} 較前一期</span>
+        <span class="chg">{{ x.arrow }} {{ "{:+,.0f} 口".format(x.change) if x.id == 'tmf_retail' else "%+.2f"|format(x.change) if (x.change|abs) < 1000 else "{:+,.0f}".format(x.change) }} 較前一期</span>
         {% endif %}
       </div>
       {% if x.sub %}<div class="subv">{{ x.sub }}</div>{% endif %}

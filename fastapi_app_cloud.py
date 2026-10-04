@@ -161,6 +161,8 @@ market_mood.init(db_config)
 # ============ 期貨籌碼（fut_inst，期交所三大法人各期貨契約）============
 import fut_flow
 fut_flow.init(db_config)
+if fut_flow.store:
+    market_mood.EXTRA["tmf_retail"] = fut_flow.store.retail_series   # 市場情緒短期加「微台散戶淨多空」
 
 # ============ 初始化爬蟲 ============
 try:

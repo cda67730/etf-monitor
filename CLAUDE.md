@@ -51,7 +51,7 @@
 
 ## 市場情緒指標（market_mood）
 - 改自使用者 Google Drive「總體風險掃描_標準提示詞_v3」；門檻固定沿用提示詞
-- 短期：VIX（CBOE CSV）、台股 VIX（期交所月檔 `YYYYMMnew.txt`，只留近 3 個月）、CNN 恐懼貪婪、CBOE 個股賣權買權比、AAII（官方 xls）
+- 短期：VIX（CBOE CSV）、台股 VIX（期交所月檔 `YYYYMMnew.txt`，只留近 3 個月）、CNN 恐懼貪婪、CBOE 個股賣權買權比、AAII（官方 xls）、微台散戶淨多空 `tmf_retail`（不存 mood_obs：主程式把 `fut_flow.store.retail_series` 註冊到 `market_mood.EXTRA`，`report()` 時合併；散戶淨口數＝−三大法人微台淨額；近一年百分位 ≥80 且淨多＝紅燈「散戶過度偏多」、≥60＝黃燈；溫度計刻度依近一年高低點動態設定）
 - 中期：FINRA 保證金負債（官網表格）、保證金佔 GDP（GDP 取自 multpl）、IPO（Renaissance 今年累計）、NYSE 騰落線（WSJ 當日漲跌家數，本站逐日累計，滿 20 日才判斷背離）、美銀牛熊指標（Finvaulta 的 Flow Show 週報內文）
 - 長期：巴菲特指標（Yahoo ^W5000 ÷ GDP）、CAPE（multpl）、美債 10Y−2Y（美國財政部 CSV）、LEI（Conference Board 新聞稿文字）
 - 已拿掉：NAAIM（2026/7 後停更）、高收益債利差（只有 FRED）、內部人買賣比與 AAII 持股比重（GuruFocus／AAII 擋）、M 平方（Cloudflare）
