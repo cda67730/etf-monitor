@@ -1661,6 +1661,40 @@ import etf_report
 if db_config:
     etf_report.init(db_config, db_query, _in_scope, inst_flow.flow)
 
+
+# ============ 股票名稱統一用證交所／櫃買簡稱（例如「台積電」而不是「台灣積體電路製造」）============
+def _short_names():
+    if not etf_report.report:
+        return {}
+    return {c: (v["short"] or "").replace("*", "").strip() for c, v in etf_report.report.market.meta().items() if v.get("short")}
+
+
+def _rename_holdings_to_short():
+    """把已存進持股表、異動表的長名稱換成簡稱（只改名稱欄位；每次啟動檢查，已一致就不動）"""
+    try:
+        m = _short_names()
+        if not m:
+            return
+        ph = "%s" if db_config.db_type == "postgresql" else "?"
+        n = 0
+        for table in ("etf_holdings", "holdings_changes"):
+            for r in db_config.execute_query(f"SELECT DISTINCT stock_code, stock_name FROM {table}", fetch="all") or []:
+                short = m.get(r["stock_code"])
+                if short and short != r["stock_name"]:
+                    db_config.execute_query(f"UPDATE {table} SET stock_name = {ph} WHERE stock_code = {ph} AND stock_name = {ph}",
+                                            (short, r["stock_code"], r["stock_name"]))
+                    n += 1
+        if n:
+            logger.info(f"✅ 股票名稱改用簡稱：{n} 組代號／名稱")
+    except Exception as e:
+        logger.error(f"❌ 股票名稱改用簡稱失敗：{e}")
+
+
+import threading
+if scraper and etf_report.report:
+    scraper.short_names = _short_names
+    threading.Thread(target=_rename_holdings_to_short, daemon=True).start()
+
 # ============ 三大法人今日觀察（inst_report，與日報 PDF 共用資料表）============
 import inst_report
 inst_report.init(etf_report.report)

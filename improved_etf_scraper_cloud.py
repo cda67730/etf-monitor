@@ -41,6 +41,9 @@ class ETFHoldingsScraper:
 
         # 股票名稱正規化 registry：stock_code -> 目前已知最佳名稱
         self._name_registry: dict = {}
+        # 證交所／櫃買簡稱來源（主程式設定成回傳 {代號: 簡稱} 的函式）；有簡稱就一律用簡稱
+        self.short_names = None
+        self._short_cache, self._short_at = {}, 0
         
         # 🔧 關鍵修復：驗證數據庫可用性
         if not db_config:
@@ -49,9 +52,24 @@ class ETFHoldingsScraper:
         logger.info(f"✅ 初始化爬蟲，數據庫類型: {db_config.db_type}")
         self.init_database()
     
+    def _short_name(self, stock_code):
+        if not self.short_names:
+            return None
+        if time.time() - self._short_at > 600:
+            try:
+                self._short_cache = self.short_names() or {}
+            except Exception as e:
+                logger.warning(f"⚠️ 讀取股票簡稱失敗：{e}")
+            self._short_at = time.time()
+        return self._short_cache.get(stock_code)
+
     def _normalize_stock_name(self, stock_code: str, stock_name: str) -> str:
-        """同一股票代號，跨ETF統一使用最完整的中文名稱。
+        """同一股票代號跨 ETF 統一名稱：台股優先用證交所／櫃買簡稱（例如「台積電」）；
+        查不到（國外股票等）才用各 ETF 揭露名稱中最完整的。
         規則：去除星號；括號後的截斷內容直接裁掉；較長者勝。"""
+        short = self._short_name(stock_code)
+        if short:
+            return short
         clean = stock_name.replace('*', '').strip()
         for bracket in ('(', '（'):
             if bracket in clean:
