@@ -18,6 +18,9 @@ from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 URL = "https://www.taifex.com.tw/cht/3/futContractsDateDown"
+OI_URL = "https://www.taifex.com.tw/cht/3/futDataDown"     # 每日行情（含各月份未沖銷契約數），一次最多約一個月
+OI_BACKFILL_DAYS = 120
+RETAIL = ("MTX", "小型臺指期貨")                            # 散戶多空比用小台
 UA = {"User-Agent": "Mozilla/5.0 (etf-monitor futures)"}
 BACKFILL_DAYS = 730      # 首次補兩年；資料只增不刪，頁面只畫近半年
 INSTS = {"foreign": "外資及陸資", "trust": "投信", "dealer": "自營商"}
@@ -38,6 +41,8 @@ class FutStore:
             d TEXT NOT NULL, product TEXT NOT NULL, inst TEXT NOT NULL,
             net_trade INTEGER, long_oi INTEGER, short_oi INTEGER, net_oi INTEGER, net_oi_amt BIGINT,
             PRIMARY KEY (d, product, inst))""")
+        self._q("""CREATE TABLE IF NOT EXISTS fut_oi (
+            d TEXT NOT NULL, product TEXT NOT NULL, oi INTEGER, PRIMARY KEY (d, product))""")
 
     @property
     def ph(self):
@@ -85,6 +90,52 @@ class FutStore:
                 cur.executemany(sql.format(v="(?, ?, ?, ?, ?, ?, ?, ?)"), rows)
                 conn.commit()
 
+    @staticmethod
+    def fetch_oi(cid, start, end):
+        """全市場未平倉（一般交易時段各到期月份的未沖銷契約數加總）；回傳 {日期: 口數}"""
+        r = requests.post(OI_URL, headers=UA, timeout=120, data={
+            "down_type": "1", "commodity_id": cid, "commodity_id2": "",
+            "queryStartDate": start.strftime("%Y/%m/%d"), "queryEndDate": end.strftime("%Y/%m/%d")})
+        r.raise_for_status()
+        rows = list(csv.reader(io.StringIO(r.content.decode("cp950", errors="replace"))))
+        if not rows or rows[0][:2] != ["交易日期", "契約"]:
+            raise ValueError("期交所行情回應格式不符（查詢區間可能太長）")
+        h = rows[0]
+        io_, it = h.index("未沖銷契約數"), h.index("交易時段")
+        out = {}
+        for x in rows[1:]:
+            if len(x) > max(io_, it) and x[it].strip() == "一般" and x[io_].strip().isdigit():
+                d = x[0].strip().replace("/", "-")
+                out[d] = out.get(d, 0) + int(x[io_])
+        return out
+
+    def update_oi(self, today):
+        cid, name = RETAIL
+        r = self._q("SELECT MAX(d) AS d FROM fut_oi WHERE product = ?", (name,), fetch="one") or {}
+        s = dt.date.fromisoformat(r["d"]) if r.get("d") else today - dt.timedelta(days=OI_BACKFILL_DAYS)
+        n = 0
+        while s <= today:                                       # 一次查一個月
+            e = min(s + dt.timedelta(days=27), today)
+            for d, oi in self.fetch_oi(cid, s, e).items():
+                self._q("INSERT INTO fut_oi (d, product, oi) VALUES (?, ?, ?) ON CONFLICT (d, product) DO UPDATE SET oi = EXCLUDED.oi",
+                        (d, name, oi))
+                n += 1
+            s = e + dt.timedelta(days=1)
+            time.sleep(1)
+        return n
+
+    def retail(self):
+        """小台散戶多空比：散戶多單−散戶空單＝−(三大法人小台多空淨額合計)；比例＝÷ 全市場未平倉"""
+        name = RETAIL[1]
+        rows = self._q("SELECT o.d AS d, o.oi AS oi, SUM(f.net_oi) AS inst FROM fut_oi o JOIN fut_inst f ON f.d = o.d AND f.product = o.product "
+                       "WHERE o.product = ? GROUP BY o.d, o.oi ORDER BY o.d DESC LIMIT 2", (name,), fetch="all") or []
+        if not rows or not rows[0]["oi"]:
+            return None
+        out = [{"d": r["d"], "oi": r["oi"], "net": -int(r["inst"]), "pct": round(-int(r["inst"]) / r["oi"] * 100, 2)} for r in rows if r["oi"]]
+        cur = out[0]
+        cur["chg"] = round(cur["pct"] - out[1]["pct"], 2) if len(out) > 1 else None
+        return cur
+
     def last_date(self):
         r = self._q("SELECT MAX(d) AS d FROM fut_inst", fetch="one") or {}
         return r.get("d")
@@ -103,8 +154,13 @@ class FutStore:
                 total += len(rows)
                 s = e + dt.timedelta(days=1)
                 time.sleep(1)
+            try:
+                n_oi = self.update_oi(today)
+            except Exception as e:
+                n_oi = f"失敗：{e}"
+                logger.warning(f"[fut] 全市場未平倉抓取失敗：{e}")
             self._cache.clear()
-            return f"寫入 {total} 筆，最新 {self.last_date()}"
+            return f"寫入 {total} 筆，最新 {self.last_date()}；小台未平倉 {n_oi} 天"
 
     # ---------- 查詢 ----------
     def series(self, inst="foreign", days=120):
@@ -148,7 +204,8 @@ def init(db_config):
     except Exception as e:
         logger.error(f"❌ 期貨籌碼資料表初始化失敗: {e}")
         return None
-    if not store.last_date():
+    no_oi = not (store._q("SELECT COUNT(*) AS n FROM fut_oi", fetch="one") or {}).get("n")
+    if not store.last_date() or no_oi:
         def _first():
             try:
                 logger.info("[fut] 首次補資料：" + store.update())
