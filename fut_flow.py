@@ -136,6 +136,16 @@ class FutStore:
         cur["chg"] = round(cur["pct"] - out[1]["pct"], 2) if len(out) > 1 else None
         return cur
 
+    def retail_net(self, product="微型臺指期貨"):
+        """散戶淨多空口數＝−(三大法人該商品多空淨額合計)；回傳 {d, net, chg}（chg＝較前一交易日）"""
+        rows = self._q("SELECT d, SUM(net_oi) AS inst FROM fut_inst WHERE product = ? GROUP BY d ORDER BY d DESC LIMIT 2",
+                       (product,), fetch="all") or []
+        if not rows:
+            return None
+        cur = {"d": rows[0]["d"], "net": -int(rows[0]["inst"])}
+        cur["chg"] = cur["net"] + int(rows[1]["inst"]) if len(rows) > 1 else None
+        return cur
+
     def last_date(self):
         r = self._q("SELECT MAX(d) AS d FROM fut_inst", fetch="one") or {}
         return r.get("d")

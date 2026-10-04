@@ -2332,7 +2332,7 @@ async def hub(request: Request):
     retail = None
     if fut_flow.store:
         try:
-            retail = await run_in_threadpool(fut_flow.store.retail)
+            retail = await run_in_threadpool(fut_flow.store.retail_net, "微型臺指期貨")
         except Exception as e:
             logger.error(f"首頁散戶多空比錯誤: {e}")
     return templates.TemplateResponse("hub.html", {

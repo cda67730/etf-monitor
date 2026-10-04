@@ -86,14 +86,14 @@
       {# 恐懼貪婪：不放標題，只寫現狀並依區間上色（恐懼綠、貪婪紅） #}
       {% set fv = (x.display|int) if x and x.display not in ('—', None) else none %}
       {% set fg = none if fv is none else ('fg-xf', '極度恐懼') if fv < 25 else ('fg-f', '恐懼') if fv < 45 else ('fg-n', '中性') if fv <= 55 else ('fg-g', '貪婪') if fv < 75 else ('fg-xg', '極度貪婪') %}
-      <div class="{{ fg[0] if fg }}" title="CNN 恐懼貪婪指數 {{ fv if fv is not none else '' }}"><b>{{ fg[1] if fg else '—' }}</b></div>
+      <div class="{{ fg[0] if fg }}" title="CNN 恐懼貪婪指數 {{ fv if fv is not none else '' }}"><b>{{ fg[1] if fg else '—' }}</b><span>CNN</span></div>
       {% else %}
       <div><b class="{{ 'text-danger' if x and x.signal == 'red' else 'text-warning' if x and x.signal == 'yellow' else '' }}">{{ x.display if x else '—' }}</b><span>{{ lb }}{% if x and x.signal not in ('gray',) %}・{{ x.get('sub') or x.label }}{% endif %}</span></div>
       {% endif %}
       {% endfor %}
-      <div><b class="{{ 'text-danger' if retail and retail.pct > 0 else 'text-success' if retail and retail.pct < 0 else '' }}">{{ '%+.1f%%'|format(retail.pct) if retail else '—' }}</b><span>散戶多空比（小台）</span></div>
+      <div><b class="{{ 'text-danger' if retail and retail.net > 0 else 'text-success' if retail and retail.net < 0 else '' }}">{{ ('淨多' if retail.net >= 0 else '淨空') ~ ' ' ~ '{:,}'.format(retail.net|abs) if retail else '—' }}</b><span>微台散戶口數{% if retail and retail.chg is not none %}・日 {{ '{:+,}'.format(retail.chg) }}{% endif %}</span></div>
     </div>
-    <div class="hub-top">賣出條件 {{ mood.n_met }}/{{ mood.sells|length }} 成立・{{ mood.level.label }}{% if retail %}・散戶{{ '淨多' if retail.net >= 0 else '淨空' }} {{ '{:,}'.format(retail.net|abs) }} 口{% endif %}</div>
+    <div class="hub-top">賣出條件 {{ mood.n_met }}/{{ mood.sells|length }} 成立・{{ mood.level.label }}</div>
     <div class="hub-go">看指標 <i class="fas fa-arrow-right"></i></div>
   </a>
   {% else %}

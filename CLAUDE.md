@@ -88,7 +88,7 @@
 - 排程 `fut` 平日 15:10、18:10（`SCHED_FUT`）；資料庫空的時候啟動即背景補兩年（`BACKFILL_DAYS=730`，批次寫入）
 - 公開頁，不需登入
 - 小台散戶多空比：`fut_oi`（d, product, oi）存小型臺指期貨全市場未平倉（POST `cht/3/futDataDown`，down_type=1、commodity_id=MTX，一般時段各月份未沖銷契約數加總；查詢區間超過約一個月會回 HTML，所以按 28 天分段）；`retail()`＝−(三大法人小台淨額合計)÷全市場未平倉；`update()` 順便更新，`fut_oi` 空的時候啟動即背景補 120 天
-- 首頁市場情緒卡片顯示 VIX、CNN 恐懼貪婪、台股 VIX（取自 `market_mood` 的 items）與小台散戶多空比；手機 2×2；恐懼貪婪只顯示現狀文字（極度恐懼／恐懼／中性／貪婪／極度貪婪，依 25／45／55／75 分界，恐懼綠、貪婪紅），不顯示標題與數值
+- 首頁市場情緒卡片顯示 VIX、CNN 恐懼貪婪、台股 VIX（取自 `market_mood` 的 items）與微台散戶淨多／淨空口數（`retail_net('微型臺指期貨')`＝−三大法人微台淨額合計，附較前日）；小台多空比 `retail()` 保留但首頁不顯示；手機 2×2；恐懼貪婪只顯示現狀文字（極度恐懼／恐懼／中性／貪婪／極度貪婪，依 25／45／55／75 分界，恐懼綠、貪婪紅）＋小字「CNN」，不顯示數值
 
 ## 日報 PDF（etf_report.py）
 - `GET /report/etf.pdf?date=&scope=aggr|all`（公開；`refresh=1` 強制重寫需登入）、`GET /api/report/etf`（JSON：facts＋ai）；ETF 日報頁右上有 PDF 按鈕
