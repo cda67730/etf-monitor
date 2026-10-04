@@ -83,11 +83,11 @@ def get_app_title():
     """安全獲取應用標題"""
     try:
         if db_config:
-            return f"ETF持股明細監控系統 (Cloud Run版本 - {db_config.db_type.upper()})"
+            return f"Danny大叔的股市觀測筆記 (Cloud Run版本 - {db_config.db_type.upper()})"
         else:
-            return "ETF持股明細監控系統 (Cloud Run版本)"
+            return "Danny大叔的股市觀測筆記 (Cloud Run版本)"
     except:
-        return "ETF持股明細監控系統 (Cloud Run版本)"
+        return "Danny大叔的股市觀測筆記 (Cloud Run版本)"
 
 app = FastAPI(
     title=get_app_title(),
