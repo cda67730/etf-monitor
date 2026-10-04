@@ -297,25 +297,47 @@
   const dlg = document.getElementById('detail'), selEtf = document.getElementById('dlg-etf'), selDate = document.getElementById('dlg-date');
   const body = document.getElementById('dlg-body'), sum = document.getElementById('dlg-sum');
   const TYPE = { NEW: '新進', INCREASED: '加碼', DECREASED: '減碼', REMOVED: '出清' };
+  // 明細表可點欄位排序（預設權重由大到小；再點同一欄切換方向）
+  const DSORT = { stock_code: '股票', weight: '權重', shares: '持股', net: '增減', change_type: '狀態' };
+  const TORDER = { NEW: 4, INCREASED: 3, DECREASED: 2, REMOVED: 1 };
+  let detRows = [], detSort = { k: 'weight', d: -1 };
+  const detVal = (x, k) => k === 'net' ? (x.shares_increase || 0) - (x.shares_decrease || 0)
+    : k === 'change_type' ? (TORDER[x.change_type] || 0) : k === 'stock_code' ? x.stock_code : Number(x[k]) || 0;
+  function renderDetail() {
+    const { k, d } = detSort;
+    const h = [...detRows].sort((a, b) => {
+      const va = detVal(a, k), vb = detVal(b, k);
+      return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * d || (b.weight - a.weight);
+    });
+    const th = key => `<th aria-sort="${k === key ? (d < 0 ? 'descending' : 'ascending') : 'none'}"${key === 'change_type' ? ' class="m-hide"' : ''}><button type="button" class="sort${k === key ? ' on' : ''}" data-k="${key}">${DSORT[key]}<i class="fas ${k !== key ? 'fa-sort' : d < 0 ? 'fa-sort-down' : 'fa-sort-up'}"></i></button></th>`;
+    const mb = key => `<button type="button" class="sort${k === key ? ' on' : ''}" data-k="${key}">${DSORT[key]}<i class="fas ${k !== key ? 'fa-sort' : d < 0 ? 'fa-sort-down' : 'fa-sort-up'}"></i></button>`;
+    body.innerHTML = `<div class="sort-m" role="group" aria-label="排序">排序 ${Object.keys(DSORT).map(mb).join('')}</div>` +
+      `<table class="tbl"><thead><tr>${Object.keys(DSORT).map(th).join('')}</tr></thead><tbody>${
+      h.map(x => {
+        const dd = big(x.shares_increase) ? `<span class="up">+${zh(x.shares_increase)}</span>` : big(x.shares_decrease) ? `<span class="down">−${zh(x.shares_decrease)}</span>` : '<span class="muted">—</span>';
+        const unit = x.unit && x.unit !== '股' ? x.unit : '張';
+        const qty = x.unit && x.unit !== '股' ? Number(x.shares).toLocaleString('zh-TW') : zh(x.shares);
+        return `<tr><td class="name"><b>${esc(x.stock_name)}</b><span class="code">${esc(x.stock_code)}</span></td>
+          <td data-l="權重">${Number(x.weight).toFixed(2)}%</td><td data-l="持股">${qty} ${unit}</td>
+          <td data-l="增減">${dd}</td><td data-l="狀態" class="m-hide">${TYPE[x.change_type] ? `<span class="chip ${x.change_type}">${TYPE[x.change_type]}</span>` : ''}</td></tr>`;
+      }).join('')}</tbody></table>`;
+    body.querySelectorAll('button.sort').forEach(b => b.addEventListener('click', () => {
+      const key = b.dataset.k;
+      detSort = detSort.k === key ? { k: key, d: -detSort.d } : { k: key, d: key === 'stock_code' ? 1 : -1 };
+      renderDetail();
+    }));
+  }
   async function loadDetail() {
     body.innerHTML = '<div class="loading">載入中…</div>'; sum.textContent = '';
     document.getElementById('dlg-title').textContent = selEtf.options[selEtf.selectedIndex].text;
     try {
       const r = await fetch(`/api/etf-holdings?etf_code=${encodeURIComponent(selEtf.value)}&date=${encodeURIComponent(selDate.value)}`);
       const j = await r.json();
-      const h = (j.holdings || []).sort((a, b) => b.weight - a.weight);
+      const h = j.holdings || [];
       if (!h.length) { body.innerHTML = '<div class="empty">這一天沒有這檔 ETF 的持股資料，請換一個日期。</div>'; return; }
       const cnt = t => h.filter(x => x.change_type === t).length;
       sum.textContent = `共 ${h.length} 檔持股：新進 ${cnt('NEW')}、加碼 ${cnt('INCREASED')}、減碼 ${cnt('DECREASED')}、出清 ${cnt('REMOVED')}`;
-      body.innerHTML = `<table class="tbl"><thead><tr><th>股票</th><th>權重</th><th>持股</th><th>增減</th><th>狀態</th></tr></thead><tbody>${
-        h.map(x => {
-          const d = big(x.shares_increase) ? `<span class="up">+${zh(x.shares_increase)}</span>` : big(x.shares_decrease) ? `<span class="down">−${zh(x.shares_decrease)}</span>` : '<span class="muted">—</span>';
-          const unit = x.unit && x.unit !== '股' ? x.unit : '張';
-          const qty = x.unit && x.unit !== '股' ? Number(x.shares).toLocaleString('zh-TW') : zh(x.shares);
-          return `<tr><td class="name"><b>${esc(x.stock_name)}</b><span class="code">${esc(x.stock_code)}</span></td>
-            <td data-l="權重">${Number(x.weight).toFixed(2)}%</td><td data-l="持股">${qty} ${unit}</td>
-            <td data-l="增減">${d}</td><td data-l="狀態" class="m-hide">${TYPE[x.change_type] ? `<span class="chip ${x.change_type}">${TYPE[x.change_type]}</span>` : ''}</td></tr>`;
-        }).join('')}</tbody></table>`;
+      detRows = h; renderDetail();
     } catch (e) { body.innerHTML = '<div class="empty">讀取失敗，請稍後再試。</div>'; }
   }
   function openDetail(code, date) {

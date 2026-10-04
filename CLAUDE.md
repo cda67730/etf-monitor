@@ -35,6 +35,7 @@
 - `?scope=aggr|all` 切換，記在 cookie `etf_scope`；`etf_scope_middleware` 設 contextvar `_etf_scope`
 - `DatabaseQuery.scope_codes()`、`_scope_sql(col)` 把查詢限縮在範圍內的啟用 ETF；`etf_names`／`get_etf_codes()` 也依範圍
 - ETF 相關頁面上方有切換鈕（`base.html`）
+- ETF 日報的「明細」對話框（單一 ETF 持股）可點欄位排序：股票、權重（預設由大到小）、持股、增減、狀態；手機版用表格上方的排序鈕
 
 ## 三大法人同買（inst_cobuy）
 - 資料來源：證交所 T86（上市）、櫃買中心三大法人買賣明細（上櫃），免費免 token
