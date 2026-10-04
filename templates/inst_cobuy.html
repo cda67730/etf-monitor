@@ -62,6 +62,20 @@
   @media (max-width: 860px) { .watch { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 640px) { .watch { grid-template-columns: 1fr; } .obs-head { font-size: 1.08rem; } }
   #box tr.flash td { background: #fff4cc !important; transition: background-color .4s; }
+  /* 個股法人走勢：股名旁的小圖示，點了在下方展開 */
+  .tr-btn { border: 0; background: none; padding: 0 2px; margin-left: 4px; color: var(--steel); opacity: .6; cursor: pointer; font-size: .78rem; line-height: 1; vertical-align: 1px; }
+  .tr-btn:hover, .tr-btn.on { opacity: 1; }
+  .tr-btn:focus-visible { outline: 2px solid var(--steel); outline-offset: 1px; border-radius: 3px; }
+  #box tr.it-open > td { background: var(--hover) !important; }
+  #box tr.it-row > td { padding: 8px 6px 14px !important; background: #fff !important; text-align: left !important; white-space: normal !important; }
+  .it-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .8rem; color: var(--body); }
+  .it-head b { font-family: var(--num); }
+  .it-head .it-ctl { display: flex; gap: 6px; align-items: center; }
+  .it-head select { border: 1px solid var(--rule); border-radius: 6px; padding: 2px 6px; font-size: .8rem; background: #fff; }
+  .it-head .it-x { border: 0; background: none; font-size: 1.1rem; line-height: 1; color: var(--mute); cursor: pointer; }
+  .it-cap { font-size: .74rem; color: var(--mute); margin: 8px 0 2px; }
+  .it-cv { position: relative; height: 150px; }
+  .it-lg { display: inline-flex; gap: 10px; margin-left: 8px; } .it-lg i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 3px; vertical-align: -1px; }
   .foot { color: var(--mute); font-size: .78rem; margin-top: 14px; line-height: 1.7; }
   /* 手機也維持表格，只留重要欄位 */
   @media (max-width: 640px) {
@@ -151,6 +165,7 @@
   </section>
 </article>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 (() => {
   const W = { foreign: '外資', trust: '投信', dealer: '自營商' };
@@ -225,7 +240,7 @@
   }
   function cell(x, [k, , t, mh]) {
     const v = x[k], lab = cols().find(c => c[0] === k)[1], m = mh ? ' m-hide' : '';
-    if (t === 'name') return `<td class="name"><b>${esc(x.name)}</b><span class="code">${esc(x.id)}</span></td>`;
+    if (t === 'name') return `<td class="name"><b>${esc(x.name)}</b><span class="code">${esc(x.id)}<button type="button" class="tr-btn${openId === x.id ? ' on' : ''}" data-trend="${esc(x.id)}" title="法人買賣走勢" aria-label="${esc(x.name)} 法人買賣走勢" aria-expanded="${openId === x.id}"><i class="fas fa-chart-column"></i></button></span></td>`;
     if (t === 'dir') return `<td data-l="${lab}" class="l${m}">${v > 0 ? '<span class="dir t">投信買・外資賣</span>' : '<span class="dir f">外資買・投信賣</span>'}</td>`;
     if (t === 'ck') return `<td data-l="${lab}" class="${m}">${v ? '<span class="ck">✔</span>' : ''}</td>`;
     if (t === 'streak') return `<td data-l="${lab}" class="${m}">${st(v)}</td>`;
@@ -264,7 +279,63 @@
       const k = b.dataset.k, cur = sortK || defKey();
       sortD = cur === k ? -sortD : -1; sortK = k; render();
     });
+    if (openId) { const tr = $('#box').querySelector(`tr[data-id="${openId}"]`); if (tr) openTrend(tr, openId); else openId = null; }
   }
+
+  // ---- 個股法人走勢：每日買賣超（堆疊長條）＋區間累計（折線），到目前選的資料日為止 ----
+  const IC = { foreign: ['外資', '#2b6cb0'], trust: ['投信', '#f5a623'], dealer: ['自營', '#8b5cf6'] };
+  let openId = null, itDays = 60, itCharts = [];
+  const sg = v => (v > 0 ? '+' : '') + Number(v).toLocaleString('en-US');
+  function closeTrend() {
+    itCharts.forEach(c => c.destroy()); itCharts = [];
+    $('#box').querySelectorAll('tr.it-row').forEach(r => r.remove());
+    $('#box').querySelectorAll('tr.it-open').forEach(r => r.classList.remove('it-open'));
+    $('#box').querySelectorAll('.tr-btn.on').forEach(b => { b.classList.remove('on'); b.setAttribute('aria-expanded', 'false'); });
+  }
+  async function openTrend(tr, id) {
+    closeTrend(); openId = id;
+    tr.classList.add('it-open');
+    const btn = tr.querySelector('.tr-btn'); if (btn) { btn.classList.add('on'); btn.setAttribute('aria-expanded', 'true'); }
+    const row = document.createElement('tr'); row.className = 'it-row';
+    row.innerHTML = `<td colspan="${tr.children.length}"><div class="loading">載入中…</div></td>`;
+    tr.after(row);
+    let j;
+    try {
+      const r = await fetch(`/api/inst-cobuy/stock?id=${encodeURIComponent(id)}&date=${DAY.date}&days=${itDays}`);
+      if (!r.ok) throw new Error(r.status);
+      j = await r.json();
+    } catch (e) { row.firstChild.innerHTML = '<div class="empty">讀取失敗，請稍後再試。</div>'; return; }
+    if (openId !== id || !row.isConnected) return;
+    if (!j.dates.length) { row.firstChild.innerHTML = '<div class="empty">沒有這檔股票的法人資料。</div>'; return; }
+    const n = j.dates.length, last = k => j[k][n - 1], sum = k => j[k].reduce((a, b) => a + b, 0);
+    const cum = k => { let c = 0; return j[k].map(v => (c += v)); };
+    const keys = Object.keys(IC);
+    row.firstChild.innerHTML = `<div class="it-head"><span>${fd(j.dates[n - 1]).slice(5)} ${keys.map(k => `${IC[k][0]} <b class="${last(k) > 0 ? 'up' : last(k) < 0 ? 'down' : ''}">${sg(last(k))}</b>`).join('　')}</span>
+        <span class="it-ctl"><select aria-label="期間">${[20, 60, 120].map(d => `<option value="${d}"${d === itDays ? ' selected' : ''}>近 ${d} 日</option>`).join('')}</select>
+        <button type="button" class="it-x" aria-label="收合">×</button></span></div>
+      <div class="it-cap">每日買賣超（張）<span class="it-lg">${keys.map(k => `<span><i style="background:${IC[k][1]}"></i>${IC[k][0]}</span>`).join('')}</span></div>
+      <div class="it-cv"><canvas></canvas></div>
+      <div class="it-cap">近 ${n} 日累計（張）：${keys.map(k => `${IC[k][0]} <b class="${sum(k) > 0 ? 'up' : sum(k) < 0 ? 'down' : ''}">${sg(sum(k))}</b>`).join('　')}</div>
+      <div class="it-cv"><canvas></canvas></div>`;
+    row.querySelector('select').onchange = e => { itDays = +e.target.value; openTrend(tr, id); };
+    row.querySelector('.it-x').onclick = () => { openId = null; closeTrend(); };
+    if (typeof Chart === 'undefined') return;
+    const labels = j.dates.map(d => fd(d).slice(5));
+    const base = { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => fd(j.dates[it[0].dataIndex]), label: c => `${c.dataset.label} ${sg(c.parsed.y)} 張` } } },
+      scales: { x: { stacked: true, grid: { display: false }, ticks: { maxTicksLimit: 6, maxRotation: 0, font: { size: 10 }, color: '#6b7a8f' } },
+                y: { stacked: true, position: 'right', grid: { color: c => c.tick.value === 0 ? '#94a3b8' : '#eef1f5' }, ticks: { maxTicksLimit: 4, font: { size: 10 }, color: '#6b7a8f' } } } };
+    const [c1, c2] = row.querySelectorAll('canvas');
+    itCharts.push(new Chart(c1, { type: 'bar', data: { labels, datasets: keys.map(k => ({ label: IC[k][0], data: j[k], backgroundColor: IC[k][1], borderWidth: 0 })) }, options: base }));
+    itCharts.push(new Chart(c2, { type: 'line', data: { labels, datasets: keys.map(k => ({ label: IC[k][0] + '累計', data: cum(k), borderColor: IC[k][1], borderWidth: 1.8, pointRadius: 0, tension: .15 })) },
+      options: { ...base, scales: { x: { ...base.scales.x, stacked: false }, y: { ...base.scales.y, stacked: false } } } }));
+  }
+  $('#box').addEventListener('click', e => {
+    const b = e.target.closest('.tr-btn'); if (!b) return;
+    e.stopPropagation();
+    const id = b.dataset.trend, tr = b.closest('tr');
+    if (openId === id) { openId = null; closeTrend(); } else openTrend(tr, id);
+  });
   function renderHist() {
     $('#box').innerHTML = `<table class="tbl hist"><thead><tr><th class="l">日期</th><th>同買檔數</th><th class="l">前 15 檔（依三大合計張數）</th></tr></thead><tbody>${
       IDX.cobuy_history.map(h => `<tr><td class="l"><a href="#" data-d="${h.date}">${fd(h.date)}</a></td><td data-l="同買">${h.count} 檔</td><td class="hist-top">${esc(h.top.join('、'))}</td></tr>`).join('')}</tbody></table>`;

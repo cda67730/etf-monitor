@@ -84,6 +84,16 @@ class InstFlow:
         self._run("CREATE INDEX IF NOT EXISTS idx_inst_daily_date ON inst_daily(trade_date)")
         self._run("CREATE TABLE IF NOT EXISTS inst_no_trading (trade_date TEXT PRIMARY KEY)")
 
+    def stock_series(self, stock_id, date, days=60):
+        """單一股票到 date（含）為止最近 days 個交易日的三大法人買賣超（張）"""
+        rows = self._run(f"SELECT trade_date, name, foreign_net, trust_net, dealer_net FROM inst_daily "
+                         f"WHERE stock_id = {self._ph()} AND trade_date <= {self._ph()} ORDER BY trade_date DESC LIMIT {int(days)}",
+                         (stock_id, date), fetch=True) or []
+        rows = rows[::-1]
+        z = lambda v: round((v or 0) / 1000)
+        return {"id": stock_id, "name": rows[-1][1] if rows else "", "dates": [r[0] for r in rows],
+                "foreign": [z(r[2]) for r in rows], "trust": [z(r[3]) for r in rows], "dealer": [z(r[4]) for r in rows]}
+
     def dates_in_db(self):
         return [r[0] for r in self._run("SELECT DISTINCT trade_date FROM inst_daily ORDER BY trade_date", fetch=True)]
 
@@ -348,6 +358,14 @@ def create_router(templates, check_authentication):
         if not r:
             raise HTTPException(status_code=404, detail=f"查無 {date} 資料")
         return JSONResponse(r)
+
+    @router.get("/api/inst-cobuy/stock")
+    async def inst_stock(request: Request, id: str = Query(..., min_length=4, max_length=6), date: str = Query(None),
+                         days: int = Query(60, ge=5, le=250)):
+        if not await allowed(request):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        date = await latest_or(date)
+        return JSONResponse(await run_in_threadpool(need_flow().stock_series, id, date, days))
 
     @router.get("/api/inst-cobuy.csv")
     async def inst_csv(request: Request, date: str = Query(None)):

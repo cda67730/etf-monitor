@@ -45,6 +45,7 @@
 - 目前：APScheduler 工作 `inst`（平日 18:20，`SCHED_INST`）寫入 PostgreSQL；啟動時背景匯入 `inst_cobuy/data/*.csv`（只補缺的日期）
 - 頁面樣式與 ETF 日報共用 `templates/_ed_css.html`；分頁：三大同買、外資投信同買（`ft_cobuy`／`ft_streak`／`ft_days`／`ft_total`）、土洋對作（`duel`：1＝投信買外資賣、-1＝外資買投信賣，`duel_streak` 同方向連續天數）、外資／投信／自營買超、每日同買；頁面不顯示上市櫃欄位；欄位標題用短字（同買張、連續天、外連、投連…），手機版仍維持表格，只留 股票／同買張／連續天／外資／投信；「今日觀察」是預設收合的抽屜（只露出一句話結論）；預設分頁是「外資投信同買」
 - 所有分頁（每日同買除外）都有期間下拉（當日／近 5 日／近 10 日）：`compute()` 另算 `co_d{5,10}`（同買天數）、`co_s{5,10}`（同買日張數合計）、`ft_d*`、`ft_s*`、`f/t/dl{5,10}`（各法人淨買賣合計）、`foreign/trust/dealer_d{5,10}`（期間買超天數）、`duel{5,10}`（以期間合計判斷的對作方向）與 `duel_d{5,10}`；回傳的 rows 含近 10 日內任一法人買超過的股票（約 1,900 檔、1.4MB，靠 GZip 壓縮），各分頁自行過濾；頁面不提供搜尋框
+- 股名旁的小圖示（`.tr-btn`）點了在該列下方展開個股法人走勢：當日三大法人張數、每日買賣超堆疊長條、區間累計折線（外資藍、投信橘、自營紫），期間 20／60（預設）／120 日；API `/api/inst-cobuy/stock?id=&date=&days=`（`InstFlow.stock_series`，到 date 為止）；切分頁、排序、換日期都會保持展開
 - 全站加 `GZipMiddleware`（BookReview 的 requests 會自動解壓，不影響）
 - 頁面 `/inst-cobuy`、API `/api/inst-cobuy/dates`、`/api/inst-cobuy?date=`、`/api/inst-cobuy.csv?date=`；預設公開，`INST_COBUY_PUBLIC=false` 改為需登入
 - 2026-10 已移除 GitHub Actions（inst-cobuy.yml、daily-scraper.yml）與靜態網頁；GitHub Pages 需使用者在 repo Settings 關閉
