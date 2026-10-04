@@ -48,6 +48,8 @@
   .fdlg .in { padding: 14px 18px 16px; }
   .fdlg .hd { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
   .fdlg h3 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--ink); }
+  .fdlg .hd-r { display: flex; align-items: center; gap: 6px; flex: none; }
+  .fdlg .dlg-range { border: 1px solid var(--rule); border-radius: 6px; padding: 4px 8px; font-size: .86rem; color: var(--ink); background: #fff; }
   .fdlg .x { border: 0; background: none; font-size: 1.4rem; line-height: 1; color: var(--mute); cursor: pointer; padding: 2px 6px; }
   .fdlg .meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .84rem; color: var(--body); margin: 6px 0 8px; }
   .fdlg .meta b { font-family: var(--num); font-weight: 600; color: var(--ink); }
@@ -88,7 +90,10 @@
 
 <dialog class="fdlg ed-dlg" id="dlg" aria-labelledby="dlg-t">
   <div class="in">
-    <div class="hd"><h3 id="dlg-t"></h3><button type="button" class="x" aria-label="關閉">×</button></div>
+    <div class="hd"><h3 id="dlg-t"></h3>
+      <div class="hd-r"><select id="dlg-range" class="dlg-range" aria-label="期間">
+        <option value="60">近 3 月</option><option value="120">近半年</option><option value="250" selected>近 1 年</option><option value="500">近 2 年</option>
+      </select><button type="button" class="x" aria-label="關閉">×</button></div></div>
     <div class="meta" id="dlg-m"></div>
     <div class="cv"><canvas id="dlg-c"></canvas></div>
   </div>
@@ -147,7 +152,8 @@
         plugins: { legend: { display: false }, dayDiff: { large },
           tooltip: { displayColors: false, callbacks: { title: it => dates[it[0].dataIndex], label: it => '淨額 ' + sgn(it.parsed.y) + ' 口' } } },
         scales: {
-          x: { display: large, grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#6b7a8f', font: { size: 11 } } },
+          x: { display: large, grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#6b7a8f', font: { size: 11 },
+               callback: (v, i) => dates.length > 130 ? dates[v].slice(0, 7).replace('-', '/') : md(dates[v]) } },
           y: { position: 'right', grid: { color: c => c.tick.value === 0 ? '#94a3b8' : '#eef1f5', lineWidth: c => c.tick.value === 0 ? 1 : .8 },
                border: { display: false },
                ticks: { maxTicksLimit: large ? 8 : (innerWidth < 560 ? 3 : 4), color: '#6b7a8f', font: { size: large ? 11 : 10 },
@@ -207,10 +213,27 @@
     document.getElementById('dlg-m').innerHTML =
       `<span>淨額 <b class="${cls(l.net_oi)}">${sgn(l.net_oi)}</b> 口</span><span>多方 <b>${fmt(l.long_oi)}</b></span><span>空方 <b>${fmt(l.short_oi)}</b></span>` +
       `<span>當日交易淨額 <b class="${cls(l.net_trade)}">${sgn(l.net_trade)}</b></span><span>日 <b class="${cls(p.chg1)}">${sgn(p.chg1)}</b></span><span>5 日 <b class="${cls(p.chg5)}">${sgn(p.chg5)}</b></span>`;
+    bigIdx = i; rangeSel.value = '250';
     dlg.showModal();
-    if (big) big.destroy();
-    big = chart(document.getElementById('dlg-c'), data.dates, p.values, true);
+    drawBig();
   }));
+  // 放大圖可選期間（交易日數：3 月 60、半年 120、1 年 250、2 年 500），依身份與期間快取
+  const rangeSel = document.getElementById('dlg-range'), longCache = {};
+  let bigIdx = null;
+  async function drawBig() {
+    const n = +rangeSel.value, key = `${inst}_${n}`;
+    if (!longCache[key]) {
+      try {
+        const r = await fetch(`/api/futures?inst=${inst}&days=${n}`);
+        if (!r.ok) throw new Error(r.status);
+        longCache[key] = await r.json();
+      } catch (e) { /* 失敗就用目前的半年資料，下次再試 */ }
+    }
+    const d = longCache[key] || data, p = d.products[bigIdx];
+    if (big) big.destroy();
+    big = chart(document.getElementById('dlg-c'), d.dates, p.values, true);
+  }
+  rangeSel.addEventListener('change', () => { if (bigIdx != null) drawBig(); });
   dlg.querySelector('.x').addEventListener('click', () => dlg.close());
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
 

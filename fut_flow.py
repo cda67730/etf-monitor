@@ -156,6 +156,25 @@ class FutStore:
         r = self._q("SELECT MAX(d) AS d FROM fut_inst", fetch="one") or {}
         return r.get("d")
 
+    def backfill_older(self):
+        """之前只補過約一年時，往前補到 BACKFILL_DAYS（放大圖可選兩年）"""
+        r = self._q("SELECT MIN(d) AS d FROM fut_inst", fetch="one") or {}
+        if not r.get("d"):
+            return 0
+        first = dt.date.fromisoformat(r["d"])
+        target = dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date() - dt.timedelta(days=BACKFILL_DAYS)
+        total, s = 0, target
+        while s < first - dt.timedelta(days=7):
+            e = min(s + dt.timedelta(days=364), first - dt.timedelta(days=1))
+            rows = self.fetch(s, e)
+            self._save(rows)
+            total += len(rows)
+            s = e + dt.timedelta(days=1)
+            time.sleep(1)
+        if total:
+            self._cache.clear()
+        return total
+
     def update(self):
         """排程用：資料庫空的就補兩年，否則從最後一天補到今天（最後一天也重抓，避免盤後修正）"""
         with self.lock:
@@ -221,13 +240,16 @@ def init(db_config):
         logger.error(f"❌ 期貨籌碼資料表初始化失敗: {e}")
         return None
     no_oi = not (store._q("SELECT COUNT(*) AS n FROM fut_oi", fetch="one") or {}).get("n")
-    if not store.last_date() or no_oi:
-        def _first():
-            try:
+    def _first():
+        try:
+            if not store.last_date() or no_oi:
                 logger.info("[fut] 首次補資料：" + store.update())
-            except Exception as e:
-                logger.error(f"[fut] 首次補資料失敗：{e}")
-        threading.Thread(target=_first, daemon=True).start()
+            n = store.backfill_older()
+            if n:
+                logger.info(f"[fut] 往前補到兩年：{n} 筆")
+        except Exception as e:
+            logger.error(f"[fut] 補資料失敗：{e}")
+    threading.Thread(target=_first, daemon=True).start()
     return store
 
 

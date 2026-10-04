@@ -107,6 +107,8 @@
   .mm-modal .mh { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 18px 4px; }
   .mm-modal .mh h4 { font-weight: 700; font-size: 1.15rem; color: var(--ink); margin: 0; }
   .mm-modal .mh small { color: var(--mute); font-size: .82rem; }
+  .mm-modal .mh-r { display: flex; align-items: center; gap: 8px; flex: none; }
+  .mm-modal .mm-range { border: 1px solid var(--rule); border-radius: 6px; padding: 4px 8px; font-size: .86rem; color: var(--ink); background: #fff; }
   .mm-modal .close { border: 0; background: none; font-size: 1.6rem; line-height: 1; color: var(--mute); cursor: pointer; padding: 0 4px; }
   .mm-modal .close:hover { color: var(--ink); }
   .mm-modal .mb { position: relative; height: min(62vh, 560px); padding: 6px 14px 16px; }
@@ -262,7 +264,10 @@
 
 <dialog class="mm-modal" id="mm-modal" aria-labelledby="mm-modal-title">
   <div class="mh"><div><h4 id="mm-modal-title"></h4><small id="mm-modal-sub"></small></div>
-    <button type="button" class="close" aria-label="關閉" onclick="document.getElementById('mm-modal').close()">×</button></div>
+    <div class="mh-r"><select id="mm-range" class="mm-range" aria-label="期間">
+      <option value="90">近 3 月</option><option value="182">近半年</option><option value="365" selected>近 1 年</option><option value="730">近 2 年</option>
+    </select>
+    <button type="button" class="close" aria-label="關閉" onclick="document.getElementById('mm-modal').close()">×</button></div></div>
   <div class="mb"><canvas id="mm-modal-canvas"></canvas></div>
 </dialog>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -370,14 +375,25 @@
   addEventListener('scroll', markNav, { passive: true }); markNav();
   if (typeof Chart === 'undefined') return;
   const modal = document.getElementById('mm-modal');
-  let bigChart = null;
+  let bigChart = null, bigSpec = null;
+  const range = document.getElementById('mm-range');
+  // 放大圖：依下拉選的期間（預設近 1 年，最長 2 年）從 dataLong 取資料
+  function drawBig() {
+    if (bigChart) bigChart.destroy();
+    const src = bigSpec.dataLong && bigSpec.dataLong.length ? bigSpec.dataLong : bigSpec.data;
+    const since = new Date(Date.now() - (+range.value) * 864e5).toISOString().slice(0, 10);
+    let data = src.filter(p => p[0] >= since);
+    if (data.length < 2) data = src.slice(-2);
+    bigChart = draw(document.getElementById('mm-modal-canvas'), { ...bigSpec, data }, true);
+  }
   function openBig(title, sub, spec) {
     document.getElementById('mm-modal-title').textContent = title;
     document.getElementById('mm-modal-sub').textContent = sub;
-    if (bigChart) bigChart.destroy();
+    bigSpec = spec; range.value = '365';
     modal.showModal();
-    bigChart = draw(document.getElementById('mm-modal-canvas'), spec, true);
+    drawBig();
   }
+  range.addEventListener('change', () => { if (bigSpec) drawBig(); });
   modal.addEventListener('click', e => { if (e.target === modal) modal.close(); });
   modal.addEventListener('close', () => { if (bigChart) { bigChart.destroy(); bigChart = null; } });
   function mount(cv, title, sub, spec) {
@@ -395,7 +411,7 @@
     const it = ITEMS.find(x => x.id === cv.dataset.chart);
     if (!it) return;
     mount(cv, it.name, `資料日期 ${it.date}，門檻 ${it.threshold}`,
-          { data: it.chart, label: it.name.split('（')[0], extra: it.extra_series, lines: it.lines, clamp: it.yclamp, fixed: it.yfixed,
+          { data: it.chart, dataLong: it.chart_long, label: it.name.split('（')[0], extra: it.extra_series, lines: it.lines, clamp: it.yclamp, fixed: it.yfixed,
             zones: (it.zones_raw || []).map(z => [z[0], z[1], z[2], z[3]]) });
   });
   document.querySelectorAll('canvas[data-chart2]').forEach(cv => {
@@ -403,7 +419,7 @@
     if (!it || !it.chart2) return;
     const c2 = it.chart2;
     mount(cv, `AAII ${c2.title}`, '紅色＝看多多於看空，綠色＝看空多於看多',
-          { data: c2.data, label: c2.label, type: c2.type, lines: c2.lines.map(l => [l[0]]),
+          { data: c2.data, dataLong: c2.data_long, label: c2.label, type: c2.type, lines: c2.lines.map(l => [l[0]]),
             refs: [[6.5, '長期平均 +6.5']], zones: c2.zones });
   });
 })();

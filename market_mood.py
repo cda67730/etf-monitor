@@ -189,7 +189,7 @@ IND = [
     ("cnn_fg", "short", "CNN 恐懼貪婪指數", "", ">75 極度貪婪", "日", 365),
     ("tw_vix", "short", "台股 VIX（臺指選擇權波動率指數）", "", "<15 自滿／>30 恐慌", "日", 365),
     ("put_call", "short", "CBOE 個股賣權買權比", "", "<0.55 自滿", "日", 120),
-    ("tmf_retail", "short", "微台散戶淨多空（微型臺指期貨）", "口", "近一年前 20% 高檔＝散戶過度偏多（反向指標）", "日", 365),
+    ("tmf_retail", "short", "微台散戶淨多空（微型臺指期貨）", "口", "近一年前 20% 高檔＝散戶過度偏多（反向指標）", "日", 182),
     ("aaii", "short", "AAII 散戶情緒（看多比）", "%", "看多 >45% 或多空差 >+20", "週", 400),
     ("margin", "mid", "FINRA 保證金負債", "", "年增 >+30%", "月", 400),
     ("margin_gdp", "mid", "保證金負債佔 GDP", "%", ">4.0%", "月", 400),
@@ -202,6 +202,7 @@ IND = [
     ("lei", "long", "美國經濟諮商理事會領先指標", "", "近 6 個月 < -4%", "月", 3650),
 ]
 STALE = {"日": 6, "週": 12, "月": 75}
+LONG_DAYS = 730          # 放大圖最長兩年
 SHORT = {"vix": "VIX 恐慌指數", "tw_vix": "台股 VIX", "cnn_fg": "CNN 恐懼貪婪", "aaii": "AAII 散戶看多", "put_call": "個股賣權買權比", "tmf_retail": "微台散戶淨多空",
          "margin": "FINRA 保證金負債", "margin_gdp": "保證金佔 GDP", "ipo": "IPO 募資額", "ad_line": "NYSE 騰落線",
          "bofa": "美銀牛熊指標", "buffett": "巴菲特指標", "cape": "席勒本益比 CAPE", "t10y2y": "美債 10Y−2Y 利差",
@@ -430,8 +431,12 @@ def build_report(S, errors=None):
             since = (dt.date.today() - dt.timedelta(days=window)).isoformat()
             scale = it.pop("chart_scale", 1)
             it["chart"] = [(d, round(v * scale, 4)) for d, v, _ in rows if d >= since]
+            since2 = (dt.date.today() - dt.timedelta(days=LONG_DAYS)).isoformat()   # 放大檢視可選到兩年
+            it["chart_long"] = [(d, round(v * scale, 4)) for d, v, _ in rows if d >= since2]
             if it.get("chart2"):
-                it["chart2"]["data"] = [(d, v) for d, v in it["chart2"].pop("rows") if d >= since]
+                r2 = it["chart2"].pop("rows")
+                it["chart2"]["data"] = [(d, v) for d, v in r2 if d >= since]
+                it["chart2"]["data_long"] = [(d, v) for d, v in r2 if d >= since2]
             if i in ("ad_line",) and len(it["chart"]) < 2:
                 it["chart"] = [(d, v) for d, v, _ in rows]
             if i in TRACK:
