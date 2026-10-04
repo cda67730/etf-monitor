@@ -140,7 +140,7 @@ class InstFlow:
             have = set(self.dates_in_db())
             no_trade = {r[0] for r in self._run("SELECT trade_date FROM inst_no_trading", fetch=True)}
             now = dt.datetime.now(TW)
-            day = now.date() if now.hour >= 17 else now.date() - dt.timedelta(days=1)   # 17:00 後才抓當天
+            day = now.date() if now.hour >= 15 else now.date() - dt.timedelta(days=1)   # 15:00 後才試抓當天（還沒公布就等下一次）
             seen = tried = fails = 0
             added, waiting, errors = [], [], []
             while seen < want and tried < want * 2 + 30:

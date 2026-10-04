@@ -190,7 +190,7 @@ async def start_scheduler():
     try:
         extra = []
         if inst_flow.flow:
-            extra.append(("inst", "三大法人買賣超", inst_flow.flow.scrape, "SCHED_INST", "20 18 * * 1-5"))
+            extra.append(("inst", "三大法人買賣超", inst_flow.flow.scrape, "SCHED_INST", "0 16 * * 1-5; 20 18 * * 1-5"))
         if market_mood.store:
             extra.append(("mood", "市場情緒指標", market_mood.store.update, "SCHED_MOOD", "30 7 * * 2-6"))
         if fut_flow.store:

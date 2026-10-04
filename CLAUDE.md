@@ -42,7 +42,7 @@
   - T86 欄位：外陸資買賣超股數（不含外資自營商）＋外資自營商買賣超股數＝外資；投信；自營商買賣超股數（合計）
   - 注意：欄位名稱比對時「不含外資自營商」字樣會誤中排除條件（已修正過一次）
 - 定義：張＝股數/1000 四捨五入，≥1 張才算買超；只含 4 碼普通股／KY；連買天數上限 `N=40`；頁面可切換最近 20 個交易日（需 60 個交易日資料）
-- 目前：APScheduler 工作 `inst`（平日 18:20，`SCHED_INST`）寫入 PostgreSQL；啟動時背景匯入 `inst_cobuy/data/*.csv`（只補缺的日期）
+- 目前：APScheduler 工作 `inst`（平日 16:00、18:20，`SCHED_INST`；15:00 後才試抓當天，證交所或櫃買還沒公布就留到下一次）寫入 PostgreSQL；啟動時背景匯入 `inst_cobuy/data/*.csv`（只補缺的日期）
 - 頁面樣式與 ETF 日報共用 `templates/_ed_css.html`；分頁：三大同買、外資投信同買（`ft_cobuy`／`ft_streak`／`ft_days`／`ft_total`）、土洋對作（`duel`：1＝投信買外資賣、-1＝外資買投信賣，`duel_streak` 同方向連續天數）、外資／投信／自營買超、每日同買；頁面不顯示上市櫃欄位；欄位標題用短字（同買張、連續天、外連、投連…），手機版仍維持表格，只留 股票／同買張／連續天／外資／投信；「今日觀察」是預設收合的抽屜（只露出一句話結論）；預設分頁是「外資投信同買」
 - 所有分頁（每日同買除外）都有期間下拉（當日／近 5 日／近 10 日）：`compute()` 另算 `co_d{5,10}`（同買天數）、`co_s{5,10}`（同買日張數合計）、`ft_d*`、`ft_s*`、`f/t/dl{5,10}`（各法人淨買賣合計）、`foreign/trust/dealer_d{5,10}`（期間買超天數）、`duel{5,10}`（以期間合計判斷的對作方向）與 `duel_d{5,10}`；回傳的 rows 含近 10 日內任一法人買超過的股票（約 1,900 檔、1.4MB，靠 GZip 壓縮），各分頁自行過濾；頁面不提供搜尋框
 - 股名旁的小圖示（`.tr-btn`）點了在該列下方展開個股法人走勢：當日三大法人張數、每日買賣超堆疊長條、區間累計折線（外資藍、投信橘、自營紫），期間 20／60（預設）／120 日；API `/api/inst-cobuy/stock?id=&date=&days=`（`InstFlow.stock_series`，到 date 為止）；切分頁、排序、換日期都會保持展開
@@ -65,7 +65,7 @@
 ## 進行中的重構計畫（2026-10 與使用者確認）
 1. ✅ 本檔 CLAUDE.md
 2. ✅ **APScheduler 統一排程**（`scheduler.py`；取代 Railway 外部排程與 GitHub Actions）
-   - 預設關閉：Railway 設 `SCHEDULER_ENABLED=true` 才啟動；時間用 `SCHED_ETF`（預設 `0 18,19,20 * * 1-5`）、`SCHED_WARRANT`（預設 `40 16 * * 1-5`）覆寫
+   - 預設關閉：Railway 設 `SCHEDULER_ENABLED=true` 才啟動；cron 可用分號寫多組（例如 `0 16 * * 1-5; 20 18 * * 1-5`，`cron_trigger` 轉成 OrTrigger）；時間用 `SCHED_ETF`（預設 `0 18,19,20 * * 1-5`）、`SCHED_WARRANT`（預設 `40 16 * * 1-5`）覆寫
    - `GET /api/scheduler/status`、`POST /api/scheduler/run/{etf|warrant}`（登入或 Bearer SCHEDULER_TOKEN）
    - 時區 `Asia/Taipei`、設 misfire 寬限、同一工作不重疊
    - 工作：ETF 持股（`scrape_all_etfs` + `scrape_premium_data`）、權證（`scrape_warrants`）、三大法人（平日 18:20）

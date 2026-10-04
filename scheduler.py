@@ -36,10 +36,15 @@ _DOW = ["sun", "mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 def cron_trigger(expr):
     """標準 cron（分 時 日 月 週；週 0/7=日、1=一）→ APScheduler CronTrigger。
-    APScheduler 3 的數字星期是 0=週一，直接用 from_crontab 會整個錯一天，所以先轉成英文縮寫。"""
+    APScheduler 3 的數字星期是 0=週一，直接用 from_crontab 會整個錯一天，所以先轉成英文縮寫。
+    多個時間不同分鐘時用分號隔開，例如 "0 16 * * 1-5; 20 18 * * 1-5"。"""
     import re
     from apscheduler.triggers.cron import CronTrigger
-    m, h, d, mo, w = expr.split()
+    parts = [p.strip() for p in expr.split(";") if p.strip()]
+    if len(parts) > 1:
+        from apscheduler.triggers.combining import OrTrigger
+        return OrTrigger([cron_trigger(p) for p in parts])
+    m, h, d, mo, w = parts[0].split()
     w = re.sub(r"\d", lambda x: _DOW[int(x.group())], w)
     return CronTrigger(minute=m, hour=h, day=d, month=mo, day_of_week=w, timezone=TZ)
 
