@@ -105,7 +105,7 @@
 - 三大法人今日觀察（`inst_report.py`，繼承 `etf_report.Report`）：存同一張 `etf_report` 表（scope='inst'）；提示詞 `templates/inst_observe_prompt.txt`、PDF `templates/inst_report_pdf.html`
   - `GET /report/inst.pdf?date=`（YYYYMMDD 或 YYYY-MM-DD）、`GET /api/inst-cobuy/observe?date=`（只讀已產生的，不觸發 AI；沒有回 404，網頁區塊就隱藏）
   - PDF 三大同買表、外資投信同買表（不含三大同買）都列出前 `LIST_MAX`=45 檔（事實鍵 `_三大同買清單`、`_外資投信同買清單`、`_外資投信同買檔數`，底線開頭不送 Gemini；舊報告缺這鍵時 render 只重算事實補上，不重呼叫 AI）
-  - 排程 `inst_report` 平日 18:40、20:40（`SCHED_INST_REPORT`）；指紋含當日三大法人與主動 ETF 異動，資料沒變不重寫
+  - 排程 `inst_report` 平日 16:30、18:40、20:40（`SCHED_INST_REPORT`；16:30 配合三大法人 16:00 先抓，晚上主動 ETF 資料進來後指紋改變會再重寫一次）；指紋含當日三大法人與主動 ETF 異動，資料沒變不重寫
 - 按鈕：ETF 日報頁「ETF 報告下載」、三大法人頁「今日報告下載」，旁邊有日期下拉（最近 10 個資料日）；沒登入只能產生最近 `REPORT_MAX_DAYS`（預設 10）個資料日，避免任意日期觸發 AI
 - 補產舊日期時，趨勢圖與連續天數只取該日（含）以前的資料
 

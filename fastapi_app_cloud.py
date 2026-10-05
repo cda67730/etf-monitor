@@ -198,7 +198,7 @@ async def start_scheduler():
         if etf_report.report:
             extra.append(("report", "日報 PDF（Gemini 說明）", etf_report.report.run_daily, "SCHED_REPORT", "50 20 * * 1-5"))
         if inst_report.report:
-            extra.append(("inst_report", "三大法人今日觀察（Gemini）", inst_report.report.run_daily, "SCHED_INST_REPORT", "40 18,20 * * 1-5"))
+            extra.append(("inst_report", "三大法人今日觀察（Gemini）", inst_report.report.run_daily, "SCHED_INST_REPORT", "30 16 * * 1-5; 40 18,20 * * 1-5"))
         app_scheduler.setup(scraper=scraper, warrant_scraper=warrant_scraper, extra_jobs=extra)
     except Exception as e:
         logger.error(f"排程啟動失敗: {e}")
