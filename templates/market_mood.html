@@ -411,7 +411,7 @@
     const it = ITEMS.find(x => x.id === cv.dataset.chart);
     if (!it) return;
     mount(cv, it.name, `資料日期 ${it.date}，門檻 ${it.threshold}`,
-          { data: it.chart, dataLong: it.chart_long, label: it.name.split('（')[0], extra: it.extra_series, lines: it.lines, clamp: it.yclamp, fixed: it.yfixed,
+          { data: it.chart, dataLong: it.chart_long, type: it.chart_type, label: it.name.split('（')[0], extra: it.extra_series, lines: it.lines, clamp: it.yclamp, fixed: it.yfixed,
             zones: (it.zones_raw || []).map(z => [z[0], z[1], z[2], z[3]]) });
   });
   document.querySelectorAll('canvas[data-chart2]').forEach(cv => {

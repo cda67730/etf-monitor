@@ -354,6 +354,7 @@ def _judge(i, rows, S, D):
         r["display"] = f"{'淨多' if v >= 0 else '淨空'} {abs(v):,.0f}"
         r["sub"] = f"單位：口・近一年第 {rank:.0f} 百分位"
         r["lines"] = [(0, "0")]
+        r["chart_type"] = "bar"                                    # 每日淨口數用長條（正紅負綠）
         if v > 0 and rank >= 80: r.update(signal="red", label="散戶過度偏多")
         elif v > 0 and rank >= 60: r.update(signal="yellow", label="散戶偏多")
         elif v < 0 and rank <= 20: r.update(label="散戶偏空")
