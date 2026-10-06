@@ -2352,6 +2352,12 @@ async def ads_txt():
     return PlainTextResponse(f"google.com, {ADSENSE_PUB}, DIRECT, f08c47fec0942fa0\n")
 
 
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_page(request: Request):
+    """隱私權政策（AdSense 需要）"""
+    return templates.TemplateResponse("privacy.html", {"request": request})
+
+
 # ============ 量化研究（本機 breakout_detector 推上來的結果，需登入）============
 import lab_results
 lab_results.init(db_config)

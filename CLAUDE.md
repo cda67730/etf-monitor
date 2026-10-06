@@ -121,5 +121,5 @@
 - `GET /api/etfs?scope=all|aggr|every`（免登入）：ETF 清單（code、name、short_name、category、enabled）。BookReview 的 `_active_etfs()` 讀這支，失敗時退回它內建的 `KNOWN_ACTIVE_ETFS`
 
 ## 其他備註
-- Google AdSense（ca-pub-5437045809111179）：`base.html` 的 `<head>` 載入 adsbygoogle.js（`/admin`、`/lab`、`/login`、`/diagnostic`、`/debug` 不載入；`login.html` 本來就不繼承 base）；`GET /ads.txt` 回 `google.com, pub-5437045809111179, DIRECT, f08c47fec0942fa0`。AdSense 審核多半不收 `*.up.railway.app` 這種共用子網域，建議綁自訂網域再送審
+- Google AdSense（ca-pub-5437045809111179）：`base.html` 的 `<head>` 載入 adsbygoogle.js（`/admin`、`/lab`、`/login`、`/diagnostic`、`/debug` 不載入；`login.html` 本來就不繼承 base）；`/privacy` 隱私權政策頁（`privacy.html`，含 AdSense 規定的第三方 Cookie 說明與停用連結），`base.html` 底部小字頁尾連過去（另開分頁）；`GET /ads.txt` 回 `google.com, pub-5437045809111179, DIRECT, f08c47fec0942fa0`。AdSense 審核多半不收 `*.up.railway.app` 這種共用子網域，建議綁自訂網域再送審
 - `database_config.py`、`diagnose_password_issue.py` 請確認沒有寫死密碼或連線字串（repo 為公開）。
