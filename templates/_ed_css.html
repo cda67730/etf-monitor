@@ -94,7 +94,7 @@
   .rank .no { font-family: var(--num); color: var(--mute); font-size: .78rem; text-align: center; }
   .rank li.top .no { color: #fff; background: var(--c); border-radius: 4px; height: 1.5em; line-height: 1.5em; font-weight: 700; }
   .rank .stk { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rank .stk b { font-weight: 600; color: var(--ink); } .rank .stk .code { font-family: var(--num); color: var(--mute); font-size: .8rem; margin-left: 6px; }
+  .rank .stk b { font-weight: 500; font-size: 1.02rem; color: var(--ink); } .rank .stk .code { font-family: var(--num); color: var(--mute); font-size: .8rem; margin-left: 6px; }
   .rank .meta { grid-column: 2 / -1; font-size: .74rem; color: var(--mute); }
   .rank .amt { font-family: var(--num); font-variant-numeric: tabular-nums; font-weight: 700; color: var(--c); text-align: right; white-space: nowrap; }
   .rank .amt small { font-weight: 400; color: var(--mute); margin-left: 2px; font-size: .75rem; }
@@ -131,7 +131,8 @@
   .tbl th:first-child, .tbl td:first-child { text-align: left; }
   .tbl tbody tr:nth-child(even) td { background: #fbfcfe; }
   .tbl td.name { font-family: var(--sans); }
-  .tbl td.name b { font-weight: 600; } .tbl td.name .code { color: var(--mute); font-size: .78rem; margin-left: 6px; font-family: var(--num); }
+  /* 股名：Noto Sans TC 只載入 400／500／700，600 會變成 700 太粗，所以用 500 並放大 */
+  .tbl td.name b { font-weight: 500; font-size: 1.04rem; letter-spacing: .02em; } .tbl td.name .code { color: var(--mute); font-size: .78rem; margin-left: 6px; font-family: var(--num); }
   .tbl tr.click { cursor: pointer; } .tbl tr.click:hover td { background: var(--hover); }
   .tbl tr.click:focus-visible td { outline: none; background: var(--hover); }
   .up, .tbl td.up { color: var(--up); } .down, .tbl td.down { color: var(--down); } .muted, .tbl td.muted { color: var(--mute); }
