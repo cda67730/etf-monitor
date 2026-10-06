@@ -1,17 +1,7 @@
-page 200 len=4443
-<!doctype html>
-
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta http-equiv="x-ua-compatible" content="IE=Edge">
-    <meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no">
-    <meta name="description" content="èºç£æè²¨äº¤ææè¡æè³è¨ç¶²">
-    <title>èºç£æè²¨äº¤ææè¡æè³è¨ç¶²</title><link data-n-head="1" rel="icon" type="image/x-icon" href="/futures/favicon.ico"><link data-n-head="1" rel="stylesheet" type="text/css" href="/futures/assets/fonts/css/all.min.css"><link data-n-head="1" rel="stylesheet" type="text/css" href="/futures/assets/css/bootstrap.min.css"><link data-n-head="1" rel="stylesheet" type="text/css" href="/futures/assets/css/bootstrap-submenu.css"><link data-n-head="1" rel="stylesheet" type="text/css" href="/futures/assets/css/style.css"><script data-n-head="1" src="/futures/assets/lib/jquery/jquery.min.js"></script><script data-n-head="1" src="/futures/assets/lib/bootstrap/bootstrap.bundle.min.js"></script><script data-n-head="1" src="/futures/assets/lib/bootstrap/bootstrap-submenu.js"></script><script data-n-head="1" src="/futures/assets/lib/jquery/jquery.marquee.min.js"></script><script data-n-head="1" src="/futures/assets/lib/highchart/highstock.js"></script><script data-n-head="1" src="/futures/assets/lib/xlsx-style/jszip.js"></script><script data-n-head="1" src="/futures/assets/lib/xlsx-style/xlsx.js"></script><script data-n-head="1" src="/futures/assets/js/charts.js"></script><script data-n-head="1" sr
-js=["/futures/assets/lib/jquery/jquery.min.js", "/futures/assets/lib/bootstrap/bootstrap.bundle.min.js", "/futures/assets/lib/bootstrap/bootstrap-submenu.js", "/futures/assets/lib/jquery/jquery.marquee.min.js", "/futures/assets/lib/highchart/highstock.js", "/futures/assets/lib/xlsx-style/jszip.js", "/futures/assets/lib/xlsx-style/xlsx.js", "/futures/assets/js/charts.js", "/futures/assets/js/dictionary.js", "/futures/_nuxt/9f5ce3f.js", "/futures/_nuxt/581b4c0.js", "/futures/_nuxt/bb0925f.js", "/futures/_nuxt/37a7b79.js"]
-== https://mis.taifex.com.tw/futures/assets/lib/jquery/jquery.min.js len=89476 apis=[]
-== https://mis.taifex.com.tw/futures/assets/lib/bootstrap/bootstrap.bundle.min.js len=70968 apis=[]
-== https://mis.taifex.com.tw/futures/assets/lib/bootstrap/bootstrap-submenu.js len=4320 apis=[]
-== https://mis.taifex.com.tw/futures/assets/lib/jquery/jquery.marquee.min.js len=5911 apis=[]
-== https://mis.taifex.com.tw/futures/assets/lib/highchart/highstock.js len=352027 apis=[]
-== https://mis.taifex.com.tw/futures/assets/lib/xlsx-style/jszip.js len=287478 apis=[]
+== /futures/_nuxt/37a7b79.js len=223510 apis=[]
+   ctx: : "FX/SPTAIFEXRMBIndices",\n      "Level1ID": "3",\n      "pageAttr": {\n        "SymbolType": "",\n        "KindID": "2",\n        "SortColumn": "",\n        "AscDesc": "A"\n      }\n    }\n  },\n  "VolatilityQuotes": {\n    "url": "VolatilityQuotes",\n    "Level1ID": "4",\n    "pageAttr": {\n      "SortColumn": "",\n      "AscDesc": "A"\n    }\n  },\n  "TaiwanStrategySeriesIndices": {\n    "url"
+   ctx: "Level1ID": "3",\n      "pageAttr": {\n        "SymbolType": "",\n        "KindID": "2",\n        "SortColumn": "",\n        "AscDesc": "A"\n      }\n    }\n  },\n  "VolatilityQuotes": {\n    "url": "VolatilityQuotes",\n    "Level1ID": "4",\n    "pageAttr": {\n      "SortColumn": "",\n      "AscDesc": "A"\n    }\n  },\n  "TaiwanStrategySeriesIndices": {\n    "url": "TaiwanStrategySeriesIndices",\n
+   ctx: ))},name:"SPRMBIndex"},{path:"/TaiwanStrategySeriesIndices",component:function(){return Object(S.m)(Promise.all([n.e(4),n.e(113)]).then(n.bind(null,448)))},name:"TaiwanStrategySeriesIndices"},{path:"/VolatilityQuotes",component:function(){return Object(S.m)(Promise.all([n.e(4),n.e(114)]).then(n.bind(null,449)))},name:"VolatilityQuotes"},{path:"/AfterHoursSession/AfEtfProducts",component:function()
+POST /futures/api/getQuoteListVIX 200 {"RtCode":"0","RtMsg":"","RtData":{"QuoteList":[{"DispCName":"臺指選擇權波動率指數","DispEName":"TAIWAN VIX","SymbolID":"TAIWANVIX","CLastPrice":"23.53","COpenPrice":"23.48","CHighPrice":"23.69","CLowPrice":"23.30","CRefPrice":"23.45","CDate":"20261006","CTime":"134500","CDiff":"0.08","CDiffRate":"0.0034"}]}}
+POST /futures/api/getVIX 404 {"timestamp":1791273635539,"status":404,"error":"Not Found","message":"No message available","path":"/futures/api/getVIX"}
+POST /futures/api/getQuoteList 200 {"RtCode":"0","RtMsg":"","RtData":{"QuoteCount":"106","QuoteList":[{"SymbolID":"TXF-S","SpotID":"","DispCName":"臺指現貨","DispEName":"TXF","Status":"TC","CBidPrice1":"","CBidSize1":"","CAskPrice1":"","CAskSize1":"","CTotalVolume":"","COpenPrice":"49736.37","CHighPrice":"49968.92","CLowPrice":"49479.69"
