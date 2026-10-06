@@ -25,10 +25,11 @@
 | `mood_fetch.py` | 市場情緒 14 項指標抓取（全部免 API key；FRED 從機房會逾時，不要用） |
 | `market_mood.py` | 資料表 `mood_obs`、燈號／賣出條件／自動結論、`/market-mood`、`/api/market-mood` |
 | `fut_flow.py` | 期貨籌碼：資料表 `fut_inst`（期交所三大法人各期貨契約，每日每商品每身份一列）、`/futures`、`/api/futures` |
+| `lab_results.py` | 量化研究：本機 breakout_detector 推上來的每日結果（`slow_bull` 慢牛、`backtest` 回測突破、`ae_monitor` Autoencoder 監測）；資料表 `lab_result(kind, d, payload, received)`；`POST /api/ingest/{kind}` 用 HMAC 簽章（`INGEST_SECRET`，標頭 `X-Timestamp`、`X-Signature`＝hex HMAC-SHA256(secret, "{ts}.{body}")，時間差 >5 分鐘拒收；沒設 secret 就 503）；`/lab` 頁面與 `/api/lab/*` 需登入；導覽列「量化研究」只在有 session cookie 時顯示；本機推送範例 `tools/lab_push.py` |
 | `inst_cobuy/fetch.py` | 證交所／櫃買抓取函式（`twse`、`tpex`）；`inst_cobuy/data/*.csv` 只當首次匯入的種子資料 |
 
 ## 現有頁面
-`/` 首頁分流（`hub.html`，四張卡片）、`/etf` ETF 日報（原首頁）、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/inst-cobuy` 三大法人同買、`/market-mood` 市場情緒指標、`/futures` 期貨籌碼、`/admin/etfs` ETF 清單管理＋手動爬取 ETF／權證（首頁原按鈕已移到這裡）、`/login`
+`/` 首頁分流（`hub.html`，四張卡片）、`/etf` ETF 日報（原首頁）、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/inst-cobuy` 三大法人同買、`/market-mood` 市場情緒指標、`/futures` 期貨籌碼、`/lab` 量化研究（需登入）、`/admin/etfs` ETF 清單管理＋手動爬取 ETF／權證（首頁原按鈕已移到這裡）、`/login`
 - 導覽列順序（`base.html`）：三大法人同買、ETF日報、市場情緒、期貨籌碼、權證排行、權證量能、ETF 管理，最後是「舊版 ETF」下拉（每日持股、新增持股、減持表、跨ETF重複持股；這些頁 BookReview 仍在解析，不能刪）
 
 ## ETF 日報範圍（積極型／不分類）

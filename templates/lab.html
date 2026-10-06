@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}量化研究 - Danny大叔的股市觀測筆記{% endblock %}
+
+{% block content %}
+{% include "_ed_css.html" %}
+<style>
+  .lab .tabs button { border: 0; background: none; padding: 6px 16px; font-size: .92rem; color: var(--term-text); border-radius: 6px; cursor: pointer; white-space: nowrap; }
+  .lab .tabs button.on { background: var(--accent); color: #1a1205; font-weight: 700; }
+  .lab .tabs button:not(.on):hover { background: var(--term-line); color: #fff; }
+  .lab .tabs button:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+  .lab .tabs .n { font-family: var(--num); font-size: .74rem; opacity: .7; margin-left: 4px; }
+  .lab .ctl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .lab .dl-sel { border-radius: 8px; border-right: 1px solid var(--term-line); padding: 6px 10px; }
+  .lab .note { font-size: .86rem; color: var(--body); margin: 10px 0 0; line-height: 1.7; white-space: pre-wrap; }
+  .lab .wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .lab .wrap .tbl { min-width: 100%; }
+  .lab .tbl td, .lab .tbl th { white-space: nowrap; }
+  .lab .tbl td.t { text-align: left; }
+  .lab .tbl th.t { text-align: left; }
+  /* 手機也維持表格，可左右滑動 */
+  @media (max-width: 640px) {
+    .lab .tbl { display: table; font-size: .8rem; }
+    .lab .tbl thead { display: table-header-group; } .lab .tbl tbody { display: table-row-group; }
+    .lab .tbl tr { display: table-row; padding: 0; }
+    .lab .tbl th, .lab .tbl td { display: table-cell; padding: 6px 8px; border-bottom: 1px solid #f1f4f8; }
+    .lab .tbl td[data-l]::before { content: none; }
+    .lab .sort-m { display: none; }
+  }
+  .lab .meta { font-size: .78rem; color: var(--mute); margin-top: 10px; }
+</style>
+
+<article class="ed lab">
+  <header class="term">
+    <div class="term-top">
+      <div>
+        <h1>量化研究</h1>
+        <div class="stat" id="stat"><span>本機 breakout_detector 每日結果（僅登入可見）</span></div>
+      </div>
+      <div class="ctl">
+        <div class="tabs" role="tablist" aria-label="結果">
+          {% for k, v in kinds.items() %}<button type="button" role="tab" data-k="{{ k }}"{% if loop.first %} class="on" aria-selected="true"{% endif %}>{{ v }}{% if summary[k] and summary[k].date %}<span class="n">{{ summary[k].date[5:].replace('-', '/') }}</span>{% endif %}</button>{% endfor %}
+        </div>
+        <select class="dl-sel" id="date" aria-label="資料日"></select>
+      </div>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="sec-head"><div><h2 id="h2">—</h2><div class="sub" id="sub"></div></div></div>
+    <p class="note" id="note" hidden></p>
+    <div class="wrap" id="box"><div class="loading">載入中…</div></div>
+    <div class="meta" id="meta"></div>
+  </section>
+</article>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  let kind = {{ kinds|list|first|tojson }}, DATA = null, sortK = null, sortD = -1;
+  const isNum = v => typeof v === 'number' && isFinite(v);
+  function fmt(v, t) {
+    if (v == null || v === '') return '<span class="muted">—</span>';
+    if (!isNum(v)) return esc(v);
+    if (t === 'pct') return `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${(v > 0 ? '+' : '') + v.toFixed(2)}%</span>`;
+    if (t === 'signed') return `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${(v > 0 ? '+' : '') + v.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>`;
+    if (t === 'int') return Math.round(v).toLocaleString('en-US');
+    return v.toLocaleString('en-US', { maximumFractionDigits: Math.abs(v) < 10 ? 4 : 2 });
+  }
+  const left = c => c.type === 'text' || c.type === 'code' || c.type === 'date' || (!c.type && DATA.rows.some(r => r[c.key] != null && !isNum(r[c.key])));
+  function render() {
+    if (!DATA) return;
+    const C = DATA.columns, rows = [...DATA.rows];
+    if (sortK) rows.sort((a, b) => {
+      const x = a[sortK], y = b[sortK];
+      if (x == null) return 1; if (y == null) return -1;
+      return (isNum(x) && isNum(y) ? x - y : String(x).localeCompare(String(y), 'zh-Hant')) * sortD;
+    });
+    $('#h2').textContent = DATA.name;
+    $('#sub').textContent = `資料日 ${DATA.date}・${DATA.rows.length} 筆`;
+    $('#note').hidden = !DATA.note; $('#note').textContent = DATA.note || '';
+    $('#meta').textContent = `本站收到時間 ${DATA.received}`;
+    if (!rows.length) { $('#box').innerHTML = '<div class="empty">這一天沒有結果。</div>'; return; }
+    const L = Object.fromEntries(C.map(c => [c.key, left(c)]));
+    $('#box').innerHTML = `<table class="tbl"><thead><tr>${C.map(c => `<th class="${L[c.key] ? 't' : ''}"${sortK === c.key ? ` aria-sort="${sortD < 0 ? 'descending' : 'ascending'}"` : ''}><button type="button" class="sort${sortK === c.key ? ' on' : ''}" data-k="${esc(c.key)}">${esc(c.label)}<i class="fas ${sortK !== c.key ? 'fa-sort' : sortD < 0 ? 'fa-sort-down' : 'fa-sort-up'}"></i></button></th>`).join('')}</tr></thead><tbody>${
+      rows.map(r => `<tr>${C.map(c => `<td class="${L[c.key] ? 't' : ''}">${fmt(r[c.key], c.type)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    $('#box').querySelectorAll('button.sort').forEach(b => b.onclick = () => {
+      const k = b.dataset.k; sortD = sortK === k ? -sortD : -1; sortK = k; render();
+    });
+  }
+  async function load(date) {
+    $('#box').innerHTML = '<div class="loading">載入中…</div>';
+    try {
+      const r = await fetch(`/api/lab/${kind}` + (date ? `?date=${date}` : ''), { cache: 'no-store' });
+      if (r.status === 401) { location.href = '/login?next=/lab'; return; }
+      if (r.status === 404) { DATA = null; $('#h2').textContent = $('.tabs button.on').firstChild.textContent; $('#sub').textContent = ''; $('#note').hidden = true; $('#meta').textContent = '';
+        $('#box').innerHTML = '<div class="empty">還沒收到這項結果。本機推送後就會出現。</div>'; return; }
+      DATA = await r.json(); sortK = null; sortD = -1; render();
+    } catch (e) { $('#box').innerHTML = '<div class="empty">讀取失敗，請稍後再試。</div>'; }
+  }
+  async function loadDates() {
+    try {
+      const r = await fetch(`/api/lab/${kind}/dates`, { cache: 'no-store' });
+      const ds = r.ok ? await r.json() : [];
+      $('#date').innerHTML = ds.map(x => `<option value="${x.date}">${x.date}</option>`).join('') || '<option value="">—</option>';
+    } catch (e) { $('#date').innerHTML = '<option value="">—</option>'; }
+    await load($('#date').value);
+  }
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.tabs button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); });
+    kind = b.dataset.k; loadDates();
+  });
+  $('#date').onchange = e => load(e.target.value);
+  loadDates();
+})();
+</script>
+{% endblock %}

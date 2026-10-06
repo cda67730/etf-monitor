@@ -2341,6 +2341,11 @@ async def admin_etf_delete(request: Request, code: str):
 app.include_router(inst_flow.create_router(templates, check_authentication))
 app.include_router(market_mood.create_router(templates))
 app.include_router(fut_flow.create_router(templates))
+
+# ============ 量化研究（本機 breakout_detector 推上來的結果，需登入）============
+import lab_results
+lab_results.init(db_config)
+app.include_router(lab_results.create_router(templates, check_authentication))
 app.include_router(etf_report.create_router(templates, check_authentication))
 app.include_router(inst_report.create_router(templates, check_authentication))
 
