@@ -1,18 +1,19 @@
 import requests, re, json
-H={"User-Agent":"Mozilla/5.0"}
+H={"User-Agent":"Mozilla/5.0","Referer":"https://mis.taifex.com.tw/futures/VolatilityQuotes/"}
 out=[]
 try:
-    r=requests.get("https://etf-monitor-production.up.railway.app/api/etfs?scope=every",headers=H,timeout=60)
-    out.append("== registry "+str(r.status_code)); out.append(r.text[:20000])
-except Exception as e: out.append("registry ERR "+str(e))
-for mode in ("2","4"):
-    r=requests.get(f"https://isin.twse.com.tw/isin/C_public.jsp?strMode={mode}",headers=H,timeout=60)
-    t=r.content.decode("big5",errors="replace")
-    rows=re.findall(r"<tr><td bgcolor=#FAFAD2>(.*?)</td><td bgcolor=#FAFAD2>(.*?)</td><td bgcolor=#FAFAD2>(.*?)</td><td bgcolor=#FAFAD2>(.*?)</td><td bgcolor=#FAFAD2>(.*?)</td><td bgcolor=#FAFAD2>(.*?)</td>",t)
-    out.append(f"== isin mode {mode} rows={len(rows)}")
-    for a,isin,listed,market,ind,cfi in rows:
-        code,_,name=a.replace("　"," ").partition(" ")
-        code=code.strip(); name=name.strip()
-        if re.fullmatch(r"00\d{3,4}[A-Z]",code) and (code.endswith("A") or "主動" in name):
-            out.append(f"{code}\t{name}\t{listed}\t{market}\t{cfi}")
+    r=requests.get("https://mis.taifex.com.tw/futures/VolatilityQuotes/",headers=H,timeout=30)
+    out.append(f"page {r.status_code} len={len(r.text)}"); out.append(r.text[:1500])
+    js=re.findall(r'src="([^"]+\.js)"',r.text)
+    out.append("js="+json.dumps(js))
+    for j in js[:6]:
+        u=j if j.startswith("http") else "https://mis.taifex.com.tw"+(j if j.startswith("/") else "/futures/VolatilityQuotes/"+j)
+        t=requests.get(u,headers=H,timeout=30).text
+        apis=sorted(set(re.findall(r'["\'](/?(?:futures/)?api/[A-Za-z0-9_/]+)["\']',t)))
+        out.append(f"== {u} len={len(t)} apis={apis[:60]}")
+        for k in ("VIX","Volatility","vix"):
+            for m in re.finditer(k,t):
+                out.append("   ctx: "+t[max(0,m.start()-150):m.start()+150].replace("\n"," "))
+                break
+except Exception as e: out.append("ERR "+repr(e))
 open("debug/fut_result.txt","w").write("\n".join(out))
