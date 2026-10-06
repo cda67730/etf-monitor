@@ -2342,6 +2342,16 @@ app.include_router(inst_flow.create_router(templates, check_authentication))
 app.include_router(market_mood.create_router(templates))
 app.include_router(fut_flow.create_router(templates))
 
+# ============ Google AdSense：網站根目錄的 ads.txt ============
+ADSENSE_PUB = "pub-5437045809111179"
+
+
+@app.get("/ads.txt", include_in_schema=False)
+async def ads_txt():
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(f"google.com, {ADSENSE_PUB}, DIRECT, f08c47fec0942fa0\n")
+
+
 # ============ 量化研究（本機 breakout_detector 推上來的結果，需登入）============
 import lab_results
 lab_results.init(db_config)
