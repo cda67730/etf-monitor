@@ -283,5 +283,59 @@
             });
         });
     </script>
+    <!-- 手機往下捲、上方導覽列看不到時，在貼頂的分頁列（或左上角）放一個漢堡鈕，可回首頁與其他頁 -->
+    <style>
+        .mnav-btn { display: none; flex: 0 0 auto; align-items: center; justify-content: center; width: 38px; height: 34px; margin-right: 4px;
+                    border: 0; border-radius: 6px; background: #0f1b2d; color: #fff; font-size: 1rem; cursor: pointer; }
+        .mnav-btn.show { display: inline-flex; }
+        .secnav .mnav-btn { position: sticky; left: 0; z-index: 2; }
+        .mnav-btn.float { position: fixed; top: 8px; left: 8px; z-index: 1040; box-shadow: 0 2px 8px rgba(15, 27, 45, .25); }
+        .mnav-btn:focus-visible { outline: 2px solid #f5a623; outline-offset: 2px; }
+        .mnav { position: fixed; inset: 0; z-index: 1050; background: rgba(15, 27, 45, .45); }
+        .mnav[hidden] { display: none; }
+        .mnav .panel-m { position: absolute; top: 0; left: 0; bottom: 0; width: min(280px, 82vw); background: #0f1b2d; color: #fff;
+                         padding: 14px 0; overflow-y: auto; box-shadow: 4px 0 20px rgba(0, 0, 0, .3); }
+        .mnav .ttl { font-weight: 700; padding: 4px 18px 12px; border-bottom: 1px solid #24364f; margin-bottom: 6px; font-size: .95rem; }
+        .mnav a { display: flex; align-items: center; gap: 10px; padding: 11px 18px; color: #c9d4e3; text-decoration: none; font-size: .95rem; }
+        .mnav a i { width: 18px; text-align: center; color: #8ea0b8; }
+        .mnav a.on, .mnav a:hover { background: #16263d; color: #fff; }
+        .mnav .grp { font-size: .74rem; color: #6b7a8f; padding: 12px 18px 4px; }
+    </style>
+    <button type="button" class="mnav-btn" id="mnav-btn" aria-label="開啟網站選單" aria-expanded="false" aria-controls="mnav"><i class="fas fa-bars"></i></button>
+    <div class="mnav" id="mnav" hidden>
+        <div class="panel-m" role="dialog" aria-label="網站選單">
+            <div class="ttl">Danny大叔的股市觀測筆記</div>
+            <a href="/"{{ ' class="on"' if request.url.path == '/' }}><i class="fas fa-house"></i>首頁</a>
+        </div>
+    </div>
+    <script>
+    (() => {
+        const btn = document.getElementById('mnav-btn'), menu = document.getElementById('mnav'), panel = menu.querySelector('.panel-m');
+        const nav = document.querySelector('nav.navbar');
+        // 選單內容直接複製上方導覽列的連結（新增頁面不用改兩個地方）
+        const path = location.pathname;
+        let legacy = false;
+        document.querySelectorAll('#navbarNav .nav-link:not(.dropdown-toggle), #navbarNav .dropdown-item').forEach(a => {
+            if (a.classList.contains('dropdown-item') && !legacy) { legacy = true; const g = document.createElement('div'); g.className = 'grp'; g.textContent = '舊版 ETF'; panel.appendChild(g); }
+            const c = document.createElement('a'); c.href = a.getAttribute('href'); c.innerHTML = a.innerHTML;
+            if (a.getAttribute('href') === path) c.className = 'on';
+            panel.appendChild(c);
+        });
+        const sec = document.querySelector('.secnav');
+        if (sec) sec.prepend(btn); else btn.classList.add('float');
+        const mobile = () => innerWidth < 1200;
+        let navVisible = true;
+        const sync = () => { btn.classList.toggle('show', mobile() && !navVisible); if (navVisible) close(); };
+        const open = () => { menu.hidden = false; btn.setAttribute('aria-expanded', 'true'); };
+        const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+        btn.addEventListener('click', e => { e.stopPropagation(); menu.hidden ? open() : close(); });
+        menu.addEventListener('click', e => { if (e.target === menu) close(); });
+        addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+        if (nav && 'IntersectionObserver' in window) {
+            new IntersectionObserver(es => { navVisible = es[0].isIntersecting; sync(); }).observe(nav);
+        }
+        addEventListener('resize', sync);
+    })();
+    </script>
 </body>
 </html>

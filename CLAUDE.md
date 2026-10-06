@@ -30,6 +30,7 @@
 
 ## 現有頁面
 `/` 首頁分流（`hub.html`，四張卡片）、`/etf` ETF 日報（原首頁）、`/holdings` 每日持股、`/new-holdings` 新增持股、`/decreased-holdings` 減持、`/cross-holdings` 跨 ETF 重複持股、`/warrant-ranking` 權證排行、`/warrant-volume-comparison` 權證量能、`/inst-cobuy` 三大法人同買、`/market-mood` 市場情緒指標、`/futures` 期貨籌碼、`/lab` 量化研究（需登入）、`/admin/etfs` ETF 清單管理＋手動爬取 ETF／權證（首頁原按鈕已移到這裡）、`/login`
+- 手機（寬 <1200）往下捲、上方導覽列離開畫面時，`base.html` 在貼頂的 `.secnav` 最左邊插入漢堡鈕（沒有 `.secnav` 的頁面改成左上角浮動），點開側邊選單；選單連結由 JS 複製導覽列（含舊版 ETF），所以新增頁面只要改導覽列一處；導覽列看得到時漢堡鈕隱藏，不會和上方的漢堡同時出現。`.secnav` 裡的按鈕事件要用 `button[data-t]` 之類的選擇器，避免點到漢堡鈕
 - 導覽列順序（`base.html`）：三大法人同買、ETF日報、市場情緒、期貨籌碼、權證排行、權證量能、ETF 管理，最後是「舊版 ETF」下拉（每日持股、新增持股、減持表、跨ETF重複持股；這些頁 BookReview 仍在解析，不能刪）
 
 ## ETF 日報範圍（積極型／不分類）

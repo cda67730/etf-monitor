@@ -343,7 +343,7 @@
   }
   function setTab(t) {
     tab = t; sortK = null; sortD = -1;
-    document.querySelectorAll('#tabs button').forEach(b => { b.classList.toggle('on', b.dataset.t === t); b.setAttribute('aria-selected', b.dataset.t === t); });
+    document.querySelectorAll('#tabs button[data-t]').forEach(b => { b.classList.toggle('on', b.dataset.t === t); b.setAttribute('aria-selected', b.dataset.t === t); });
   }
   // ---- 今日觀察 ----
   const TAGS = { up: '偏多', down: '偏空', core: '主軸', warn: '注意', info: '盤勢' };
@@ -398,7 +398,7 @@
     $('#dl-date').onchange = () => { $('#pdf').href = `/report/inst.pdf?date=${$('#dl-date').value}`; };
     await loadDay(IDX.dates[0]);
   }
-  $('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; setTab(b.dataset.t); render(); };
+  $('#tabs').onclick = e => { const b = e.target.closest('button[data-t]'); if (!b) return; setTab(b.dataset.t); render(); };
   $('#duel-pick').onclick = e => { const b = e.target.closest('button'); if (!b) return; duelDir = +b.dataset.d;
     $('#duel-pick').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); render(); };
   $('#date').onchange = e => loadDay(e.target.value).catch(err => { $('#box').innerHTML = `<div class="empty">${esc(err.message)}</div>`; });
