@@ -138,6 +138,18 @@ def tw_vix(have=(), months=15):
     return sorted(out)
 
 
+def tw_vix_live():
+    """台股 VIX 盤中即時值（期交所行情資訊網，每 15 秒更新；09:00～13:45）。回傳當天一筆，extra 標記盤中時間"""
+    r = requests.post("https://mis.taifex.com.tw/futures/api/getQuoteListVIX", json={}, timeout=TIMEOUT,
+                      headers={**UA, "Referer": "https://mis.taifex.com.tw/futures/VolatilityQuotes/"})
+    r.raise_for_status()
+    q = ((r.json().get("RtData") or {}).get("QuoteList") or [{}])[0]
+    d, t, v = q.get("CDate", ""), q.get("CTime", ""), q.get("CLastPrice", "")
+    if not re.fullmatch(r"\d{8}", d) or not v:
+        raise ValueError(f"期交所即時 VIX 回應格式不符：{str(q)[:120]}")
+    return [(f"{d[:4]}-{d[4:6]}-{d[6:]}", float(v), {"live": True, "time": t, "ref": float(q.get("CRefPrice") or 0) or None})]
+
+
 # ───────── 中期 ─────────
 def finra_margin():
     """FINRA 保證金負債（Debit Balances，百萬美元，月資料）"""

@@ -83,11 +83,13 @@ class MoodStore:
         return self._run("SELECT COUNT(*) FROM mood_obs", fetch=True)[0][0]
 
     # ---------- 抓取 ----------
-    def update(self):
-        """抓全部指標；個別失敗不影響其他。回傳摘要字串，全部失敗才丟例外"""
+    def update(self, only=None):
+        """抓全部指標（only＝只抓指定的幾項）；個別失敗不影響其他。回傳摘要字串，全部失敗才丟例外"""
         with self.lock:
             ok, fail = [], []
             for ind, fn in F.FETCHERS.items():
+                if only and ind not in only:
+                    continue
                 try:
                     rows = fn(have=self.dates(ind)) if ind in F.NEEDS_HAVE else fn()
                     self.save(ind, rows)
@@ -99,8 +101,16 @@ class MoodStore:
                     logger.error(f"[mood] {ind} 抓取失敗：{e}")
             self._cache = None
             if not ok:
-                raise RuntimeError("全部抓取失敗：" + "；".join(f"{k} {v}" for k, v in self.last_errors.items()))
-            return f"成功 {len(ok)}/{len(F.FETCHERS)}" + (f"；失敗：{'、'.join(fail)}" if fail else "")
+                raise RuntimeError("全部抓取失敗：" + "；".join(f"{k} {v}" for k, v in self.last_errors.items() if not only or k in only))
+            return f"成功 {len(ok)}/{len(only or F.FETCHERS)}" + (f"；失敗：{'、'.join(fail)}" if fail else "")
+
+    def update_twvix_live(self):
+        """盤中每 15 分鐘：期交所即時台股 VIX 寫進 tw_vix 當天那一筆（16:10 收盤後由每月檔的正式值覆蓋）"""
+        with self.lock:
+            rows = F.tw_vix_live()
+            self.save("tw_vix", rows)
+            d, v, e = rows[0]
+            return f"{d} {e['time'][:2]}:{e['time'][2:4]} {v}"
 
     # ---------- 給頁面的完整結果（快取 10 分鐘）----------
     def report(self):
@@ -247,6 +257,8 @@ def _judge(i, rows, S, D):
                      f"介於 13 到 25 之間，距自滿線 {v - 13:.1f} 點、距恐慌線 {25 - v:.1f} 點。"))
     elif i == "tw_vix":
         r["display"] = _fmt(v)
+        if (e or {}).get("live") and (e or {}).get("time"):
+            r["sub"] = f"盤中 {e['time'][:2]}:{e['time'][2:4]}"
         r["lines"] = [(30, "恐慌 30"), (15, "自滿 15")]
         if v > 30: r.update(signal="red", label="恐慌")
         elif v < 15: r.update(signal="yellow", label="自滿")

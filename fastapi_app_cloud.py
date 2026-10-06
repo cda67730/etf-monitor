@@ -193,6 +193,10 @@ async def start_scheduler():
             extra.append(("inst", "三大法人買賣超", inst_flow.flow.scrape, "SCHED_INST", "0 16 * * 1-5; 20 18 * * 1-5"))
         if market_mood.store:
             extra.append(("mood", "市場情緒指標", market_mood.store.update, "SCHED_MOOD", "30 7 * * 2-6"))
+            # 台股 VIX：期交所收盤後當天更新；CNN 恐懼貪婪：美股盤中每 2 小時（台北 22、0、2、4 點），早上 07:30 那次是收盤值
+            extra.append(("mood_twvix", "台股 VIX（收盤）", lambda: market_mood.store.update(only={"tw_vix"}), "SCHED_MOOD_TWVIX", "10 16 * * 1-5"))
+            extra.append(("mood_twvix_live", "台股 VIX（盤中）", market_mood.store.update_twvix_live, "SCHED_MOOD_TWVIX_LIVE", "0,15,30,45 9-13 * * 1-5"))
+            extra.append(("mood_cnn", "CNN 恐懼貪婪（盤中）", lambda: market_mood.store.update(only={"cnn_fg"}), "SCHED_MOOD_CNN", "0 22 * * 1-5; 0 0,2,4 * * 2-6"))
         if fut_flow.store:
             extra.append(("fut", "期貨三大法人未平倉", fut_flow.store.update, "SCHED_FUT", "10 15,18 * * 1-5"))
         if etf_report.report:

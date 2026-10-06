@@ -58,7 +58,8 @@
 - 中期：FINRA 保證金負債（官網表格）、保證金佔 GDP（GDP 取自 multpl）、IPO（Renaissance 今年累計）、NYSE 騰落線（WSJ 當日漲跌家數，本站逐日累計，滿 20 日才判斷背離）、美銀牛熊指標（Finvaulta 的 Flow Show 週報內文）
 - 長期：巴菲特指標（Yahoo ^W5000 ÷ GDP）、CAPE（multpl）、美債 10Y−2Y（美國財政部 CSV）、LEI（Conference Board 新聞稿文字）
 - 已拿掉：NAAIM（2026/7 後停更）、高收益債利差（只有 FRED）、內部人買賣比與 AAII 持股比重（GuruFocus／AAII 擋）、M 平方（Cloudflare）
-- 排程 `mood` 週二～六 07:30（`SCHED_MOOD`）；資料庫空的時候啟動即背景抓一次
+- 排程 `mood` 週二～六 07:30（`SCHED_MOOD`）；資料庫空的時候啟動即背景抓一次；`update(only={...})` 可只抓幾項
+- 加開排程：`mood_twvix` 平日 16:10 只抓台股 VIX 每月檔（收盤正式值）；`mood_twvix_live` 平日 09:00～13:45 每 15 分鐘抓期交所即時值（POST `https://mis.taifex.com.tw/futures/api/getQuoteListVIX`，Actions／美國機房連得到），寫進 tw_vix 當天一筆，extra `live`/`time`，頁面顯示「盤中 HH:MM」，之後被收盤檔覆蓋；`mood_cnn` 美股盤中每 2 小時（台北 22:00、00:00、02:00、04:00）只抓 CNN 恐懼貪婪，同一天覆蓋
 - 賣出條件 5 項：VIX>25、保證金連 3 月下降、恐懼貪婪由 ≥75 跌破 50、騰落線背離、美銀 >8；≥3 出脫、≥2 警戒升級
 - 每項指標的「放大」圖有期間下拉：近 3 月／半年／1 年（預設）／2 年；資料來自 item 的 `chart_long`（近 `LONG_DAYS`=730 天），卡片上的小圖仍依 `IND` 的視窗（微台散戶 182 天）
 - 版面與 ETF 日報共用 `_ed_css.html`：深色行情列一行放 S&P 500、賣出條件 n/5、短中長紅燈數與結論句；貼頂區塊導覽；原本的大型「賣出條件」判讀區塊已拿掉（細節在下方賣出條件表）

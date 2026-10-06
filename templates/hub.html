@@ -88,7 +88,7 @@
       {% set fg = none if fv is none else ('fg-xf', '極度恐懼') if fv < 25 else ('fg-f', '恐懼') if fv < 45 else ('fg-n', '中性') if fv <= 55 else ('fg-g', '貪婪') if fv < 75 else ('fg-xg', '極度貪婪') %}
       <div class="{{ fg[0] if fg }}" title="CNN 恐懼貪婪指數 {{ fv if fv is not none else '' }}"><b>{{ fg[1] if fg else '—' }}</b><span>CNN</span></div>
       {% else %}
-      <div><b class="{{ 'text-danger' if x and x.signal == 'red' else 'text-warning' if x and x.signal == 'yellow' else '' }}">{{ x.display if x else '—' }}</b><span>{{ lb }}{% if x and x.signal not in ('gray',) %}・{{ x.get('sub') or x.label }}{% endif %}</span></div>
+      <div><b class="{{ 'text-danger' if x and x.signal == 'red' else 'text-warning' if x and x.signal == 'yellow' else '' }}">{{ x.display if x else '—' }}</b><span>{{ lb }}{% if x and x.signal not in ('gray',) %}・{{ (x.label ~ (' ' ~ x.sub if x.get('sub') else '')) if k == 'tw_vix' else (x.get('sub') or x.label) }}{% endif %}</span></div>
       {% endif %}
       {% endfor %}
       <div><b class="{{ 'text-danger' if retail and retail.net > 0 else 'text-success' if retail and retail.net < 0 else '' }}">{{ ('淨多' if retail.net >= 0 else '淨空') ~ ' ' ~ '{:,}'.format(retail.net|abs) if retail else '—' }}</b><span>微台散戶口數{% if retail and retail.chg is not none %}・日 {{ '{:+,}'.format(retail.chg) }}{% endif %}</span></div>
