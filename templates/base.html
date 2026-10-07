@@ -162,7 +162,8 @@
                     ('/futures', 'fa-chart-line', '期貨籌碼'),
                     ('/warrant-ranking', 'fa-certificate', '權證排行'),
                     ('/warrant-volume-comparison', 'fa-chart-bar', '權證量能'),
-                    ('/admin/etfs', 'fa-gear', 'ETF 管理')] + ([('/lab', 'fa-flask', '量化研究')] if request.cookies.get('session_id') else []) %}
+                    ('/admin/etfs', 'fa-gear', 'ETF 管理'),
+                    ('/lab', 'fa-lock', '量化研究')] %}
                 <li class="nav-item">
                     <a class="nav-link{{ ' active' if _np == href }}" href="{{ href }}"{{ ' aria-current="page"' if _np == href }}>
                         <i class="fas {{ icon }}"></i> {{ label }}

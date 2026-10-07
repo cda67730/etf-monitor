@@ -5,11 +5,11 @@
 {% block content %}
 {% include "_ed_css.html" %}
 <style>
-  .lab .tabs button { border: 0; background: none; padding: 6px 16px; font-size: .92rem; color: var(--term-text); border-radius: 6px; cursor: pointer; white-space: nowrap; }
-  .lab .tabs button.on { background: var(--accent); color: #1a1205; font-weight: 700; }
-  .lab .tabs button:not(.on):hover { background: var(--term-line); color: #fff; }
-  .lab .tabs button:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
-  .lab .tabs .n { font-family: var(--num); font-size: .74rem; opacity: .7; margin-left: 4px; }
+  .lab .secnav button[data-k] { flex: 0 0 auto; border: 0; background: none; padding: 6px 14px; border-radius: 6px; font-size: .88rem; color: var(--body); white-space: nowrap; cursor: pointer; }
+  .lab .secnav button[data-k]:hover { background: var(--hover); color: var(--ink); }
+  .lab .secnav button[data-k].on { background: var(--term); color: #fff; font-weight: 600; }
+  .lab .secnav button[data-k]:focus-visible { outline: 2px solid var(--steel); outline-offset: 1px; }
+  .lab .secnav .n { font-family: var(--num); font-size: .74rem; opacity: .7; margin-left: 4px; }
   .lab .ctl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .lab .dl-sel { border-radius: 8px; border-right: 1px solid var(--term-line); padding: 6px 10px; }
   .lab .note { font-size: .86rem; color: var(--body); margin: 10px 0 0; line-height: 1.7; white-space: pre-wrap; }
@@ -38,13 +38,14 @@
         <div class="stat" id="stat"><span>本機 breakout_detector 每日結果（僅登入可見）</span></div>
       </div>
       <div class="ctl">
-        <div class="tabs" role="tablist" aria-label="結果">
-          {% for k, v in kinds.items() %}<button type="button" role="tab" data-k="{{ k }}"{% if loop.first %} class="on" aria-selected="true"{% endif %}>{{ v }}{% if summary[k] and summary[k].date %}<span class="n">{{ summary[k].date[5:].replace('-', '/') }}</span>{% endif %}</button>{% endfor %}
-        </div>
         <select class="dl-sel" id="date" aria-label="資料日"></select>
       </div>
     </div>
   </header>
+
+  <nav class="secnav" id="labtabs" role="tablist" aria-label="結果">
+    {% for k, v in kinds.items() %}<button type="button" role="tab" data-k="{{ k }}"{% if loop.first %} class="on" aria-selected="true"{% endif %}>{{ v }}{% if summary[k] and summary[k].date %}<span class="n">{{ summary[k].date[5:].replace('-', '/') }}</span>{% endif %}</button>{% endfor %}
+  </nav>
 
   <section class="panel">
     <div class="sec-head"><div><h2 id="h2">—</h2><div class="sub" id="sub"></div></div></div>
@@ -94,7 +95,7 @@
     try {
       const r = await fetch(`/api/lab/${kind}` + (date ? `?date=${date}` : ''), { cache: 'no-store' });
       if (r.status === 401) { location.href = '/login?next=/lab'; return; }
-      if (r.status === 404) { DATA = null; $('#h2').textContent = $('.tabs button.on').firstChild.textContent; $('#sub').textContent = ''; $('#note').hidden = true; $('#meta').textContent = '';
+      if (r.status === 404) { DATA = null; $('#h2').textContent = $('#labtabs button[data-k].on').firstChild.textContent; $('#sub').textContent = ''; $('#note').hidden = true; $('#meta').textContent = '';
         $('#box').innerHTML = '<div class="empty">還沒收到這項結果。本機推送後就會出現。</div>'; return; }
       DATA = await r.json(); sortK = null; sortD = -1; render();
     } catch (e) { $('#box').innerHTML = '<div class="empty">讀取失敗，請稍後再試。</div>'; }
@@ -107,8 +108,9 @@
     } catch (e) { $('#date').innerHTML = '<option value="">—</option>'; }
     await load($('#date').value);
   }
-  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
-    document.querySelectorAll('.tabs button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); });
+  const TABS = document.querySelectorAll('#labtabs button[data-k]');
+  TABS.forEach(b => b.onclick = () => {
+    TABS.forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); });
     kind = b.dataset.k; loadDates();
   });
   $('#date').onchange = e => load(e.target.value);
