@@ -3,7 +3,9 @@
 - 寫入：POST /api/ingest/{kind}，用 HMAC 簽章驗證（Railway 環境變數 INGEST_SECRET，本機存同一串）
     標頭 X-Timestamp：Unix 秒；X-Signature：hex(HMAC-SHA256(secret, f"{timestamp}.{原始 body}"))
     與伺服器時間差超過 5 分鐘、簽章不符、沒設 INGEST_SECRET 一律拒收；token 本身不在網路上傳
-    body：{"date": "YYYY-MM-DD", "rows": [{...}, ...], "columns": [{"key", "label", "type"}]（可省略）, "note": "..."（可省略）}
+    body：{"date": "YYYY-MM-DD", "rows": [{...}, ...], "columns": [{"key", "label", "type"}]（可省略）, "note": "..."（可省略）,
+           "legend": {"stopped": "已停損", ...}（可省略，表格上方圖例）}
+    列裡底線開頭的鍵不當欄位；"_flag"（new／holding／stopped／market_block）決定整列底色，未知值照一般列
     同一 kind、同一天重送就覆蓋
 - 讀取：/lab 頁面與 /api/lab/*，都要登入網站密碼（跟 ETF 管理同一組）；ingest 的金鑰不能拿來讀
 - 資料表 lab_result(kind, d, payload JSON, received)
@@ -96,13 +98,17 @@ def validate(body):
             for k in r:
                 if k not in keys:
                     keys.append(k)
-        cols = [{"key": k, "label": k} for k in keys]
+        cols = [{"key": k, "label": k} for k in keys if not str(k).startswith("_")]
     if not isinstance(cols, list) or not all(isinstance(c, dict) and c.get("key") for c in cols):
         raise ValueError("columns 必須是 [{key, label, type}] 陣列")
     cols = [{"key": str(c["key"]), "label": str(c.get("label") or c["key"]),
-             "type": c.get("type") if c.get("type") in TYPES else None} for c in cols][:40]
+             "type": c.get("type") if c.get("type") in TYPES else None}
+            for c in cols if not str(c["key"]).startswith("_")][:40]    # 底線開頭的鍵（如 _flag）是列標記，不當欄位
     note = str(body.get("note") or "")[:2000]
-    return d, {"rows": rows, "columns": cols, "note": note}
+    legend = body.get("legend")
+    legend = ({str(k)[:40]: str(v)[:80] for k, v in list(legend.items())[:12]}
+              if isinstance(legend, dict) else {})
+    return d, {"rows": rows, "columns": cols, "note": note, "legend": legend}
 
 
 store = None

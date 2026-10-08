@@ -25,7 +25,7 @@
 | `mood_fetch.py` | 市場情緒 14 項指標抓取（全部免 API key；FRED 從機房會逾時，不要用） |
 | `market_mood.py` | 資料表 `mood_obs`、燈號／賣出條件／自動結論、`/market-mood`、`/api/market-mood` |
 | `fut_flow.py` | 期貨籌碼：資料表 `fut_inst`（期交所三大法人各期貨契約，每日每商品每身份一列）、`/futures`、`/api/futures` |
-| `lab_results.py` | 量化研究：本機 breakout_detector 推上來的每日結果（`slow_bull` 慢牛、`backtest` 回測突破、`ae_monitor` Autoencoder 監測）；資料表 `lab_result(kind, d, payload, received)`；`POST /api/ingest/{kind}` 用 HMAC 簽章（`INGEST_SECRET`，標頭 `X-Timestamp`、`X-Signature`＝hex HMAC-SHA256(secret, "{ts}.{body}")，時間差 >5 分鐘拒收；沒設 secret 就 503）；`/lab` 頁面與 `/api/lab/*` 需登入；導覽列「量化研究」一律顯示（鎖頭圖示，沒登入點了轉登入頁）；頁面三個結果切換鈕是貼頂 `.secnav#labtabs`（`button[data-k]`）；本機推送範例 `tools/lab_push.py` |
+| `lab_results.py` | 量化研究：本機 breakout_detector 推上來的每日結果（`slow_bull` 慢牛、`backtest` 回測突破、`ae_monitor` Autoencoder 監測）；資料表 `lab_result(kind, d, payload, received)`；`POST /api/ingest/{kind}` 用 HMAC 簽章（`INGEST_SECRET`，標頭 `X-Timestamp`、`X-Signature`＝hex HMAC-SHA256(secret, "{ts}.{body}")，時間差 >5 分鐘拒收；沒設 secret 就 503）；列裡底線開頭的鍵不當欄位，`_flag`＝stopped 整列淡紅、market_block 淡灰（new／holding／未知值不上色）；payload 頂層可選 `legend` 物件顯示成表格上方圖例；`/lab` 頁面與 `/api/lab/*` 需登入；導覽列「量化研究」一律顯示（鎖頭圖示，沒登入點了轉登入頁）；頁面三個結果切換鈕是貼頂 `.secnav#labtabs`（`button[data-k]`）；本機推送範例 `tools/lab_push.py` |
 | `inst_cobuy/fetch.py` | 證交所／櫃買抓取函式（`twse`、`tpex`）；`inst_cobuy/data/*.csv` 只當首次匯入的種子資料 |
 
 ## 現有頁面

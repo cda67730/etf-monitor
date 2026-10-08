@@ -27,6 +27,13 @@
     .lab .tbl td[data-l]::before { content: none; }
     .lab .sort-m { display: none; }
   }
+  .lab .tbl tr.f-stopped td { background: rgba(229, 57, 53, .12); }
+  .lab .tbl tr.f-market_block td { background: rgba(128, 128, 128, .12); }
+  .lab .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 8px; font-size: .82rem; color: var(--body); }
+  .lab .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .lab .legend i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,.08); background: #fff; }
+  .lab .legend i.f-stopped { background: rgba(229, 57, 53, .12); }
+  .lab .legend i.f-market_block { background: rgba(128, 128, 128, .12); }
   .lab .meta { font-size: .78rem; color: var(--mute); margin-top: 10px; }
 </style>
 
@@ -50,6 +57,7 @@
   <section class="panel">
     <div class="sec-head"><div><h2 id="h2">—</h2><div class="sub" id="sub"></div></div></div>
     <p class="note" id="note" hidden></p>
+    <div class="legend" id="legend" hidden></div>
     <div class="wrap" id="box"><div class="loading">載入中…</div></div>
     <div class="meta" id="meta"></div>
   </section>
@@ -72,7 +80,12 @@
   const left = c => c.type === 'text' || c.type === 'code' || c.type === 'date' || (!c.type && DATA.rows.some(r => r[c.key] != null && !isNum(r[c.key])));
   function render() {
     if (!DATA) return;
-    const C = DATA.columns, rows = [...DATA.rows];
+    const C = (DATA.columns || []).filter(c => !String(c.key).startsWith('_')), rows = [...DATA.rows];
+    const FLAGS = new Set(['stopped', 'market_block']);   // 只有這兩種上色；new／holding、未知值、缺值都照一般列
+    const rowCls = r => FLAGS.has(r._flag) ? ` class="f-${r._flag}"` : '';
+    const lg = DATA.legend && typeof DATA.legend === 'object' ? Object.entries(DATA.legend) : [];
+    $('#legend').hidden = !lg.length;
+    $('#legend').innerHTML = lg.map(([k, v]) => `<span><i class="${FLAGS.has(k) ? 'f-' + k : ''}"></i>${esc(v)}</span>`).join('');
     if (sortK) rows.sort((a, b) => {
       const x = a[sortK], y = b[sortK];
       if (x == null) return 1; if (y == null) return -1;
@@ -85,7 +98,7 @@
     if (!rows.length) { $('#box').innerHTML = '<div class="empty">這一天沒有結果。</div>'; return; }
     const L = Object.fromEntries(C.map(c => [c.key, left(c)]));
     $('#box').innerHTML = `<table class="tbl"><thead><tr>${C.map(c => `<th class="${L[c.key] ? 't' : ''}"${sortK === c.key ? ` aria-sort="${sortD < 0 ? 'descending' : 'ascending'}"` : ''}><button type="button" class="sort${sortK === c.key ? ' on' : ''}" data-k="${esc(c.key)}">${esc(c.label)}<i class="fas ${sortK !== c.key ? 'fa-sort' : sortD < 0 ? 'fa-sort-down' : 'fa-sort-up'}"></i></button></th>`).join('')}</tr></thead><tbody>${
-      rows.map(r => `<tr>${C.map(c => `<td class="${L[c.key] ? 't' : ''}">${fmt(r[c.key], c.type)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+      rows.map(r => `<tr${rowCls(r)}>${C.map(c => `<td class="${L[c.key] ? 't' : ''}">${fmt(r[c.key], c.type)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
     $('#box').querySelectorAll('button.sort').forEach(b => b.onclick = () => {
       const k = b.dataset.k; sortD = sortK === k ? -sortD : -1; sortK = k; render();
     });
@@ -95,7 +108,7 @@
     try {
       const r = await fetch(`/api/lab/${kind}` + (date ? `?date=${date}` : ''), { cache: 'no-store' });
       if (r.status === 401) { location.href = '/login?next=/lab'; return; }
-      if (r.status === 404) { DATA = null; $('#h2').textContent = $('#labtabs button[data-k].on').firstChild.textContent; $('#sub').textContent = ''; $('#note').hidden = true; $('#meta').textContent = '';
+      if (r.status === 404) { DATA = null; $('#h2').textContent = $('#labtabs button[data-k].on').firstChild.textContent; $('#sub').textContent = ''; $('#note').hidden = true; $('#legend').hidden = true; $('#meta').textContent = '';
         $('#box').innerHTML = '<div class="empty">還沒收到這項結果。本機推送後就會出現。</div>'; return; }
       DATA = await r.json(); sortK = null; sortD = -1; render();
     } catch (e) { $('#box').innerHTML = '<div class="empty">讀取失敗，請稍後再試。</div>'; }
