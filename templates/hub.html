@@ -27,6 +27,9 @@
   .hub-stats.q4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; }
   @media (max-width: 480px) { .hub-stats.q4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .fg-xf b { color: #0b7a3e; } .fg-f b { color: #12a150; } .fg-n b { color: #6c757d; } .fg-g b { color: #e8590c; } .fg-xg b { color: #e5383b; }
+  .hub-mini { --hub-c: #e8590c; gap: 2px; padding: 14px 18px; }
+  .hub-mini b { font-size: 1.35rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
+  @media (max-width: 767.98px) { .hub-grid.hub-tw { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .hub-mini b { font-size: 1.1rem; } }
   .hub-card.soon { background: #fafafa; border-style: dashed; }
 </style>
 
@@ -37,8 +40,8 @@
 
 <div class="hub-grid">
   {% for s, cls, icon, title, sub in [
-      (aggr, 'c-aggr', 'fa-rocket', '主動式 ETF 日報（積極型）', '排除「國外為主」「高股息」，看偏成長的主動式 ETF 動向'),
-      (full, 'c-all', 'fa-newspaper', '主動式 ETF 日報（不分類）', '全部追蹤中的主動式 ETF')] %}
+      (full, 'c-all', 'fa-newspaper', '主動式 ETF 日報（不分類）', '全部追蹤中的主動式 ETF'),
+      (aggr, 'c-aggr', 'fa-rocket', '主動式 ETF 日報（積極型）', '排除「國外為主」「高股息」，看偏成長的主動式 ETF 動向')] %}
   <a class="hub-card {{ cls }}" href="/etf?scope={{ s.scope }}">
     <div class="hub-head">
       <div class="hub-icon"><i class="fas {{ icon }}"></i></div>
@@ -106,6 +109,23 @@
   </div>
   {% endif %}
 </div>
+
+{# 首頁下方：台股 VIX、微台散戶淨多空（點了到市場情緒頁） #}
+{% if mood or retail %}
+{% set tv = (mood['items']|selectattr('id', 'equalto', 'tw_vix')|first) if mood else none %}
+<div class="hub-grid hub-tw mt-3">
+  <a class="hub-card hub-mini" href="/market-mood">
+    <span class="hub-sub">台股 VIX</span>
+    <b class="{{ 'text-danger' if tv and tv.signal == 'red' else 'text-warning' if tv and tv.signal == 'yellow' else '' }}">{{ tv.display if tv else '—' }}</b>
+    <span class="hub-sub">{% if tv and tv.signal != 'gray' %}{{ tv.label }}{{ ' ' ~ tv.sub if tv.get('sub') }}{% endif %}</span>
+  </a>
+  <a class="hub-card hub-mini" href="/market-mood">
+    <span class="hub-sub">微台散戶淨多空</span>
+    <b class="{{ 'text-danger' if retail and retail.net > 0 else 'text-success' if retail and retail.net < 0 else '' }}">{{ ('淨多' if retail.net >= 0 else '淨空') ~ ' ' ~ '{:,}'.format(retail.net|abs) ~ ' 口' if retail else '—' }}</b>
+    <span class="hub-sub">{% if retail and retail.chg is not none %}較前日 {{ '{:+,}'.format(retail.chg) }} 口{% endif %}</span>
+  </a>
+</div>
+{% endif %}
 
 <div class="text-muted small mt-4">資料來源：pocket.tw、臺灣證券交易所、證券櫃檯買賣中心。內容僅供參考，非投資建議。</div>
 {% endblock %}

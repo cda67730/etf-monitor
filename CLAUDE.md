@@ -82,10 +82,11 @@
 4. ✅ **三大法人改存 PostgreSQL**：`inst_daily`（trade_date, stock_id, name, market, foreign_net, trust_net, dealer_net）、`inst_no_trading`；頁面 `/inst-cobuy`、API `/api/inst-cobuy`、CSV 下載；首次啟動匯入 `inst_cobuy/data/*.csv`；之後移除 GitHub Actions 與 Pages
    - 環境變數 `INST_COBUY_PUBLIC=true` 時該頁免登入（為了 AdSense）
 5. ✅ **首頁分流** `/`（原首頁移到 `/etf`），四張卡片：
-   1. 主動式 ETF 日報（積極型）＝排除「國外為主」「高股息」
-   2. 主動式 ETF 日報（不分類）＝全部啟用 ETF
+   1. 主動式 ETF 日報（不分類）＝全部啟用 ETF
+   2. 主動式 ETF 日報（積極型）＝排除「國外為主」「高股息」
    3. 三大法人買賣超及連買
-   4. 市場情緒指標（待使用者提供資料）
+   4. 市場情緒指標
+   - 卡片下方另有兩個小方塊：台股 VIX、微台散戶淨多空（較前日），點了到 `/market-mood`
 6. ✅ 市場情緒指標（`/market-mood`，首頁第四張卡片）
 
 ## 期貨籌碼（fut_flow）
