@@ -30,6 +30,12 @@
   .hub-mini { --hub-c: #e8590c; gap: 2px; padding: 14px 18px; }
   .hub-mini b { font-size: 1.35rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
   @media (max-width: 767.98px) { .hub-grid.hub-tw { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .hub-mini b { font-size: 1.1rem; } }
+  .hub-mini .spark { width: 100%; height: 72px; margin-top: 8px; display: block; overflow: visible; }
+  .spark .ln { fill: none; stroke: #e8590c; stroke-width: 1.8; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+  .spark .ref { stroke: #adb5bd; stroke-dasharray: 3 3; stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .spark rect.up { fill: #e5383b; opacity: .55; } .spark rect.dn { fill: #12a150; opacity: .55; } .spark rect.last { opacity: 1; }
+  .spark-x { display: flex; justify-content: space-between; font-size: .7rem; color: #adb5bd; font-variant-numeric: tabular-nums; }
+  @media (max-width: 767.98px) { .hub-mini .spark { height: 52px; } }
   .hub-card.soon { background: #fafafa; border-style: dashed; }
 </style>
 
@@ -110,19 +116,43 @@
   {% endif %}
 </div>
 
-{# 首頁下方：台股 VIX、微台散戶淨多空（點了到市場情緒頁） #}
+{# 首頁下方：台股 VIX、微台散戶淨多空的趨勢小圖（點了到市場情緒頁） #}
+{% macro spark(pts, bar=false, refs=[]) %}{# pts＝[(日期, 值)]；伺服器端直接畫 SVG，不用載圖表套件 #}
+{%- if pts and pts|length > 1 -%}
+{%- set W, H, P = 300, 72, 4 -%}
+{%- set vs = pts|map(attribute=1)|list -%}
+{%- set lo = ([vs|min] + (refs|map(attribute=0)|list) + ([0] if bar else []))|min -%}
+{%- set hi = ([vs|max] + (refs|map(attribute=0)|list) + ([0] if bar else []))|max -%}
+{%- set rg = (hi - lo) or 1 -%}
+{%- set n = vs|length -%}
+<svg class="spark" viewBox="0 0 {{ W }} {{ H }}" preserveAspectRatio="none" role="img" aria-label="近期走勢">
+  {%- for v, lb in refs %}{% set y = P + (hi - v) / rg * (H - 2 * P) %}
+  <line x1="0" x2="{{ W }}" y1="{{ '%.1f'|format(y) }}" y2="{{ '%.1f'|format(y) }}" class="ref"/>{% endfor %}
+  {%- if bar %}{% set bw = W / n %}{% set y0 = P + hi / rg * (H - 2 * P) %}
+  {%- for v in vs %}{% set y = P + (hi - v) / rg * (H - 2 * P) %}
+  <rect x="{{ '%.2f'|format(loop.index0 * bw + bw * 0.15) }}" width="{{ '%.2f'|format(bw * 0.7) }}" y="{{ '%.1f'|format([y, y0]|min) }}" height="{{ '%.1f'|format(([y - y0, y0 - y]|max) or 0.5) }}" class="{{ 'up' if v > 0 else 'dn' }}{{ ' last' if loop.last }}"/>{% endfor %}
+  {%- else %}
+  <polyline points="{% for v in vs %}{{ '%.1f'|format(loop.index0 / (n - 1) * W) }},{{ '%.1f'|format(P + (hi - v) / rg * (H - 2 * P)) }} {% endfor %}" class="ln"/>
+  {%- endif %}
+</svg>
+<div class="spark-x"><span>{{ pts[0][0][5:].replace('-', '/') }}</span><span>{{ pts[-1][0][5:].replace('-', '/') }}</span></div>
+{%- endif -%}
+{% endmacro %}
 {% if mood or retail %}
 {% set tv = (mood['items']|selectattr('id', 'equalto', 'tw_vix')|first) if mood else none %}
+{% set tr = (mood['items']|selectattr('id', 'equalto', 'tmf_retail')|first) if mood else none %}
 <div class="hub-grid hub-tw mt-3">
   <a class="hub-card hub-mini" href="/market-mood">
     <span class="hub-sub">台股 VIX</span>
     <b class="{{ 'text-danger' if tv and tv.signal == 'red' else 'text-warning' if tv and tv.signal == 'yellow' else '' }}">{{ tv.display if tv else '—' }}</b>
     <span class="hub-sub">{% if tv and tv.signal != 'gray' %}{{ tv.label }}{{ ' ' ~ tv.sub if tv.get('sub') }}{% endif %}</span>
+    {{ spark(tv.chart if tv else [], refs=[(30, '恐慌')]) }}
   </a>
   <a class="hub-card hub-mini" href="/market-mood">
     <span class="hub-sub">微台散戶淨多空</span>
     <b class="{{ 'text-danger' if retail and retail.net > 0 else 'text-success' if retail and retail.net < 0 else '' }}">{{ ('淨多' if retail.net >= 0 else '淨空') ~ ' ' ~ '{:,}'.format(retail.net|abs) ~ ' 口' if retail else '—' }}</b>
     <span class="hub-sub">{% if retail and retail.chg is not none %}較前日 {{ '{:+,}'.format(retail.chg) }} 口{% endif %}</span>
+    {{ spark(tr.chart if tr else [], bar=true) }}
   </a>
 </div>
 {% endif %}
