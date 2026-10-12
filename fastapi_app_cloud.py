@@ -203,6 +203,8 @@ async def start_scheduler():
             extra.append(("report", "日報 PDF（Gemini 說明）", etf_report.report.run_daily, "SCHED_REPORT", "50 20 * * 1-5"))
         if inst_report.report:
             extra.append(("inst_report", "三大法人今日觀察（Gemini）", inst_report.report.run_daily, "SCHED_INST_REPORT", "30 16 * * 1-5; 40 18,20 * * 1-5"))
+        if pick_report.report:
+            extra.append(("pick", "AI 籌碼焦點 10 檔（Gemini）", pick_report.report.run_daily, "SCHED_PICK", "30 21 * * 1-5"))
         app_scheduler.setup(scraper=scraper, warrant_scraper=warrant_scraper, extra_jobs=extra)
     except Exception as e:
         logger.error(f"排程啟動失敗: {e}")
@@ -1703,6 +1705,10 @@ if scraper and etf_report.report:
 import inst_report
 inst_report.init(etf_report.report)
 
+# ============ AI 籌碼焦點 10 檔（pick_report，同一張 etf_report 表 scope='pick'）============
+import pick_report
+pick_report.init(etf_report.report, inst_report.report)
+
 # ============ 保持所有原有的路由和中間件不變 ============
 
 # [所有原有的路由方法保持完全不變]
@@ -2368,6 +2374,7 @@ lab_results.init(db_config)
 app.include_router(lab_results.create_router(templates, check_authentication))
 app.include_router(etf_report.create_router(templates, check_authentication))
 app.include_router(inst_report.create_router(templates, check_authentication))
+app.include_router(pick_report.create_router(check_authentication))
 
 # ============ 主要頁面路由 ============
 @app.get("/", response_class=HTMLResponse)
@@ -2396,8 +2403,14 @@ async def hub(request: Request):
             retail = await run_in_threadpool(fut_flow.store.retail_net, "微型臺指期貨")
         except Exception as e:
             logger.error(f"首頁散戶多空比錯誤: {e}")
+    picks = None
+    if pick_report.report:
+        try:
+            picks = await run_in_threadpool(pick_report.report.latest)
+        except Exception as e:
+            logger.error(f"首頁 AI 籌碼焦點錯誤: {e}")
     return templates.TemplateResponse("hub.html", {
-        "request": request, "aggr": aggr, "full": full, "inst": inst, "mood": mood, "retail": retail})
+        "request": request, "aggr": aggr, "full": full, "inst": inst, "mood": mood, "retail": retail, "picks": picks})
 
 @app.get("/etf", response_class=HTMLResponse)
 async def home(request: Request):

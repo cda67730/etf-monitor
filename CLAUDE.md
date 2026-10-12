@@ -26,6 +26,7 @@
 | `market_mood.py` | 資料表 `mood_obs`、燈號／賣出條件／自動結論、`/market-mood`、`/api/market-mood` |
 | `fut_flow.py` | 期貨籌碼：資料表 `fut_inst`（期交所三大法人各期貨契約，每日每商品每身份一列）、`/futures`、`/api/futures` |
 | `lab_results.py` | 量化研究：本機 breakout_detector 推上來的每日結果（`slow_bull` 慢牛、`backtest` 回測突破、`ae_monitor` Autoencoder 監測）；資料表 `lab_result(kind, d, payload, received)`；`POST /api/ingest/{kind}` 用 HMAC 簽章（`INGEST_SECRET`，標頭 `X-Timestamp`、`X-Signature`＝hex HMAC-SHA256(secret, "{ts}.{body}")，時間差 >5 分鐘拒收；沒設 secret 就 503）；列裡底線開頭的鍵不當欄位，`_flag`＝stopped 整列淡紅、market_block 淡灰（new／holding／未知值不上色）；payload 頂層可選 `legend` 物件顯示成表格上方圖例；`/lab` 頁面與 `/api/lab/*` 需登入；導覽列「量化研究」一律顯示（鎖頭圖示，沒登入點了轉登入頁）；頁面三個結果切換鈕是貼頂 `.secnav#labtabs`（`button[data-k]`）；本機推送範例 `tools/lab_push.py` |
+| `pick_report.py` | AI 籌碼焦點 10 檔（繼承 `etf_report.Report`，存 `etf_report` 表 scope='pick'）：`build_facts` 程式先算「籌碼分數」——三大法人（三大同買、外資投信同買、連買、近 5 日外資＋投信百分位、土洋對作）、主動 ETF（不分類範圍，當日加碼／新進／減碼檔數、近 5 個資料日加碼次數）、量化研究（`lab_results` 最近 7 天內的最新一份：慢牛 new +3／holding +2／stopped −3、回測突破 +2、Autoencoder +1；代號欄位自動辨識）；取前 30 檔加市場情緒背景交給 Gemini（`templates/pick_prompt.txt`）排 10 檔，走同樣的查證與數字核對，只留候選內代號、不足依分數補；排程 `pick` 平日 21:30（`SCHED_PICK`）；首頁最下方公開顯示（`latest()` 只讀已產生的）；`GET /api/picks`（`?date=` 看某天含事實清單，`refresh=1` 立即產生需登入）；權證不納入 |
 | `inst_cobuy/fetch.py` | 證交所／櫃買抓取函式（`twse`、`tpex`）；`inst_cobuy/data/*.csv` 只當首次匯入的種子資料 |
 
 ## 現有頁面
@@ -86,6 +87,7 @@
    2. 主動式 ETF 日報（積極型）＝排除「國外為主」「高股息」
    3. 三大法人買賣超及連買
    4. 市場情緒指標
+   - 最下方是「AI 籌碼焦點 10 檔」（`pick_report.py`），沒產生過就不顯示
    - 卡片下方另有兩個小方塊：台股 VIX（折線，虛線＝30 恐慌）、微台散戶淨多空（長條，正紅負綠，附較前日），趨勢圖用 `market_mood` items 的 `chart`，`hub.html` 的 `spark` 巨集在伺服器端畫 SVG；點了到 `/market-mood`
 6. ✅ 市場情緒指標（`/market-mood`，首頁第四張卡片）
 

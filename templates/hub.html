@@ -36,6 +36,23 @@
   .spark rect.up { fill: #e5383b; opacity: .55; } .spark rect.dn { fill: #12a150; opacity: .55; } .spark rect.last { opacity: 1; }
   .spark-x { display: flex; justify-content: space-between; font-size: .7rem; color: #adb5bd; font-variant-numeric: tabular-nums; }
   @media (max-width: 767.98px) { .hub-mini .spark { height: 52px; } }
+  .hub-pick { --hub-c: #6f42c1; --hub-bg: #f0eafb; gap: 10px; }
+  .pick-sum { font-size: .92rem; color: #343a40; line-height: 1.6; }
+  .pick-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
+  .pick-list li { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid #f1f3f5; min-width: 0; }
+  .pk-rank { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--hub-bg); color: var(--hub-c); font-weight: 700;
+             font-size: .82rem; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
+  .pk-main { min-width: 0; }
+  .pk-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+  .pk-top b { font-weight: 500; font-size: 1rem; }
+  .pk-code { font-size: .78rem; color: #868e96; font-variant-numeric: tabular-nums; }
+  .pk-tag { font-size: .72rem; color: var(--hub-c); background: var(--hub-bg); border-radius: 4px; padding: 1px 6px; }
+  .pk-pct { font-size: .78rem; font-variant-numeric: tabular-nums; } .pk-pct.up { color: #e5383b; } .pk-pct.dn { color: #12a150; }
+  .pk-text { font-size: .86rem; color: #495057; line-height: 1.55; margin-top: 2px; }
+  .pk-sig { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .pk-sig span { font-size: .7rem; color: #6c757d; border: 1px solid #e9ecef; border-radius: 4px; padding: 0 5px; }
+  .pick-foot { font-size: .72rem; color: #adb5bd; }
+  @media (max-width: 767.98px) { .pick-list { grid-template-columns: 1fr; } }
   .hub-card.soon { background: #fafafa; border-style: dashed; }
 </style>
 
@@ -155,6 +172,32 @@
     {{ spark(tr.chart if tr else [], bar=true) }}
   </a>
 </div>
+{% endif %}
+
+{# AI 籌碼焦點 10 檔（pick_report；平日 21:30 產生，這裡只讀已產生的版本） #}
+{% if picks and picks.picks %}
+<section class="hub-card hub-pick mt-3" aria-labelledby="pick-h">
+  <div class="hub-head">
+    <div class="hub-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
+    <div><p class="hub-title" id="pick-h">AI 籌碼焦點 10 檔</p>
+      <div class="hub-sub">{{ picks.date[5:].replace('-', '/') }}・三大法人、主動 ETF、量化研究訊號綜合，AI 排序</div></div>
+  </div>
+  {% if picks.summary %}<div class="pick-sum">{{ picks.summary }}</div>{% endif %}
+  <ol class="pick-list">
+    {% for p in picks.picks %}
+    <li>
+      <span class="pk-rank">{{ p.rank }}</span>
+      <div class="pk-main">
+        <div class="pk-top"><b>{{ p.name or p.code }}</b><span class="pk-code">{{ p.code }}</span>{% if p.tag %}<span class="pk-tag">{{ p.tag }}</span>{% endif %}
+          {% if p.pct is not none %}<span class="pk-pct {{ 'up' if p.pct > 0 else 'dn' if p.pct < 0 else '' }}">{{ '%+.2f'|format(p.pct) }}%</span>{% endif %}</div>
+        <div class="pk-text">{{ p.text }}</div>
+        {% if p.signals %}<div class="pk-sig">{% for x in p.signals[:5] %}<span>{{ x }}</span>{% endfor %}</div>{% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+  <div class="pick-foot">籌碼面觀察，不含技術面與基本面，非投資建議；AI 產生後已逐句查證並核對數字。產生時間 {{ picks.created }}</div>
+</section>
 {% endif %}
 
 <div class="text-muted small mt-4">資料來源：pocket.tw、臺灣證券交易所、證券櫃檯買賣中心。內容僅供參考，非投資建議。</div>
