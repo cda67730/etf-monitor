@@ -3,7 +3,8 @@
 流程（與 etf_report／inst_report 共用 Gemini 呼叫、查證、數字核對與資料表 etf_report，scope='pick'）：
 1. 程式算「籌碼分數」：三大法人（同買、外資投信同買、連買、近 5 日累計、土洋對作）、
    主動 ETF（當日加碼／新進／減碼檔數、近 5 個資料日加碼次數）、量化研究（慢牛、回測突破、Autoencoder）
-2. 取分數前 CANDIDATES 檔連同大盤背景（市場情緒、微台散戶）交給 Gemini，從中排出 10 檔、各寫一句理由
+   多來源重疊（法人／主動 ETF／量化研究同時偏多）加分，且一律納入候選；跨 ETF 共同持有檔數也計分
+2. 取分數前 CANDIDATES 檔（＋重疊股）連同大盤背景（市場情緒、微台散戶）交給 Gemini，從中排出 10 檔、各寫一句理由
 3. 查證（開 Google 搜尋）→ 程式核對數字 → 只留候選名單內的代號，不足 10 檔依分數補上
 4. 排程平日 21:30（SCHED_PICK）；資料沒變不重寫；首頁下方只讀已產生的版本
 """
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 SCOPE = "pick"
 TOP = 10            # 最後名單檔數
 CANDIDATES = 30     # 交給 AI 挑選的候選檔數
+OVERLAP_MAX = 15    # 分數不在前 30 但多來源重疊的，最多再補幾檔進候選
 LAB_MAX_AGE = 7     # 量化研究結果超過幾天就不採用
 CODE_KEYS = ("code", "stock_id", "stock_code", "id", "symbol", "代號", "股票代號", "ticker")
 
@@ -59,6 +61,11 @@ class PickReport(ER.Report):
         except Exception as e:
             logger.warning(f"[pick] 讀市場情緒失敗：{e}")
             return None
+
+    def _held(self, d):
+        dbq = self.dbq
+        return dbq.execute_query(f"SELECT stock_code, COUNT(DISTINCT etf_code) AS n FROM etf_holdings WHERE update_date = "
+                                 f"{dbq._get_placeholder()} AND {dbq._scope_sql('etf_code')} GROUP BY stock_code", (d,), fetch="all") or []
 
     def _etf_dates(self, D):
         return [d for d in self.in_scope("all", self.dbq.get_available_dates) if d <= D]
@@ -125,6 +132,12 @@ class PickReport(ER.Report):
                         etf5[c] = etf5.get(c, 0) + 1
         except Exception as e:
             logger.warning(f"[pick] 讀主動 ETF 異動失敗：{e}")
+        held = {}                                                 # 跨 ETF 重複持股：當日幾檔主動 ETF 同時持有
+        if etf_d:
+            try:
+                held = {r["stock_code"]: r["n"] for r in self.in_scope("all", self._held, etf_d)}
+            except Exception as e:
+                logger.warning(f"[pick] 讀跨 ETF 持股失敗：{e}")
 
         lab, lab_used = self._lab_hits(D)
 
@@ -133,6 +146,7 @@ class PickReport(ER.Report):
         pct = lambda v: (sum(1 for x in ft5 if x <= v) / len(ft5)) if v > 0 and ft5 else 0
 
         codes = set(rows) | set(etf_today) | set(lab)
+        overlap = {}                                              # 代號 -> 同時出現訊號的來源
         cands = []
         for c in codes:
             if not re.fullmatch(r"\d{4}", c):                     # 只看 4 碼普通股
@@ -158,6 +172,9 @@ class PickReport(ER.Report):
                 if e["new"]: sig.append(f"主動ETF {e['new']}檔新進")
                 if e["cut"]: sig.append(f"主動ETF {e['cut']}檔減碼")
             s += 0.3 * min(etf5.get(c, 0), 15)
+            nh = held.get(c, 0)
+            if nh >= 3:
+                s += 0.4 * min(nh, 10); sig.append(f"{nh}檔主動ETF共同持有")
             for kind, flag in lb:
                 if kind == "slow_bull":
                     if flag == "stopped": s -= 3; sig.append("慢牛已停損")
@@ -168,6 +185,18 @@ class PickReport(ER.Report):
                     s += 2; sig.append("回測突破")
                 elif kind == "ae_monitor":
                     s += 1; sig.append("Autoencoder 監測")
+            # 多來源重疊：法人、主動 ETF、量化研究同時有偏多訊號的加分，並保證進候選
+            src = []
+            if r.get("cobuy") or r.get("ft_cobuy") or r.get("trust_streak", 0) >= 3 or r.get("foreign_streak", 0) >= 5:
+                src.append("法人")
+            if (e and (e["add"] or e["new"])) or etf5.get(c, 0) >= 2 or nh >= 5:
+                src.append("主動ETF")
+            if any(k != "slow_bull" or f not in ("stopped", "market_block") for k, f in lb):
+                src.append("量化研究")
+            if len(src) >= 2:
+                s += 2 if len(src) == 2 else 4
+                sig.insert(0, "＋".join(src) + "重疊")
+                overlap[c] = src
             # 流動性：外資＋投信 5 日合計太小、又沒有 ETF／量化訊號的不列入
             if s <= 0 or (abs((r.get("f5") or 0) + (r.get("t5") or 0)) < 300 and not e and not lb):
                 continue
@@ -180,9 +209,13 @@ class PickReport(ER.Report):
                 "外資連買天數": r.get("foreign_streak"), "投信連買天數": r.get("trust_streak"),
                 "主動ETF當日淨增減張": ER.zh(e["net"]) if e else None,
                 "近5個資料日主動ETF加碼次數": etf5.get(c) or None,
+                "主動ETF共同持有檔數": nh or None,
+                "訊號重疊來源": overlap.get(c),
             })
         cands.sort(key=lambda x: -x["籌碼分數"])
-        cands = cands[:CANDIDATES]
+        top = cands[:CANDIDATES]                                  # 多來源重疊的一律納入候選（最多再加 OVERLAP_MAX 檔）
+        top += [x for x in cands[CANDIDATES:] if x["代號"] in overlap][:OVERLAP_MAX]
+        cands = top
         for x in cands:                                           # 沒值的欄位不送，減少雜訊
             for k in [k for k, v in x.items() if v is None]:
                 del x[k]
@@ -205,7 +238,8 @@ class PickReport(ER.Report):
             "大盤": {"加權指數收盤": idx.get("close"), "漲跌點": idx.get("chg"), "漲跌幅%": idx.get("pct")} if idx else None,
             "市場情緒": bg or None,
             "候選名單": cands,
-            "說明": "籌碼分數由程式依三大法人、主動ETF、量化研究訊號加總（越高代表籌碼面越一致偏多），不含技術面與基本面；張＝股數/1000",
+            "重疊檔數": {"兩種來源": sum(1 for v in overlap.values() if len(v) == 2), "三種來源": sum(1 for v in overlap.values() if len(v) >= 3)},
+            "說明": "訊號重疊來源＝法人、主動ETF、量化研究中同時偏多的來源；籌碼分數由程式依三大法人、主動ETF、量化研究訊號加總（越高代表籌碼面越一致偏多），不含技術面與基本面；張＝股數/1000",
         }
 
     # ---- 文字
