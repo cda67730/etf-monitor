@@ -485,8 +485,9 @@ class Report:
             logger.info(f"[{self.TAG}] {date} {scope} 產生完成（{model}，{time.time() - t0:.0f} 秒）{'；' + '；'.join(notes) if notes else ''}")
             return {"facts": facts, "ai": ai, "model": model, "notes": notes, "created": created}
 
-    def pdf(self, date, scope, templates, refresh=False):
-        rep = self.get(date, scope, refresh)
+    def pdf(self, date, scope, templates, refresh=False, rep=None):
+        """rep：已取得的報告（沒登入時只給已產生的版本）；沒給就 get()（必要時呼叫 Gemini）"""
+        rep = rep or self.get(date, scope, refresh)
         key = (date, scope, hashlib.md5(json.dumps([rep["created"], rep["model"], rep["ai"]], ensure_ascii=False, sort_keys=True).encode()).hexdigest())
         if key not in self._pdf:
             from weasyprint import HTML
@@ -675,6 +676,19 @@ def create_router(templates, check_authentication):
             raise HTTPException(status_code=400, detail="日期格式 YYYY-MM-DD")
         return date
 
+    async def obtain(request, rep_obj, date, scope, refresh=False):
+        """產生報告（會呼叫 Gemini）需要登入；沒登入只能拿已產生的版本，沒有就回 None"""
+        if await check_authentication(request):
+            return await run_in_threadpool(rep_obj.get, date, scope, refresh)
+        return await run_in_threadpool(rep_obj.stored, date, scope)
+
+    def need_login(request):
+        from urllib.parse import quote
+        from fastapi.responses import RedirectResponse
+        nxt = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        return RedirectResponse(url=f"/login?next={quote(nxt, safe='/')}", status_code=302)
+
+
     async def within(request, date):
         """沒登入只能產生最近 MAX_DAYS 個資料日（避免任意日期都去呼叫 AI）"""
         recent = (await run_in_threadpool(report.dbq.get_available_dates))[:MAX_DAYS]
@@ -688,7 +702,10 @@ def create_router(templates, check_authentication):
         if refresh and not await check_authentication(request):
             raise HTTPException(status_code=401, detail="重新產生需要登入")
         await within(request, date)
-        pdf = await run_in_threadpool(report.pdf, date, scope, templates, refresh)
+        rep = await obtain(request, report, date, scope, refresh)
+        if not rep:                                        # 還沒產生：要登入才能產生
+            return need_login(request)
+        pdf = await run_in_threadpool(report.pdf, date, scope, templates, refresh, rep)
         fn = f"etf_report_{scope}_{date.replace('-', '')}.pdf"
         return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{fn}"'})
 
@@ -697,7 +714,9 @@ def create_router(templates, check_authentication):
         """日報說明與事實清單（JSON），給 BookReview 等外部程式用"""
         date = await resolve(date, scope)
         await within(request, date)
-        rep = await run_in_threadpool(report.get, date, scope)
+        rep = await obtain(request, report, date, scope)
+        if not rep:
+            raise HTTPException(status_code=401, detail="報告尚未產生；產生報告需要登入")
         return JSONResponse({"date": date, "scope": scope, "model": rep["model"], "created": rep["created"], "notes": rep["notes"],
                              "ai": rep["ai"], "facts": {k: v for k, v in rep["facts"].items() if not k.startswith("_")}})
 

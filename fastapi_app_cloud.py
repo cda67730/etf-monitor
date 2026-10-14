@@ -2659,7 +2659,8 @@ async def login_process(request: Request, password: str = Form(...), next: str =
     nxt = _safe_next(next)
     if not verify_password(password):
         logger.warning(f"❌ 密碼錯誤，登入失敗，IP: {session_manager.get_client_ip(request)}")
-        return RedirectResponse(url=f"/login?error=密碼錯誤&next={nxt}", status_code=302)
+        from urllib.parse import quote
+        return RedirectResponse(url=f"/login?error=密碼錯誤&next={quote(nxt, safe='/')}", status_code=302)
     
     session_id = session_manager.create_session(request)
     response = RedirectResponse(url=nxt, status_code=302)

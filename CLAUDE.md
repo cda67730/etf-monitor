@@ -101,7 +101,8 @@
 - 首頁市場情緒卡片顯示 VIX、CNN 恐懼貪婪、台股 VIX（取自 `market_mood` 的 items）與微台散戶淨多／淨空口數（`retail_net('微型臺指期貨')`＝−三大法人微台淨額合計，附較前日）；小台多空比 `retail()` 保留但首頁不顯示；手機 2×2；恐懼貪婪只顯示現狀文字（極度恐懼／恐懼／中性／貪婪／極度貪婪，依 25／45／55／75 分界，恐懼綠、貪婪紅）＋小字「CNN」，不顯示數值
 
 ## 日報 PDF（etf_report.py）
-- `GET /report/etf.pdf?date=&scope=aggr|all`（公開；`refresh=1` 強制重寫需登入）、`GET /api/report/etf`（JSON：facts＋ai）；ETF 日報頁右上有 PDF 按鈕
+- `GET /report/etf.pdf?date=&scope=aggr|all`、`GET /api/report/etf`（JSON：facts＋ai）；ETF 日報頁右上有 PDF 按鈕
+- **產生報告（會呼叫 Gemini）需要登入**：沒登入只能拿資料庫裡已產生的版本（排程產生的；資料後來有變也照舊給），還沒產生過 → PDF 轉 `/login?next=原網址`、API 回 401；登入後才會依指紋判斷要不要重寫（`refresh=1` 強制重寫）；`/report/inst.pdf` 同樣規則；排程照常產生
 - 流程：程式算「事實清單」→ 接 `templates/report_prompt.txt` 給 Gemini 寫初稿 → **查證**：初稿＋事實清單接 `templates/verify_prompt.txt` 再呼叫 Gemini（開 `google_search` 工具，不指定 JSON 格式、從文字取 JSON），數字對照清單、清單外敘述上網查證，回傳修正稿與 changes；查證兩個模型都失敗就整份改用模板（不採用沒查證的文字）；修改處、搜尋關鍵字、來源記在 `notes`（`/api/report/etf` 可看），model 欄會帶「+查證」，PDF 免責聲明隨之顯示 → `merge_checked` 逐段核對數字，對不上的段落換成 `fallback_text` 模板句子 → `templates/report_pdf.html` 用 WeasyPrint 轉 PDF
 - 環境變數：`GEMINI_API_KEY`（沒設＝全部模板句子）、`GEMINI_MODEL`（預設 gemini-3.8-flash，2026-10 使用者要求省錢改用 Flash）、`GEMINI_FALLBACK_MODEL`（預設 gemini-3.1-pro-preview，Flash 失敗才用）；新模型已停用 temperature 等參數，不要加；`GEMINI_VERIFY`（預設 true，設 false 跳過查證，不建議）
 - 結果存資料表 `etf_report`（d, scope, fp…）；`fp` 是當日持股筆數＋異動指紋，資料有變才重寫，否則沿用（不重複呼叫 Gemini）
