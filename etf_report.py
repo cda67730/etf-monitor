@@ -11,8 +11,8 @@
 
 環境變數：
   GEMINI_API_KEY          沒設就全部用程式模板句子
-  GEMINI_MODEL            預設 gemini-3.1-pro-preview
-  GEMINI_FALLBACK_MODEL   主模型失敗時改用，預設 gemini-3.8-flash
+  GEMINI_MODEL            預設 gemini-3.8-flash（2026-10 為省錢從 Pro 改成 Flash）
+  GEMINI_FALLBACK_MODEL   主模型失敗時改用，預設 gemini-3.1-pro-preview
   GEMINI_VERIFY           預設 true；設 false 跳過第 3 步查證（不建議）
 """
 import datetime as dt
@@ -30,8 +30,8 @@ import requests
 logger = logging.getLogger(__name__)
 
 KEY = os.getenv("GEMINI_API_KEY", "").strip()
-MODELS = [m for m in (os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview").strip(),
-                      os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.8-flash").strip()) if m]
+MODELS = [m for m in (os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip(),
+                      os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-pro-preview").strip()) if m]
 VERIFY = os.getenv("GEMINI_VERIFY", "true").strip().lower() not in ("0", "false", "no", "off")
 HERE = os.path.dirname(os.path.abspath(__file__))
 UA = {"User-Agent": "Mozilla/5.0 (etf-monitor report)"}
