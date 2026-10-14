@@ -88,17 +88,15 @@ class PickReport(ER.Report):
         return out, used
 
     def fingerprint(self, date, scope=SCOPE):
+        """資料有變才重寫（重新呼叫 Gemini）；沒變就沿用資料庫裡的版本
+        三大法人＋主動 ETF 沿用 inst_report 的指紋；量化研究只看會影響算分的內容（代號與 _flag），
+        本機重送一模一樣的結果不會觸發重寫"""
+        import hashlib, json
         D = dash(date)
-        parts = [self.inst_report.fingerprint(D) if self.inst_report else ""]
-        st = self._lab()
-        if st:
-            for kind in ("slow_bull", "backtest", "ae_monitor"):
-                try:
-                    x = st.dates(kind, 1)
-                    parts.append(f"{x[0]['date']}@{x[0]['received']}" if x else "-")
-                except Exception:
-                    parts.append("?")
-        return "|".join(parts)
+        base = self.inst_report.fingerprint(D) if self.inst_report else ""
+        lab, _ = self._lab_hits(D)
+        h = hashlib.md5(json.dumps(sorted((c, sorted(map(str, v))) for c, v in lab.items()), ensure_ascii=False).encode()).hexdigest()[:12]
+        return f"{base}|lab:{h}"
 
     # ---- 算分
     def build_facts(self, date, scope=SCOPE):
