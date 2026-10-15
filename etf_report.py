@@ -43,6 +43,9 @@ TPEX_IND = {"01": "水泥工業", "02": "食品工業", "03": "塑膠工業", "0
             "33": "農業科技業", "35": "綠能環保", "36": "數位雲端", "37": "運動休閒", "38": "居家生活"}
 zh = lambda sh: round((sh or 0) / 1000)
 MAX_DAYS = int(os.getenv("REPORT_MAX_DAYS", "10"))     # 報告最多可回看幾個資料日
+CALL_TIMEOUT = 240     # 單次 Gemini 呼叫最多等幾秒
+BUDGET = 480           # 一份報告呼叫 Gemini 的總時間上限（秒），超過就不再試下一個模型，改用模板
+RECENT = 600           # 剛產生完的報告，這段時間內資料又變（排程還在抓）也先沿用，不馬上重寫
 
 
 def etf_style(name):
@@ -378,7 +381,7 @@ class Report:
         else:
             body["generationConfig"] = {"responseMimeType": "application/json"}
         r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                          headers={"x-goog-api-key": KEY, "Content-Type": "application/json"}, timeout=300, json=body)
+                          headers={"x-goog-api-key": KEY, "Content-Type": "application/json"}, timeout=(15, CALL_TIMEOUT), json=body)
         if r.status_code != 200:
             raise RuntimeError(f"HTTP {r.status_code}: {r.text[:300]}")
         cand = (r.json().get("candidates") or [{}])[0]
@@ -419,10 +422,16 @@ class Report:
             return tpl, "template", ["未設定 GEMINI_API_KEY，全部使用程式模板"]
         p = self.prompt(facts)
         draft, by = None, None
+        t_start = time.time()
+        over = lambda: time.time() - t_start > BUDGET
         for model in MODELS:                                   # 1. 初稿
+            if over():
+                notes.append(f"超過 {BUDGET} 秒，不再嘗試 {model}"); break
             try:
+                t0 = time.time()
                 draft, _ = self._gemini(model, p)
                 by = model
+                logger.info(f"[{self.TAG}] {facts.get('資料日')} {model} 初稿完成（{time.time() - t0:.0f} 秒）")
                 break
             except Exception as e:
                 notes.append(f"{model} 初稿失敗：{str(e)[:200]}")
@@ -432,6 +441,8 @@ class Report:
         if VERIFY:                                             # 2. 查證（初稿模型優先，失敗換另一個）
             done = False
             for model in [by] + [m for m in MODELS if m != by]:
+                if over():
+                    notes.append(f"超過 {BUDGET} 秒，不再嘗試 {model} 查證"); break
                 try:
                     t0 = time.time()
                     draft, changes, meta = self.verify(model, facts, draft)
@@ -474,7 +485,9 @@ class Report:
                 if row and row["fp"] == fp:
                     return row
             t0 = time.time()
+            logger.info(f"[{self.TAG}] {date} {scope} 開始產生")
             facts = self.build_facts(date, scope)
+            logger.info(f"[{self.TAG}] {date} {scope} 事實清單完成（{time.time() - t0:.0f} 秒）")
             ai, model, notes = self.write(facts)
             created = dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
             self._q("INSERT INTO etf_report (d, scope, fp, model, facts, ai, notes, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
@@ -483,7 +496,41 @@ class Report:
                     (date, scope, fp, model, json.dumps(facts, ensure_ascii=False), json.dumps(ai, ensure_ascii=False),
                      json.dumps(notes, ensure_ascii=False), created))
             logger.info(f"[{self.TAG}] {date} {scope} 產生完成（{model}，{time.time() - t0:.0f} 秒）{'；' + '；'.join(notes) if notes else ''}")
+            self.__dict__.setdefault("done_at", {})[(date, scope)] = time.time()
             return {"facts": facts, "ai": ai, "model": model, "notes": notes, "created": created}
+
+    def ensure(self, date, scope, refresh=False):
+        """網頁用（不讓瀏覽器等 Gemini）：回傳 ("ready", 報告) / ("running", None) / ("error", 訊息)
+        需要重寫時在背景執行緒產生；同一份正在產生就不重複開"""
+        jobs = self.__dict__.setdefault("jobs", {})
+        key = (date, scope)
+        job = jobs.get(key)
+        if job and job["thread"].is_alive():
+            return "running", None
+        if job and job.get("error") and time.time() - job["at"] < 60:    # 剛失敗：先回報錯誤，一分鐘後才可再試
+            return "error", job["error"]
+        row = self.stored(date, scope)
+        if row and not refresh:
+            recent = time.time() - self.__dict__.get("done_at", {}).get(key, 0) < RECENT
+            if recent or row["fp"] == self.fingerprint(date, scope):
+                return "ready", row
+        if job and job.get("ok") and not refresh:            # 背景剛做完（資料又變了也先用這份）
+            jobs.pop(key, None)
+            row = self.stored(date, scope)
+            if row:
+                return "ready", row
+
+        def run():
+            try:
+                self.get(date, scope, refresh)
+                jobs[key]["ok"] = True
+            except Exception as e:
+                logger.error(f"[{self.TAG}] {date} {scope} 產生失敗：{e}")
+                jobs[key]["error"] = str(e)[:300]
+            jobs[key]["at"] = time.time()
+        jobs[key] = {"thread": threading.Thread(target=run, daemon=True), "at": time.time()}
+        jobs[key]["thread"].start()
+        return "running", None
 
     def pdf(self, date, scope, templates, refresh=False, rep=None):
         """rep：已取得的報告（沒登入時只給已產生的版本）；沒給就 get()（必要時呼叫 Gemini）"""
@@ -656,6 +703,27 @@ def init(db, dbq, in_scope, inst=None):
     return report
 
 
+def waiting(request, st, msg=None):
+    """PDF 還沒好時給瀏覽器的頁面：沒登入轉登入頁；產生中每 5 秒自動重新整理；失敗顯示原因"""
+    from urllib.parse import quote, urlencode
+    from fastapi.responses import HTMLResponse, RedirectResponse
+    q = {k: v for k, v in request.query_params.items() if k != "refresh"}     # 重新整理時不要再強制重寫
+    url = request.url.path + ("?" + urlencode(q) if q else "")
+    if st == "login":
+        return RedirectResponse(url=f"/login?next={quote(url, safe='/')}", status_code=302)
+    if st == "running":
+        title, body, head = "報告產生中…", "AI 正在撰寫並查證報告，通常 1～3 分鐘。這頁每 5 秒自動檢查，完成後直接顯示 PDF，不用重按。", \
+            f'<meta http-equiv="refresh" content="5;url={H.escape(url)}">'
+    else:
+        title, body, head = "報告產生失敗", f"{H.escape(str(msg or ''))}<br>請稍後重新整理再試一次。", ""
+    html = (f'<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{head}'
+            f'<title>{title}</title><style>body{{font-family:system-ui,"Noto Sans TC",sans-serif;background:#f5f7fa;color:#1f2933;display:grid;place-items:center;min-height:100vh;margin:0}}'
+            f'.b{{background:#fff;border-radius:12px;padding:28px 32px;max-width:420px;box-shadow:0 4px 16px rgba(0,0,0,.06);text-align:center;line-height:1.7}}'
+            f'.s{{width:28px;height:28px;border:3px solid #dbe2ea;border-top-color:#1f6feb;border-radius:50%;margin:0 auto 14px;animation:r 1s linear infinite}}@keyframes r{{to{{transform:rotate(360deg)}}}}</style></head>'
+            f'<body><div class="b">{"<div class=s></div>" if st == "running" else ""}<h3 style="margin:0 0 8px">{title}</h3><div>{body}</div></div></body></html>')
+    return HTMLResponse(html, status_code=200 if st == "running" else 500)
+
+
 def create_router(templates, check_authentication):
     from fastapi import APIRouter, HTTPException, Query, Request
     from fastapi.responses import JSONResponse, Response
@@ -677,17 +745,12 @@ def create_router(templates, check_authentication):
         return date
 
     async def obtain(request, rep_obj, date, scope, refresh=False):
-        """產生報告（會呼叫 Gemini）需要登入；沒登入只能拿已產生的版本，沒有就回 None"""
+        """沒登入：只拿已產生的版本（沒有回 ("login", None)）；登入：需要重寫就在背景產生，不讓瀏覽器卡住等 Gemini
+        回傳 (狀態, 報告)：ready／running／error／login"""
         if await check_authentication(request):
-            return await run_in_threadpool(rep_obj.get, date, scope, refresh)
-        return await run_in_threadpool(rep_obj.stored, date, scope)
-
-    def need_login(request):
-        from urllib.parse import quote
-        from fastapi.responses import RedirectResponse
-        nxt = request.url.path + (f"?{request.url.query}" if request.url.query else "")
-        return RedirectResponse(url=f"/login?next={quote(nxt, safe='/')}", status_code=302)
-
+            return await run_in_threadpool(rep_obj.ensure, date, scope, refresh)
+        rep = await run_in_threadpool(rep_obj.stored, date, scope)
+        return ("ready", rep) if rep else ("login", None)
 
     async def within(request, date):
         """沒登入只能產生最近 MAX_DAYS 個資料日（避免任意日期都去呼叫 AI）"""
@@ -702,9 +765,9 @@ def create_router(templates, check_authentication):
         if refresh and not await check_authentication(request):
             raise HTTPException(status_code=401, detail="重新產生需要登入")
         await within(request, date)
-        rep = await obtain(request, report, date, scope, refresh)
-        if not rep:                                        # 還沒產生：要登入才能產生
-            return need_login(request)
+        st, rep = await obtain(request, report, date, scope, refresh)
+        if st != "ready":                                  # 還沒產生：沒登入轉登入頁；產生中／失敗顯示等待頁
+            return waiting(request, st, rep)
         pdf = await run_in_threadpool(report.pdf, date, scope, templates, refresh, rep)
         fn = f"etf_report_{scope}_{date.replace('-', '')}.pdf"
         return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{fn}"'})
@@ -714,9 +777,13 @@ def create_router(templates, check_authentication):
         """日報說明與事實清單（JSON），給 BookReview 等外部程式用"""
         date = await resolve(date, scope)
         await within(request, date)
-        rep = await obtain(request, report, date, scope)
-        if not rep:
+        st, rep = await obtain(request, report, date, scope)
+        if st == "login":
             raise HTTPException(status_code=401, detail="報告尚未產生；產生報告需要登入")
+        if st == "running":
+            return JSONResponse({"status": "generating", "detail": "報告產生中，請稍後再查"}, status_code=202)
+        if st == "error":
+            raise HTTPException(status_code=500, detail=f"報告產生失敗：{rep}")
         return JSONResponse({"date": date, "scope": scope, "model": rep["model"], "created": rep["created"], "notes": rep["notes"],
                              "ai": rep["ai"], "facts": {k: v for k, v in rep["facts"].items() if not k.startswith("_")}})
 

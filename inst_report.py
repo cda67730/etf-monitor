@@ -215,15 +215,13 @@ def create_router(templates, check_authentication):
         if d not in recent and not await check_authentication(request):
             raise HTTPException(status_code=403, detail=f"只提供最近 {ER.MAX_DAYS} 個交易日的報告")
         try:
-            if await check_authentication(request):          # 產生報告（呼叫 Gemini）需要登入
-                rep = await run_in_threadpool(report.get, d, SCOPE, refresh)
+            if await check_authentication(request):          # 需要重寫就在背景產生（不讓瀏覽器卡住等 Gemini）
+                st, rep = await run_in_threadpool(report.ensure, d, SCOPE, refresh)
             else:                                            # 沒登入只能拿已產生的版本
                 rep = await run_in_threadpool(report.stored, d, SCOPE)
-                if not rep:
-                    from urllib.parse import quote
-                    from fastapi.responses import RedirectResponse
-                    nxt = request.url.path + (f"?{request.url.query}" if request.url.query else "")
-                    return RedirectResponse(url=f"/login?next={quote(nxt, safe='/')}", status_code=302)
+                st = "ready" if rep else "login"
+            if st != "ready":
+                return ER.waiting(request, st, rep)
             pdf = await run_in_threadpool(report.pdf, d, SCOPE, templates, refresh, rep)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))

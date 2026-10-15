@@ -102,7 +102,8 @@
 
 ## 日報 PDF（etf_report.py）
 - `GET /report/etf.pdf?date=&scope=aggr|all`、`GET /api/report/etf`（JSON：facts＋ai）；ETF 日報頁右上有 PDF 按鈕
-- **產生報告（會呼叫 Gemini）需要登入**：沒登入只能拿資料庫裡已產生的版本（排程產生的；資料後來有變也照舊給），還沒產生過 → PDF 轉 `/login?next=原網址`、API 回 401；登入後才會依指紋判斷要不要重寫（`refresh=1` 強制重寫）；`/report/inst.pdf` 同樣規則；排程照常產生
+- **產生報告（會呼叫 Gemini）需要登入**：沒登入只能拿資料庫裡已產生的版本（排程產生的；資料後來有變也照舊給），還沒產生過 → PDF 轉 `/login?next=原網址`、API 回 401；登入後依指紋判斷要不要重寫（`refresh=1` 強制重寫）；**重寫在背景執行緒做**（`Report.ensure`），瀏覽器先拿到「報告產生中」頁（`waiting()`，每 5 秒自動重新整理，完成就直接顯示 PDF；失敗顯示原因，一分鐘後可再試），API 回 202；剛產生完 `RECENT`=600 秒內資料又變（排程還在抓）先沿用；`/report/inst.pdf` 同樣規則；排程照常產生（同步）
+- Gemini 單次呼叫逾時 `CALL_TIMEOUT`=240 秒（連線 15 秒），一份報告總時間超過 `BUDGET`=480 秒就不再試下一個模型、改用模板；log 會記「開始產生／事實清單完成／初稿完成／查證完成／產生完成」各步秒數
 - 流程：程式算「事實清單」→ 接 `templates/report_prompt.txt` 給 Gemini 寫初稿 → **查證**：初稿＋事實清單接 `templates/verify_prompt.txt` 再呼叫 Gemini（開 `google_search` 工具，不指定 JSON 格式、從文字取 JSON），數字對照清單、清單外敘述上網查證，回傳修正稿與 changes；查證兩個模型都失敗就整份改用模板（不採用沒查證的文字）；修改處、搜尋關鍵字、來源記在 `notes`（`/api/report/etf` 可看），model 欄會帶「+查證」，PDF 免責聲明隨之顯示 → `merge_checked` 逐段核對數字，對不上的段落換成 `fallback_text` 模板句子 → `templates/report_pdf.html` 用 WeasyPrint 轉 PDF
 - 環境變數：`GEMINI_API_KEY`（沒設＝全部模板句子）、`GEMINI_MODEL`（預設 gemini-3.8-flash，2026-10 使用者要求省錢改用 Flash）、`GEMINI_FALLBACK_MODEL`（預設 gemini-3.1-pro-preview，Flash 失敗才用）；新模型已停用 temperature 等參數，不要加；`GEMINI_VERIFY`（預設 true，設 false 跳過查證，不建議）
 - 結果存資料表 `etf_report`（d, scope, fp…）；`fp` 是當日持股筆數＋異動指紋，資料有變才重寫，否則沿用（不重複呼叫 Gemini）
