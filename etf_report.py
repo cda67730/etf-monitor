@@ -88,29 +88,43 @@ class Market:
         return r
 
     def meta(self):
-        """代號 -> {short, industry, market}；資料庫有就用，超過 7 天重抓證交所 ISIN 清單"""
+        """代號 -> {short, industry, market}；資料庫有就用，最近一次更新超過 7 天才重抓證交所 ISIN 清單
+        （只留股票／ETF，不存權證；批次寫入；同時只有一個執行緒在更新，其他的先用舊資料）"""
         if self._meta is not None and time.time() - self._meta_at < 3600:
             return self._meta
         rows = self._q("SELECT code, short_name, industry, market, updated FROM stock_meta", fetch="all") or []
-        stale = not rows or min(r["updated"] or "" for r in rows) < (dt.date.today() - dt.timedelta(days=7)).isoformat()
-        if stale:
+        last = max((r["updated"] or "" for r in rows), default="")      # 用「最近一次」更新日判斷（下市的舊代號不會讓它一直過期）
+        stale = not rows or last < (dt.date.today() - dt.timedelta(days=7)).isoformat()
+        if stale and self.lock.acquire(blocking=not rows):
             try:
                 fresh = {}
                 for mode, mkt in ((2, "上市"), (4, "上櫃")):
                     r = self._get(f"https://isin.twse.com.tw/isin/C_public.jsp?strMode={mode}")
                     r.encoding = "big5"
                     for m in re.finditer(r"<tr><td bgcolor=#FAFAD2>([0-9A-Z]{4,6})　([^<]+)</td>(?:<td[^>]*>[^<]*</td>){3}<td[^>]*>([^<]*)</td>", r.text):
-                        fresh[m.group(1)] = (m.group(2).strip(), m.group(3).strip(), mkt)
+                        code = m.group(1)
+                        if re.fullmatch(r"\d{4}[A-Z]?|00\d{2,4}[A-Z]?", code):          # 股票、KY、ETF；權證（6 碼數字）不要
+                            fresh[code] = (m.group(2).strip(), m.group(3).strip(), mkt)
                 if fresh:
                     today = dt.date.today().isoformat()
-                    for code, (s, ind, mkt) in fresh.items():
-                        self._q("INSERT INTO stock_meta (code, short_name, industry, market, updated) VALUES (?, ?, ?, ?, ?) "
-                                "ON CONFLICT (code) DO UPDATE SET short_name = EXCLUDED.short_name, industry = EXCLUDED.industry, "
-                                "market = EXCLUDED.market, updated = EXCLUDED.updated", (code, s, ind, mkt, today))
+                    vals = [(c, v[0], v[1], v[2], today) for c, v in fresh.items()]
+                    sql = ("INSERT INTO stock_meta (code, short_name, industry, market, updated) VALUES {v} "
+                           "ON CONFLICT (code) DO UPDATE SET short_name = EXCLUDED.short_name, industry = EXCLUDED.industry, "
+                           "market = EXCLUDED.market, updated = EXCLUDED.updated")
+                    with self.db.get_connection() as conn:                 # 一次連線批次寫入
+                        cur = conn.cursor()
+                        if self.db.db_type == "postgresql":
+                            from psycopg2.extras import execute_values
+                            execute_values(cur, sql.format(v="%s"), vals, page_size=1000)
+                        else:
+                            cur.executemany(sql.format(v="(?, ?, ?, ?, ?)"), vals)
+                            conn.commit()
                     rows = [{"code": c, "short_name": v[0], "industry": v[1], "market": v[2]} for c, v in fresh.items()]
                     logger.info(f"[report] 股票簡稱／產業別更新 {len(fresh)} 檔")
             except Exception as e:
                 logger.warning(f"[report] 抓股票簡稱／產業別失敗（沿用舊資料）：{e}")
+            finally:
+                self.lock.release()
         self._meta = {r["code"]: {"short": r["short_name"], "industry": r["industry"], "market": r["market"]} for r in rows}
         self._meta_at = time.time()
         return self._meta
@@ -225,8 +239,10 @@ class Report:
 
     def _build_facts(self, date, scope):
         dbq = self.dbq
-        meta = self.market.meta()
-        mk = self.market.day(date)
+        t0 = time.time()
+        lap = lambda what: logger.info(f"[report] {date} {scope} {what}（累計 {time.time() - t0:.0f} 秒）")
+        meta = self.market.meta(); lap("股票簡稱")
+        mk = self.market.day(date); lap("證交所／櫃買行情")
         price = mk.get("price", {})
         inst = {}
         if self.inst:
@@ -239,8 +255,10 @@ class Report:
         ind = lambda c: (meta.get(c) or {}).get("industry") or ("公司債" if not re.fullmatch(r"\d{4}", c or "") else "")
         eshort = lambda e: etf_short(names.get(e, e), e)
 
+        lap("三大法人")
         day = dbq.get_etf_day(date)
         moves = self._moves(date)
+        lap("ETF 異動")
         buy = sum(max(0, (m["new_shares"] or 0) - (m["old_shares"] or 0)) for m in moves)
         sell = sum(max(0, (m["old_shares"] or 0) - (m["new_shares"] or 0)) for m in moves)
         per = {}
@@ -316,7 +334,9 @@ class Report:
                               "合計買進張": zh(p["加"]), "股價漲跌幅%": price.get(p["代號"]),
                               "投信當日買賣超張": inst.get(p["代號"], {}).get("trust"), "外資當日買賣超張": inst.get(p["代號"], {}).get("foreign")}
                              for p in per.values() if p["新進ETF"]], key=lambda x: -x["合計買進張"])
+        lap("加減碼與趨勢")
         fb = dbq.get_first_buys(date)
+        lap("首次買進")
         first = [{"代號": r["stock_code"], "簡稱": S(r["stock_code"], r["stock_name"]), "全新面孔": r["first_any"],
                   "買進ETF": [f'{eshort(e["etf_code"])}（{e["etf_code"]}，{zh(e["shares"])}張）' for e in r["etfs"]]} for r in fb["rows"]]
 
@@ -330,6 +350,7 @@ class Report:
                               "淨增減張": zh(r["total_increase"] - r["total_decrease"]),
                               "_trend": [[t["shares"] or 0, t["net"] or 0] for t in trend(c)]})
 
+        lap("跨 ETF 持股")
         idx = mk.get("index") or {}
         br = mk.get("breadth") or {}
         top10 = top_buy[:10]
