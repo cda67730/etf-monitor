@@ -8,11 +8,13 @@
     INGEST_SECRET  與 Railway 上設定的同一串
     INGEST_URL     預設 https://etf-monitor-production.up.railway.app
 
-kind：slow_bull（慢牛）、backtest（回測突破）、ae_monitor（Autoencoder 監測）
+kind：slow_bull（慢牛）、backtest（回測突破）、ae_monitor（Autoencoder 監測）、fundamental（三率三升／營收新高）
 rows：每列一個 dict，例如 {"code": "2330", "name": "台積電", "score": 0.87, "ret_20d": 12.3}
 columns（可省略，省略就用 rows 的鍵當欄名）：
     [{"key": "code", "label": "代號", "type": "code"}, {"key": "score", "label": "分數", "type": "float"}, ...]
-    type 可用 text、code、date、int、float、pct（顯示成 +12.30%，紅漲綠跌）、signed（正負號加紅綠）
+    type 可用 text、code、date、int、float、pct（顯示成 +12.30%，紅漲綠跌）、signed（正負號加紅綠）、
+    check（true 顯示 ✓、false 顯示 —）、month（'2026-09' 顯示成 9月）
+    欄位另可帶 desc（表頭提示）、bad_below／bad_above（超出門檻該格標橘色）
 同一個 kind、同一天重送會覆蓋，失敗可以直接重送。
 """
 import hashlib
@@ -36,12 +38,16 @@ def _clean(v):
     return v
 
 
-def push(kind, date, rows, columns=None, note="", url=None, secret=None, timeout=60):
+def push(kind, date, rows, columns=None, note="", legend=None, help=None, url=None, secret=None, timeout=60):
     secret = secret or os.environ["INGEST_SECRET"]
     url = (url or os.getenv("INGEST_URL", "https://etf-monitor-production.up.railway.app")).rstrip("/")
     payload = {"date": str(date)[:10], "rows": [{k: _clean(v) for k, v in r.items()} for r in rows], "note": note}
     if columns:
         payload["columns"] = columns
+    if legend:
+        payload["legend"] = legend          # {"stopped": "已停損", ...}，表格上方圖例
+    if help:
+        payload["help"] = help              # 純文字說明，空白行分段，顯示成可收合的「分數怎麼看」
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     ts = str(int(time.time()))
     sig = hmac.new(secret.encode(), f"{ts}.".encode() + body, hashlib.sha256).hexdigest()

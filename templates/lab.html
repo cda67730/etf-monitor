@@ -44,6 +44,7 @@
   /* 表格欄位多：量化研究頁放寬到接近整個視窗（超出外層 container） */
   .lab.ed { --w: min(1760px, calc(100vw - 40px)); width: var(--w); max-width: none; margin-left: calc((100% - var(--w)) / 2); margin-right: 0; }
   @media (max-width: 640px) { .lab.ed { --w: 100%; } }
+  .lab .tbl .ck { color: #d6336c; font-weight: 700; }
   .lab .meta { font-size: .78rem; color: var(--mute); margin-top: 10px; }
 </style>
 
@@ -82,7 +83,11 @@
   const isNum = v => typeof v === 'number' && isFinite(v);
   const THIS_YEAR = String(new Date().getFullYear());
   function fmt(v, t) {
+    if (t === 'check' || typeof v === 'boolean')                                   // 是／否：✓ 或 —
+      return v === true || v === 1 ? '<span class="ck" title="是">✓</span>' : '<span class="muted">—</span>';
     if (v == null || v === '') return '<span class="muted">—</span>';
+    const mm = typeof v === 'string' && v.match(/^(\d{4})-(\d{2})$/);             // 年月：9月（不是今年加年）
+    if (mm) return `<span title="${esc(v)}">${mm[1] === THIS_YEAR ? '' : mm[1].slice(2) + '年'}${+mm[2]}月</span>`;
     const dm = typeof v === 'string' && v.match(/^(\d{4})-(\d{2})-(\d{2})/);       // 日期縮短：10/14（不是今年才加年）
     if (dm) return `<span title="${esc(v)}">${dm[1] === THIS_YEAR ? '' : dm[1].slice(2) + '/'}${dm[2]}/${dm[3]}</span>`;
     if (!isNum(v)) return esc(v);
