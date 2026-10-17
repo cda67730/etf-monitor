@@ -14,8 +14,10 @@
   .lab .dl-sel { border-radius: 8px; border-right: 1px solid var(--term-line); padding: 6px 10px; }
   .lab .note { font-size: .86rem; color: var(--body); margin: 10px 0 0; line-height: 1.7; white-space: pre-wrap; }
   .lab .wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .lab .wrap .tbl { min-width: 100%; }
-  .lab .tbl td, .lab .tbl th { white-space: nowrap; }
+  /* 欄寬依內容，不撐滿整個版面；文字欄太長就截斷（滑鼠移上去看全文） */
+  .lab .wrap .tbl { width: auto; min-width: 0; }
+  .lab .tbl td, .lab .tbl th { white-space: nowrap; padding-left: 10px; padding-right: 10px; }
+  .lab .tbl td.t { max-width: 16em; overflow: hidden; text-overflow: ellipsis; }
   .lab .tbl td.t { text-align: left; }
   .lab .tbl th.t { text-align: left; }
   /* 手機也維持表格，可左右滑動 */
@@ -86,10 +88,12 @@
   // 網站端的顯示調整（依欄位標題比對，推送內容不用改）：慢牛隱藏「第N天」「進場日」，「標記」改短字，滑鼠移上去看原文
   const SHORT_FLAG = t => /停損/.test(t) ? '停損' : /未成交/.test(t) ? '未成交' : /掛單/.test(t) ? '掛單中'
     : /季線/.test(t) ? '季空不買' : /大盤|年線|月線/.test(t) ? '大盤不買' : /持有/.test(t) ? '持有' : t;
-  const VIEW = { slow_bull: { hide: ['第N天', '進場日'], short: { '標記': SHORT_FLAG } } };
+  const VIEW = { slow_bull: { hide: ['第N天', '進場日'], short: { '標記': SHORT_FLAG },
+                              after: { anchor: '報酬', match: /分$|分數/ } } };   // 標題以「分」結尾的分數欄放到報酬後面
   function cell(V, c, v) {
     const f = (V.short || {})[c.label];
     if (f && typeof v === 'string' && f(v) !== v) return `<span title="${esc(v)}">${esc(f(v))}</span>`;
+    if (typeof v === 'string' && v.length > 14 && !/^\d{4}-\d{2}/.test(v)) return `<span title="${esc(v)}">${esc(v)}</span>`;
     return fmt(v, c.type);
   }
   const HELP_TITLE = { slow_bull: '分數怎麼看', backtest: '分數怎麼看', ae_monitor: '分數怎麼看' };
@@ -115,7 +119,13 @@
   function render() {
     if (!DATA) return;
     const V = VIEW[kind] || {};
-    const C = (DATA.columns || []).filter(c => !String(c.key).startsWith('_') && !(V.hide || []).includes(c.label)), rows = [...DATA.rows];
+    let C = (DATA.columns || []).filter(c => !String(c.key).startsWith('_') && !(V.hide || []).includes(c.label));
+    if (V.after) {                                   // 把分數欄移到指定欄（例如「報酬」）後面
+      const mv = C.filter(c => V.after.match.test(c.label)), rest = C.filter(c => !V.after.match.test(c.label));
+      const i = rest.findIndex(c => c.label === V.after.anchor);
+      if (mv.length && i >= 0) C = [...rest.slice(0, i + 1), ...mv, ...rest.slice(i + 1)];
+    }
+    const rows = [...DATA.rows];
     const FLAGS = new Set(['stopped', 'market_block', 'inst_both']);   // 這幾種上色；new／holding、未知值、缺值都照一般列
     const rowCls = r => FLAGS.has(r._flag) ? ` class="f-${r._flag}"` : '';
     const lg = DATA.legend && typeof DATA.legend === 'object' ? Object.entries(DATA.legend) : [];
