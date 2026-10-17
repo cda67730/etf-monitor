@@ -153,15 +153,15 @@
             <!-- 可折疊的導航選單 -->
             <div class="collapse navbar-collapse" id="navbarNav">
             {% set _np = request.url.path %}
-            {% set _legacy = _np.startswith('/holdings') or _np in ['/new-holdings', '/decreased-holdings', '/cross-holdings', '/changes'] %}
+            {% set _legacy = _np.startswith('/holdings') or _np in ['/new-holdings', '/decreased-holdings', '/cross-holdings', '/changes', '/warrant-ranking', '/warrant-volume-comparison'] %}
             <ul class="navbar-nav ms-auto">
                 {% for href, icon, label in [
                     ('/inst-cobuy', 'fa-users', '三大法人同買'),
                     ('/etf', 'fa-newspaper', 'ETF日報'),
                     ('/market-mood', 'fa-gauge-high', '市場情緒'),
                     ('/futures', 'fa-chart-line', '期貨籌碼'),
-                    ('/warrant-ranking', 'fa-certificate', '權證排行'),
-                    ('/warrant-volume-comparison', 'fa-chart-bar', '權證量能'),
+                    ('/lab?k=three_rates', 'fa-lock', '三率三升'),
+                    ('/lab?k=revenue_high', 'fa-lock', '營收創新高'),
                     ('/admin/etfs', 'fa-gear', 'ETF 管理'),
                     ('/lab', 'fa-lock', '量化研究')] %}
                 <li class="nav-item">
@@ -180,7 +180,9 @@
                             ('/holdings', 'fa-chart-pie', '每日持股'),
                             ('/new-holdings', 'fa-plus-circle', '新增持股'),
                             ('/decreased-holdings', 'fa-minus-circle', '減持表'),
-                            ('/cross-holdings', 'fa-layer-group', '跨ETF重複持股')] %}
+                            ('/cross-holdings', 'fa-layer-group', '跨ETF重複持股'),
+                            ('/warrant-ranking', 'fa-certificate', '權證排行'),
+                            ('/warrant-volume-comparison', 'fa-chart-bar', '權證量能')] %}
                         <li><a class="dropdown-item{{ ' active' if _np == href }}" href="{{ href }}"><i class="fas {{ icon }} me-2 text-muted"></i>{{ label }}</a></li>
                         {% endfor %}
                     </ul>

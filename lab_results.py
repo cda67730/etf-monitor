@@ -26,7 +26,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
-KINDS = {"slow_bull": "慢牛", "backtest": "回測突破", "ae_monitor": "Autoencoder 監測", "fundamental": "三率三升／營收新高"}
+KINDS = {"slow_bull": "慢牛", "backtest": "回測突破", "ae_monitor": "Autoencoder 監測", "three_rates": "三率三升", "revenue_high": "營收創新高"}
 MAX_BODY = 3 * 1024 * 1024        # 一次最多 3MB
 MAX_ROWS = 5000
 SKEW = 300                        # 時間戳容許誤差（秒）
@@ -172,9 +172,13 @@ def create_router(templates, check_authentication):
     @router.get("/lab", response_class=HTMLResponse)
     async def lab_page(request: Request):
         if not await check_authentication(request):
-            return RedirectResponse(url="/login?next=/lab", status_code=302)
+            from urllib.parse import quote
+            nxt = "/lab" + (f"?{request.url.query}" if request.url.query else "")
+            return RedirectResponse(url=f"/login?next={quote(nxt, safe='/')}", status_code=302)
         summary = await run_in_threadpool(need().summary) if store else {}
-        return templates.TemplateResponse("lab.html", {"request": request, "kinds": KINDS, "summary": summary})
+        k = request.query_params.get("k")                     # /lab?k=three_rates 直接打開該分頁
+        return templates.TemplateResponse("lab.html", {"request": request, "kinds": KINDS, "summary": summary,
+                                                       "start": k if k in KINDS else next(iter(KINDS))})
 
     @router.get("/api/lab/{kind}/dates")
     async def lab_dates(kind: str, request: Request):

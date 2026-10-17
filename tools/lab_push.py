@@ -8,7 +8,7 @@
     INGEST_SECRET  與 Railway 上設定的同一串
     INGEST_URL     預設 https://etf-monitor-production.up.railway.app
 
-kind：slow_bull（慢牛）、backtest（回測突破）、ae_monitor（Autoencoder 監測）、fundamental（三率三升／營收新高）
+kind：slow_bull（慢牛）、backtest（回測突破）、ae_monitor（Autoencoder 監測）、three_rates（三率三升）、revenue_high（營收創新高）
 rows：每列一個 dict，例如 {"code": "2330", "name": "台積電", "score": 0.87, "ret_20d": 12.3}
 columns（可省略，省略就用 rows 的鍵當欄名）：
     [{"key": "code", "label": "代號", "type": "code"}, {"key": "score", "label": "分數", "type": "float"}, ...]

@@ -29,11 +29,13 @@
   }
   .lab .tbl tr.f-stopped td { background: rgba(229, 57, 53, .12); }
   .lab .tbl tr.f-market_block td { background: rgba(128, 128, 128, .12); }
+  .lab .tbl tr.f-inst_both td { background: rgba(46, 204, 113, .12); }
   .lab .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 8px; font-size: .82rem; color: var(--body); }
   .lab .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .lab .legend i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,.08); background: #fff; }
   .lab .legend i.f-stopped { background: rgba(229, 57, 53, .12); }
   .lab .legend i.f-market_block { background: rgba(128, 128, 128, .12); }
+  .lab .legend i.f-inst_both { background: rgba(46, 204, 113, .12); }
   .lab .help { margin: 0 0 10px; font-size: .84rem; color: var(--body); }
   .lab .help summary { cursor: pointer; color: var(--ink); font-weight: 600; width: fit-content; }
   .lab .help summary:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
@@ -62,14 +64,14 @@
   </header>
 
   <nav class="secnav" id="labtabs" role="tablist" aria-label="結果">
-    {% for k, v in kinds.items() %}<button type="button" role="tab" data-k="{{ k }}"{% if loop.first %} class="on" aria-selected="true"{% endif %}>{{ v }}{% if summary[k] and summary[k].date %}<span class="n">{{ summary[k].date[5:].replace('-', '/') }}</span>{% endif %}</button>{% endfor %}
+    {% for k, v in kinds.items() %}<button type="button" role="tab" data-k="{{ k }}"{% if k == start %} class="on" aria-selected="true"{% endif %}>{{ v }}{% if summary[k] and summary[k].date %}<span class="n">{{ summary[k].date[5:].replace('-', '/') }}</span>{% endif %}</button>{% endfor %}
   </nav>
 
   <section class="panel">
     <div class="sec-head"><div><h2 id="h2">—</h2><div class="sub" id="sub"></div></div></div>
     <p class="note" id="note" hidden></p>
     <div class="legend" id="legend" hidden></div>
-    <details class="help" id="help" hidden><summary>分數怎麼看</summary><div class="help-body" id="help-body"></div></details>
+    <details class="help" id="help" hidden><summary id="help-title">分數怎麼看</summary><div class="help-body" id="help-body"></div></details>
     <div class="wrap" id="box"><div class="loading">載入中…</div></div>
     <div class="meta" id="meta"></div>
   </section>
@@ -79,8 +81,9 @@
 (() => {
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  let kind = {{ kinds|list|first|tojson }}, DATA = null, sortK = null, sortD = -1;
+  let kind = {{ start|tojson }}, DATA = null, sortK = null, sortD = -1;
   const isNum = v => typeof v === 'number' && isFinite(v);
+  const HELP_TITLE = { slow_bull: '分數怎麼看', backtest: '分數怎麼看', ae_monitor: '分數怎麼看' };
   const THIS_YEAR = String(new Date().getFullYear());
   function fmt(v, t) {
     if (t === 'check' || typeof v === 'boolean')                                   // 是／否：✓ 或 —
@@ -94,6 +97,7 @@
     if (t === 'pct') return `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${(v > 0 ? '+' : '') + v.toFixed(2)}%</span>`;
     if (t === 'signed') return `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${(v > 0 ? '+' : '') + v.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>`;
     if (t === 'int') return Math.round(v).toLocaleString('en-US');
+    if (t === 'float') return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     return v.toLocaleString('en-US', { maximumFractionDigits: Math.abs(v) < 10 ? 4 : 2 });
   }
   const lim = x => typeof x === 'number' && isFinite(x);
@@ -102,12 +106,13 @@
   function render() {
     if (!DATA) return;
     const C = (DATA.columns || []).filter(c => !String(c.key).startsWith('_')), rows = [...DATA.rows];
-    const FLAGS = new Set(['stopped', 'market_block']);   // 只有這兩種上色；new／holding、未知值、缺值都照一般列
+    const FLAGS = new Set(['stopped', 'market_block', 'inst_both']);   // 這幾種上色；new／holding、未知值、缺值都照一般列
     const rowCls = r => FLAGS.has(r._flag) ? ` class="f-${r._flag}"` : '';
     const lg = DATA.legend && typeof DATA.legend === 'object' ? Object.entries(DATA.legend) : [];
     $('#legend').hidden = !lg.length;
     const hp = typeof DATA.help === 'string' ? DATA.help.trim() : '';     // 純文字：跳脫後以空白行分段
     $('#help').hidden = !hp;
+    $('#help-title').textContent = HELP_TITLE[kind] || '這份清單怎麼看';
     $('#help-body').innerHTML = hp ? hp.split(/\n\s*\n/).map(t => `<p>${esc(t.trim())}</p>`).join('') : '';
     $('#legend').innerHTML = lg.map(([k, v]) => `<span><i class="${FLAGS.has(k) ? 'f-' + k : ''}"></i>${esc(v)}</span>`).join('');
     if (sortK) rows.sort((a, b) => {
