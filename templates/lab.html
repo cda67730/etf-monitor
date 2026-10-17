@@ -83,6 +83,15 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let kind = {{ start|tojson }}, DATA = null, sortK = null, sortD = -1;
   const isNum = v => typeof v === 'number' && isFinite(v);
+  // 網站端的顯示調整（依欄位標題比對，推送內容不用改）：慢牛隱藏「第N天」「進場日」，「標記」改短字，滑鼠移上去看原文
+  const SHORT_FLAG = t => /停損/.test(t) ? '停損' : /未成交/.test(t) ? '未成交' : /掛單/.test(t) ? '掛單中'
+    : /季線/.test(t) ? '季空不買' : /大盤|年線|月線/.test(t) ? '大盤不買' : /持有/.test(t) ? '持有' : t;
+  const VIEW = { slow_bull: { hide: ['第N天', '進場日'], short: { '標記': SHORT_FLAG } } };
+  function cell(V, c, v) {
+    const f = (V.short || {})[c.label];
+    if (f && typeof v === 'string' && f(v) !== v) return `<span title="${esc(v)}">${esc(f(v))}</span>`;
+    return fmt(v, c.type);
+  }
   const HELP_TITLE = { slow_bull: '分數怎麼看', backtest: '分數怎麼看', ae_monitor: '分數怎麼看' };
   const THIS_YEAR = String(new Date().getFullYear());
   function fmt(v, t) {
@@ -105,7 +114,8 @@
   const left = c => c.type === 'text' || c.type === 'code' || c.type === 'date' || (!c.type && DATA.rows.some(r => r[c.key] != null && !isNum(r[c.key])));
   function render() {
     if (!DATA) return;
-    const C = (DATA.columns || []).filter(c => !String(c.key).startsWith('_')), rows = [...DATA.rows];
+    const V = VIEW[kind] || {};
+    const C = (DATA.columns || []).filter(c => !String(c.key).startsWith('_') && !(V.hide || []).includes(c.label)), rows = [...DATA.rows];
     const FLAGS = new Set(['stopped', 'market_block', 'inst_both']);   // 這幾種上色；new／holding、未知值、缺值都照一般列
     const rowCls = r => FLAGS.has(r._flag) ? ` class="f-${r._flag}"` : '';
     const lg = DATA.legend && typeof DATA.legend === 'object' ? Object.entries(DATA.legend) : [];
@@ -127,7 +137,7 @@
     if (!rows.length) { $('#box').innerHTML = '<div class="empty">這一天沒有結果。</div>'; return; }
     const L = Object.fromEntries(C.map(c => [c.key, left(c)]));
     $('#box').innerHTML = `<table class="tbl"><thead><tr>${C.map(c => `<th class="${L[c.key] ? 't' : ''}"${sortK === c.key ? ` aria-sort="${sortD < 0 ? 'descending' : 'ascending'}"` : ''}><button type="button" class="sort${sortK === c.key ? ' on' : ''}" data-k="${esc(c.key)}"${c.desc ? ` title="${esc(c.desc)}" aria-description="${esc(c.desc)}"` : ''}>${esc(c.label)}${c.desc ? '<em class="info" aria-hidden="true">ⓘ</em>' : ''}<i class="fas ${sortK !== c.key ? 'fa-sort' : sortD < 0 ? 'fa-sort-down' : 'fa-sort-up'}"></i></button></th>`).join('')}</tr></thead><tbody>${
-      rows.map(r => `<tr${rowCls(r)}>${C.map(c => `<td class="${L[c.key] ? 't' : ''}${bad(c, r[c.key]) ? ' bad' : ''}">${fmt(r[c.key], c.type)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+      rows.map(r => `<tr${rowCls(r)}>${C.map(c => `<td class="${L[c.key] ? 't' : ''}${bad(c, r[c.key]) ? ' bad' : ''}">${cell(V, c, r[c.key])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
     $('#box').querySelectorAll('button.sort').forEach(b => b.onclick = () => {
       const k = b.dataset.k; sortD = sortK === k ? -sortD : -1; sortK = k; render();
     });
