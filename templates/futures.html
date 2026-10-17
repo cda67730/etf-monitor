@@ -83,7 +83,7 @@
   </div>
 
   <p class="note">
-    近半年走勢。數字是<b>未平倉多空淨額（口）</b>，所有月份合計：正值＝淨多單（紅）、負值＝淨空單（綠）。卡片上的「日」「5 日」是淨額比前 1／5 個交易日的增減。
+    近 3 個月走勢。數字是<b>未平倉多空淨額（口）</b>，所有月份合計：正值＝淨多單（紅）、負值＝淨空單（綠）。卡片上的「日」「5 日」是淨額比前 1／5 個交易日的增減。
     股票期貨是所有個股期貨口數加總（各檔契約大小不同，只看方向與變化）。點卡片可放大。資料來源：臺灣期貨交易所「三大法人－區分各期貨契約」，每個交易日約 15:00 後更新。
   </p>
 </article>
@@ -107,7 +107,7 @@
   const sgn = n => n == null ? '—' : (n > 0 ? '+' : '') + n.toLocaleString('en-US');
   const cls = n => n > 0 ? 'up' : n < 0 ? 'down' : '';
   const md = d => d.slice(5).replace('-', '/');
-  let inst = 'foreign', days = 120,      // 固定顯示近半年
+  let inst = 'foreign', days = 60,       // 卡片固定顯示近 3 個月（約 60 個交易日）；放大圖另可選期間
       data = null, charts = [], big = null;
 
   // 在最後一天畫實心點、前一天畫空心點，旁邊標「較昨日 ±N」
@@ -227,7 +227,7 @@
         const r = await fetch(`/api/futures?inst=${inst}&days=${n}`);
         if (!r.ok) throw new Error(r.status);
         longCache[key] = await r.json();
-      } catch (e) { /* 失敗就用目前的半年資料，下次再試 */ }
+      } catch (e) { /* 失敗就用卡片上的 3 個月資料，下次再試 */ }
     }
     const d = longCache[key] || data, p = d.products[bigIdx];
     if (big) big.destroy();

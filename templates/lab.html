@@ -32,12 +32,16 @@
   .lab .tbl tr.f-stopped td { background: rgba(229, 57, 53, .12); }
   .lab .tbl tr.f-market_block td { background: rgba(128, 128, 128, .12); }
   .lab .tbl tr.f-inst_both td { background: rgba(46, 204, 113, .12); }
+  .lab .tbl tr.old td { background: rgba(241, 196, 15, .18); }                     /* 營收月份不是最新 */
+  .lab .tbl tr.f-inst_both.old td { background: rgba(46, 204, 113, .12); }
+  .lab .tbl tr.f-inst_both.old td:first-child { background: rgba(241, 196, 15, .35); }
   .lab .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 8px; font-size: .82rem; color: var(--body); }
   .lab .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .lab .legend i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,.08); background: #fff; }
   .lab .legend i.f-stopped { background: rgba(229, 57, 53, .12); }
   .lab .legend i.f-market_block { background: rgba(128, 128, 128, .12); }
   .lab .legend i.f-inst_both { background: rgba(46, 204, 113, .12); }
+  .lab .legend i.old { background: rgba(241, 196, 15, .18); }
   .lab .help { margin: 0 0 10px; font-size: .84rem; color: var(--body); }
   .lab .help summary { cursor: pointer; color: var(--ink); font-weight: 600; width: fit-content; }
   .lab .help summary:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
@@ -88,8 +92,13 @@
   // 網站端的顯示調整（依欄位標題比對，推送內容不用改）：慢牛隱藏「第N天」「進場日」，「標記」改短字，滑鼠移上去看原文
   const SHORT_FLAG = t => /停損/.test(t) ? '停損' : /未成交/.test(t) ? '未成交' : /掛單/.test(t) ? '掛單中'
     : /季線/.test(t) ? '季空不買' : /大盤|年線|月線/.test(t) ? '大盤不買' : /持有/.test(t) ? '持有' : t;
-  const VIEW = { slow_bull: { hide: ['第N天', '進場日'], short: { '標記': SHORT_FLAG },
-                              after: { anchor: '報酬', match: /分$|分數/ } } };   // 標題以「分」結尾的分數欄放到報酬後面
+  const VIEW = {
+    slow_bull: { hide: ['第N天', '進場日'], short: { '標記': SHORT_FLAG },
+                 after: { anchor: '報酬', match: /分$|分數/ } },        // 標題以「分」結尾的分數欄放到報酬後面
+    // 營收創新高：拿掉市場、營收月份；法人四欄移到創新高月數後面；月營收放最後；營收月份不是最新月的列標黃底
+    revenue_high: { hide: ['市場', '營收月份'], after: { anchor: '創新高月數', match: /外資|投信|自營|法人/ },
+                    last: /^月營收/, oldMonth: '營收月份' },
+  };
   function cell(V, c, v) {
     const f = (V.short || {})[c.label];
     if (f && typeof v === 'string' && f(v) !== v) return `<span title="${esc(v)}">${esc(f(v))}</span>`;
@@ -125,16 +134,25 @@
       const i = rest.findIndex(c => c.label === V.after.anchor);
       if (mv.length && i >= 0) C = [...rest.slice(0, i + 1), ...mv, ...rest.slice(i + 1)];
     }
+    if (V.last) C = [...C.filter(c => !V.last.test(c.label)), ...C.filter(c => V.last.test(c.label))];
+    // 最新月份＝這份資料裡最大的月份；比它舊的列加 old（欄位就算隱藏也照樣判斷）
+    const mc = V.oldMonth && (DATA.columns || []).find(c => c.label === V.oldMonth);
+    const months = mc ? DATA.rows.map(r => r[mc.key]).filter(v => typeof v === 'string' && v) : [];
+    const newest = months.length ? months.reduce((a, b) => (b > a ? b : a)) : null;
+    const isOld = r => newest && typeof r[mc.key] === 'string' && r[mc.key] && r[mc.key] < newest;
     const rows = [...DATA.rows];
     const FLAGS = new Set(['stopped', 'market_block', 'inst_both']);   // 這幾種上色；new／holding、未知值、缺值都照一般列
-    const rowCls = r => FLAGS.has(r._flag) ? ` class="f-${r._flag}"` : '';
+    const rowCls = r => { const k = [FLAGS.has(r._flag) ? 'f-' + r._flag : '', isOld(r) ? 'old' : ''].filter(Boolean).join(' ');
+                          return k ? ` class="${k}"${isOld(r) ? ` title="營收月份 ${esc(r[mc.key])}，不是最新的 ${esc(newest)}"` : ''}` : ''; };
     const lg = DATA.legend && typeof DATA.legend === 'object' ? Object.entries(DATA.legend) : [];
+    const nOld = DATA.rows.filter(isOld).length;
+    if (nOld) lg.push(['old', `營收月份不是最新（${+newest.slice(5, 7)}月）的 ${nOld} 檔`]);
     $('#legend').hidden = !lg.length;
     const hp = typeof DATA.help === 'string' ? DATA.help.trim() : '';     // 純文字：跳脫後以空白行分段
     $('#help').hidden = !hp;
     $('#help-title').textContent = HELP_TITLE[kind] || '這份清單怎麼看';
     $('#help-body').innerHTML = hp ? hp.split(/\n\s*\n/).map(t => `<p>${esc(t.trim())}</p>`).join('') : '';
-    $('#legend').innerHTML = lg.map(([k, v]) => `<span><i class="${FLAGS.has(k) ? 'f-' + k : ''}"></i>${esc(v)}</span>`).join('');
+    $('#legend').innerHTML = lg.map(([k, v]) => `<span><i class="${FLAGS.has(k) ? 'f-' + k : k === 'old' ? 'old' : ''}"></i>${esc(v)}</span>`).join('');
     if (sortK) rows.sort((a, b) => {
       const x = a[sortK], y = b[sortK];
       if (x == null) return 1; if (y == null) return -1;
