@@ -41,6 +41,9 @@
   .lab .help-body p { margin: 0 0 8px; white-space: pre-wrap; } .lab .help-body p:last-child { margin-bottom: 0; }
   .lab .tbl td.bad, .lab .tbl td.bad span { color: #e67e22 !important; font-weight: 700; }
   .lab .tbl .info { font-size: .72rem; opacity: .6; margin-left: 2px; font-style: normal; }
+  /* 表格欄位多：量化研究頁放寬到接近整個視窗（超出外層 container） */
+  .lab.ed { --w: min(1760px, calc(100vw - 40px)); width: var(--w); max-width: none; margin-left: calc((100% - var(--w)) / 2); margin-right: 0; }
+  @media (max-width: 640px) { .lab.ed { --w: 100%; } }
   .lab .meta { font-size: .78rem; color: var(--mute); margin-top: 10px; }
 </style>
 
@@ -77,8 +80,11 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let kind = {{ kinds|list|first|tojson }}, DATA = null, sortK = null, sortD = -1;
   const isNum = v => typeof v === 'number' && isFinite(v);
+  const THIS_YEAR = String(new Date().getFullYear());
   function fmt(v, t) {
     if (v == null || v === '') return '<span class="muted">—</span>';
+    const dm = typeof v === 'string' && v.match(/^(\d{4})-(\d{2})-(\d{2})/);       // 日期縮短：10/14（不是今年才加年）
+    if (dm) return `<span title="${esc(v)}">${dm[1] === THIS_YEAR ? '' : dm[1].slice(2) + '/'}${dm[2]}/${dm[3]}</span>`;
     if (!isNum(v)) return esc(v);
     if (t === 'pct') return `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${(v > 0 ? '+' : '') + v.toFixed(2)}%</span>`;
     if (t === 'signed') return `<span class="${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${(v > 0 ? '+' : '') + v.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>`;
