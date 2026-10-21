@@ -30,6 +30,9 @@ PRODUCTS = [
     ("臺股期貨", "台指期"), ("電子期貨", "電子期貨"), ("美國標普500期貨", "標普500"), ("美國費城半導體期貨", "費城半導體"),
 ]
 _int = lambda s: int(str(s).replace(",", "").strip() or 0)
+# 交易價差只算台指期（外資主要部位；小台、微台是散戶指標不算）：每點 200 元
+SPREAD_PRODUCT, SPREAD_MULT = "臺股期貨", 200
+TWSE = "https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK"   # 每月每日加權指數收盤
 
 
 class FutStore:
@@ -41,6 +44,11 @@ class FutStore:
             d TEXT NOT NULL, product TEXT NOT NULL, inst TEXT NOT NULL,
             net_trade INTEGER, long_oi INTEGER, short_oi INTEGER, net_oi INTEGER, net_oi_amt BIGINT,
             PRIMARY KEY (d, product, inst))""")
+        self._q("""CREATE TABLE IF NOT EXISTS fut_trade (
+            d TEXT NOT NULL, product TEXT NOT NULL, inst TEXT NOT NULL,
+            long_trade INTEGER, long_amt BIGINT, short_trade INTEGER, short_amt BIGINT,
+            PRIMARY KEY (d, product, inst))""")
+        self._q("""CREATE TABLE IF NOT EXISTS taiex_close (d TEXT PRIMARY KEY, close REAL)""")
         self._q("""CREATE TABLE IF NOT EXISTS fut_oi (
             d TEXT NOT NULL, product TEXT NOT NULL, oi INTEGER, PRIMARY KEY (d, product))""")
 
@@ -64,20 +72,27 @@ class FutStore:
             raise ValueError(f"期交所回應格式不符：{txt[:120]!r}")
         h = rows[0]
         ix = {k: h.index(k) for k in ("多空交易口數淨額", "多方未平倉口數", "空方未平倉口數", "多空未平倉口數淨額", "多空未平倉契約金額淨額(千元)")}
+        col = lambda key: next((i for i, c in enumerate(h) if c.replace(" ", "").startswith(key)), None)
+        tx = [col("多方交易口數"), col("多方交易契約金額"), col("空方交易口數"), col("空方交易契約金額")]
+        if None in tx:                                          # 欄位對不到就不存交易價差，其他照常
+            logger.warning(f"[fut] 找不到多空交易口數／金額欄位：{h}")
+            tx = None
         out = []
         for x in rows[1:]:
             if len(x) < len(h) or not x[0].strip():
                 continue
             out.append((x[0].strip().replace("/", "-"), x[1].strip(), x[2].strip(), _int(x[ix["多空交易口數淨額"]]),
                         _int(x[ix["多方未平倉口數"]]), _int(x[ix["空方未平倉口數"]]), _int(x[ix["多空未平倉口數淨額"]]),
-                        _int(x[ix["多空未平倉契約金額淨額(千元)"]])))
-        return out
+                        _int(x[ix["多空未平倉契約金額淨額(千元)"]])) + (tuple(_int(x[i]) for i in tx) if tx else ()))
+        return out     # 每筆 12 欄：前 8 欄存 fut_inst，後 4 欄（多方／空方交易口數、契約金額千元）存 fut_trade
 
     def _save(self, rows):
         """批次寫入（首次補兩年約 1 萬多筆，逐筆開連線太慢）；同一鍵只留最後一筆，避免 ON CONFLICT 同批重複"""
         rows = list({r[:3]: r for r in rows}.values())
         if not rows:
             return
+        trades = [r[:3] + r[8:12] for r in rows if len(r) >= 12 and r[1] == SPREAD_PRODUCT]
+        rows = [r[:8] for r in rows]
         sql = ("INSERT INTO fut_inst (d, product, inst, net_trade, long_oi, short_oi, net_oi, net_oi_amt) VALUES {v} "
                "ON CONFLICT (d, product, inst) DO UPDATE SET net_trade = EXCLUDED.net_trade, long_oi = EXCLUDED.long_oi, "
                "short_oi = EXCLUDED.short_oi, net_oi = EXCLUDED.net_oi, net_oi_amt = EXCLUDED.net_oi_amt")
@@ -89,6 +104,93 @@ class FutStore:
             else:
                 cur.executemany(sql.format(v="(?, ?, ?, ?, ?, ?, ?, ?)"), rows)
                 conn.commit()
+        if trades:
+            sql = ("INSERT INTO fut_trade (d, product, inst, long_trade, long_amt, short_trade, short_amt) VALUES {v} "
+                   "ON CONFLICT (d, product, inst) DO UPDATE SET long_trade = EXCLUDED.long_trade, long_amt = EXCLUDED.long_amt, "
+                   "short_trade = EXCLUDED.short_trade, short_amt = EXCLUDED.short_amt")
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                if self.db.db_type == "postgresql":
+                    from psycopg2.extras import execute_values
+                    execute_values(cur, sql.format(v="%s"), trades, page_size=1000)
+                else:
+                    cur.executemany(sql.format(v="(?, ?, ?, ?, ?, ?, ?)"), trades)
+                    conn.commit()
+
+    # ---------- 交易價差（外資台指期）----------
+    def backfill_trade(self):
+        """fut_trade 是後來加的：第一次把 fut_inst 有的期間整段重抓一次（一次一年）"""
+        r = self._q("SELECT MIN(d) AS a FROM fut_inst", fetch="one") or {}
+        t = self._q("SELECT MIN(d) AS a FROM fut_trade", fetch="one") or {}
+        if not r.get("a"):
+            return 0
+        first = dt.date.fromisoformat(r["a"])
+        have = dt.date.fromisoformat(t["a"]) if t.get("a") else dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date()
+        if have <= first + dt.timedelta(days=7):                # 已經補齊
+            return 0
+        s, end, total = first, have, 0
+        while s <= end:
+            e = min(s + dt.timedelta(days=364), end)
+            rows = self.fetch(s, e)
+            self._save(rows)
+            total += len(rows)
+            s = e + dt.timedelta(days=1)
+            time.sleep(1)
+        self._cache.clear()
+        return total
+
+    def update_taiex(self, months=None):
+        """加權指數每日收盤（證交所 FMTQIK，一次一個月）；預設補缺的月份到本月，第一次補兩年"""
+        today = dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date()
+        if months is None:
+            last = (self._q("SELECT MAX(d) AS d FROM taiex_close", fetch="one") or {}).get("d")
+            start = dt.date.fromisoformat(last).replace(day=1) if last else (today - dt.timedelta(days=BACKFILL_DAYS)).replace(day=1)
+            months, m = [], start
+            while m <= today:
+                months.append(m)
+                m = (m + dt.timedelta(days=32)).replace(day=1)
+        n = 0
+        for m in months:
+            r = requests.get(TWSE, params={"date": m.strftime("%Y%m01"), "response": "json"}, headers=UA, timeout=40)
+            r.raise_for_status()
+            for row in r.json().get("data") or []:
+                try:
+                    y, mo, d = (int(x) for x in str(row[0]).split("/"))
+                    day = dt.date(y + 1911, mo, d).isoformat()
+                    close = float(str(row[4]).replace(",", ""))
+                except (ValueError, IndexError):
+                    continue
+                self._q("INSERT INTO taiex_close (d, close) VALUES (?, ?) ON CONFLICT (d) DO UPDATE SET close = EXCLUDED.close", (day, close))
+                n += 1
+            time.sleep(1.5)
+        return n
+
+    def spread(self, inst="foreign", days=120):
+        """台指期交易價差（點）＝買進均價 − 賣出均價；均價＝契約金額 ÷（口數 × 200）
+        負值＝當天賣在高、買在低（先空後補，盤中主導下殺）；20 日合計看持續性。
+        正負方向已用 2026-10 實際資料對照節目圖（大跌日 10/15 為負、7 月回檔時 20 日合計大幅為負）"""
+        key = ("spread", inst, days)
+        if key in self._cache:
+            return self._cache[key]
+        name = INSTS.get(inst, INSTS["foreign"])
+        rows = self._q("SELECT d, long_trade, long_amt, short_trade, short_amt FROM fut_trade WHERE product = ? AND inst = ? "
+                       "ORDER BY d DESC LIMIT ?", (SPREAD_PRODUCT, name, int(days) + 19), fetch="all") or []
+        rows = rows[::-1]
+        avg = lambda amt, n: amt * 1000 / (n * SPREAD_MULT) if n else None
+        pts = []
+        for r in rows:
+            b, sl = avg(r["long_amt"], r["long_trade"]), avg(r["short_amt"], r["short_trade"])
+            pts.append({"d": r["d"], "buy": b, "sell": sl, "spread": round(b - sl, 1) if b and sl else None})
+        for i, p in enumerate(pts):                              # 20 日合計（不足 20 天不算）
+            w = [x["spread"] for x in pts[max(0, i - 19):i + 1] if x["spread"] is not None]
+            p["sum20"] = round(sum(w), 1) if i >= 19 else None
+        pts = pts[-int(days):]
+        tx = {r["d"]: r["close"] for r in (self._q("SELECT d, close FROM taiex_close WHERE d >= ?", (pts[0]["d"],), fetch="all") or [])} if pts else {}
+        res = {"inst": inst, "inst_name": name, "product": SPREAD_PRODUCT, "dates": [p["d"] for p in pts],
+               "spread": [p["spread"] for p in pts], "sum20": [p["sum20"] for p in pts], "taiex": [tx.get(p["d"]) for p in pts],
+               "last": pts[-1] if pts else None}
+        self._cache[key] = res
+        return res
 
     @staticmethod
     def fetch_oi(cid, start, end):
@@ -190,12 +292,17 @@ class FutStore:
                 s = e + dt.timedelta(days=1)
                 time.sleep(1)
             try:
+                n_tx = self.update_taiex()
+            except Exception as e:
+                n_tx = f"失敗：{e}"
+                logger.warning(f"[fut] 加權指數抓取失敗：{e}")
+            try:
                 n_oi = self.update_oi(today)
             except Exception as e:
                 n_oi = f"失敗：{e}"
                 logger.warning(f"[fut] 全市場未平倉抓取失敗：{e}")
             self._cache.clear()
-            return f"寫入 {total} 筆，最新 {self.last_date()}；小台未平倉 {n_oi} 天"
+            return f"寫入 {total} 筆，最新 {self.last_date()}；小台未平倉 {n_oi} 天；加權指數 {n_tx} 天"
 
     # ---------- 查詢 ----------
     def series(self, inst="foreign", days=120):
@@ -247,6 +354,11 @@ def init(db_config):
             n = store.backfill_older()
             if n:
                 logger.info(f"[fut] 往前補到兩年：{n} 筆")
+            n = store.backfill_trade()
+            if n:
+                logger.info(f"[fut] 補交易口數與金額（交易價差用）：{n} 筆")
+            if not (store._q("SELECT COUNT(*) AS n FROM taiex_close", fetch="one") or {}).get("n"):
+                logger.info(f"[fut] 補加權指數收盤：{store.update_taiex()} 天")
         except Exception as e:
             logger.error(f"[fut] 補資料失敗：{e}")
     threading.Thread(target=_first, daemon=True).start()
@@ -267,5 +379,14 @@ def create_router(templates):
         if inst not in INSTS:
             raise HTTPException(status_code=400, detail="inst 只能是 foreign、trust、dealer")
         return JSONResponse(await run_in_threadpool(store.series, inst, days))
+
+    @router.get("/api/futures/spread")
+    async def futures_spread(inst: str = Query("foreign"), days: int = Query(120, ge=20, le=750)):
+        """台指期交易價差（買進均價−賣出均價，點）與 20 日合計、加權指數收盤"""
+        if not store:
+            raise HTTPException(status_code=503, detail="資料庫無法使用")
+        if inst not in INSTS:
+            raise HTTPException(status_code=400, detail="inst 只能是 foreign、trust、dealer")
+        return JSONResponse(await run_in_threadpool(store.spread, inst, days))
 
     return router

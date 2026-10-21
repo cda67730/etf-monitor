@@ -42,6 +42,17 @@
 
   .note { font-size: .8rem; color: var(--mute); margin-top: 14px; line-height: 1.7; }
 
+  /* 台指期交易價差 */
+  .spr { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px 10px; margin-top: 18px; }
+  .spr .hd { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .spr h2 { margin: 0; font-size: 1.02rem; font-weight: 700; color: var(--ink); }
+  .spr .meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .84rem; color: var(--body); margin: 6px 0 4px; }
+  .spr .meta b { font-family: var(--num); font-weight: 600; }
+  .spr .sub { font-size: .8rem; color: var(--mute); margin: 8px 0 2px; }
+  .spr .cv1 { position: relative; height: 260px; } .spr .cv2 { position: relative; height: 150px; }
+  .spr select { border: 1px solid var(--rule); border-radius: 6px; padding: 3px 8px; font-size: .86rem; background: #fff; color: var(--ink); }
+  @media (max-width: 560px) { .spr { padding: 10px 10px 6px; } .spr .cv1 { height: 210px; } .spr .cv2 { height: 120px; } }
+
   /* 放大檢視 */
   .fdlg { border: 0; border-radius: 12px; padding: 0; width: min(960px, 96vw); max-height: 92vh; box-shadow: 0 20px 60px rgba(15, 27, 45, .35); }
   .fdlg::backdrop { background: rgba(15, 27, 45, .55); }
@@ -81,6 +92,18 @@
     </button>
     {% endfor %}
   </div>
+
+  <section class="spr" aria-labelledby="spr-t">
+    <div class="hd"><h2 id="spr-t">外資台指期交易價差</h2>
+      <select id="spr-days" aria-label="期間"><option value="60">近 3 月</option><option value="120" selected>近半年</option><option value="250">近 1 年</option><option value="500">近 2 年</option></select></div>
+    <div class="meta" id="spr-m"></div>
+    <div class="sub">20 日合計（長條，左軸點數）與加權指數（黑線，右軸）</div>
+    <div class="cv1"><canvas id="spr-c1" aria-label="交易價差 20 日合計與加權指數"></canvas></div>
+    <div class="sub">每日交易價差（點）</div>
+    <div class="cv2"><canvas id="spr-c2" aria-label="每日交易價差"></canvas></div>
+    <p class="note" style="margin-top:8px">交易價差＝當天<b>買進均價 − 賣出均價</b>（點），均價＝期交所公布的多方／空方交易契約金額 ÷（口數 × 200），只算台指期（大台），小台、微台以散戶為主不列入。
+      負值（綠）代表賣在高點、買在低點，也就是盤中先空後補、主動往下打；正值（紅）代表買在高、賣在低，偏向盤中追價做多。20 日合計看這種動作是否持續，常拿來對照指數高低點。</p>
+  </section>
 
   <p class="note">
     近 3 個月走勢。數字是<b>未平倉多空淨額（口）</b>，所有月份合計：正值＝淨多單（紅）、負值＝淨空單（綠）。卡片上的「日」「5 日」是淨額比前 1／5 個交易日的增減。
@@ -238,6 +261,51 @@
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
 
   load();
+
+  // ---------- 台指期交易價差 ----------
+  let spr = [];
+  const sprSel = document.getElementById('spr-days');
+  const pt = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toLocaleString('en-US', { maximumFractionDigits: 1 });
+  async function loadSpread() {
+    let d;
+    try {
+      const r = await fetch(`/api/futures/spread?inst=${inst}&days=${sprSel.value}`);
+      if (!r.ok) throw new Error(r.status);
+      d = await r.json();
+    } catch (e) { document.getElementById('spr-m').textContent = '資料載入失敗'; return; }
+    const name = inst === 'foreign' ? '外資' : d.inst_name;
+    document.getElementById('spr-t').textContent = `${name}台指期交易價差`;
+    spr.forEach(c => c.destroy()); spr = [];
+    if (!d.dates.length) { document.getElementById('spr-m').textContent = '資料準備中（首次部署會在背景補歷史資料）'; return; }
+    const L = d.last || {};
+    document.getElementById('spr-m').innerHTML = `<span>${d.dates[d.dates.length - 1].replace(/-/g, '/')}</span>` +
+      `<span>當日 <b class="${cls(L.spread)}">${pt(L.spread)}</b> 點</span><span>20 日合計 <b class="${cls(L.sum20)}">${pt(L.sum20)}</b> 點</span>` +
+      (L.buy ? `<span>買進均價 <b>${Math.round(L.buy).toLocaleString('en-US')}</b></span><span>賣出均價 <b>${Math.round(L.sell).toLocaleString('en-US')}</b></span>` : '');
+    if (typeof Chart === 'undefined') return;
+    const lab = d.dates.map(md), col = a => a.map(v => v == null ? '#ccc' : v >= 0 ? 'rgba(229,56,59,.75)' : 'rgba(18,161,80,.75)');
+    const xs = { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#6b7a8f', font: { size: 11 } } };
+    const ys = { grid: { color: c => c.tick.value === 0 ? '#94a3b8' : '#eef1f5' }, border: { display: false }, ticks: { color: '#6b7a8f', font: { size: 11 }, maxTicksLimit: 6 } };
+    const tip = { callbacks: { title: it => d.dates[it[0].dataIndex] } };
+    spr.push(new Chart(document.getElementById('spr-c1'), {
+      data: { labels: lab, datasets: [
+        { type: 'line', label: '加權指數', data: d.taiex, yAxisID: 'y1', borderColor: '#1f2933', borderWidth: 1.8, pointRadius: 0, tension: .15, spanGaps: true },
+        { type: 'bar', label: '20 日合計', data: d.sum20, yAxisID: 'y', backgroundColor: col(d.sum20), barPercentage: 1, categoryPercentage: .9 }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { ...tip, callbacks: { ...tip.callbacks,
+          label: it => it.dataset.yAxisID === 'y1' ? `加權指數 ${it.parsed.y == null ? '—' : it.parsed.y.toLocaleString('en-US')}` : `20 日合計 ${pt(it.parsed.y)} 點` } } },
+        scales: { x: xs, y: { ...ys, position: 'left' }, y1: { position: 'right', grid: { display: false }, border: { display: false },
+          ticks: { color: '#6b7a8f', font: { size: 11 }, maxTicksLimit: 6, callback: v => v.toLocaleString('en-US') } } } }
+    }));
+    spr.push(new Chart(document.getElementById('spr-c2'), {
+      type: 'bar', data: { labels: lab, datasets: [{ data: d.spread, backgroundColor: col(d.spread), barPercentage: 1, categoryPercentage: .8 }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { display: false }, tooltip: { ...tip, callbacks: { ...tip.callbacks, label: it => `價差 ${pt(it.parsed.y)} 點` } } },
+        scales: { x: xs, y: { ...ys, position: 'left' } } }
+    }));
+  }
+  sprSel.addEventListener('change', loadSpread);
+  document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', loadSpread));
+  loadSpread();
 })();
 </script>
 {% endblock %}
