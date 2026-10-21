@@ -60,6 +60,43 @@ try:
     test("20日合計 翻正/翻負", lambda i: (1 if M[i]>0 else -1) if g(i,1) and (M[i]>0)!=(M[i-1]>0) else None)
     test("每日價差 由負翻正/由正翻負", lambda i: (1 if S[i]>0 else -1) if i and S[i]*S[i-1]<0 else None)
     test("每日價差 連3天同號", lambda i: (1 if S[i]>0 else -1) if i>=2 and S[i]*S[i-1]>0 and S[i-1]*S[i-2]>0 and (i<3 or S[i-3]*S[i]<=0) else None)
+    out.append("===Y2026===")
+    Y=[i for i in range(n) if D[i]>="2026-01-01"]
+    out.append(f"2026 共 {len(Y)} 天；指數 {T[Y[0]]:.0f} → {T[Y[-1]]:.0f}")
+    def stat(L,k):
+        rs=[r(i,k) for i in L if r(i,k) is not None]
+        return f"{stat_mean(rs)} 漲{sum(x>0 for x in rs)/len(rs):.0%} n={len(rs)}" if rs else "-"
+    stat_mean=lambda rs: f"{stt.mean(rs):+.2%}"
+    out.append("基準｜"+"｜".join(f"{k}日 {stat(Y,k)}" for k in (1,5,20)))
+    def hit(name,sig):
+        parts=[]
+        for k in (1,5,20):
+            L=[i for i in Y if sig(i) is not None and r(i,k) is not None]
+            if L: parts.append(f"{k}日 猜中 {sum((sig(i)>0)==(r(i,k)>0) for i in L)/len(L):.0%}")
+        up=[i for i in Y if sig(i) is not None and sig(i)>0]; dn=[i for i in Y if sig(i) is not None and sig(i)<0]
+        out.append(f"{name}｜"+"｜".join(parts)+f"｜正/向上後 5日 {stat(up,5)}｜負/向下後 5日 {stat(dn,5)}")
+    hit("每日價差正負", lambda i: S[i] if S[i] else None)
+    hit("20日合計正負", lambda i: M[i] if M[i] else None)
+    hit("20日合計1日方向", lambda i: (M[i]-M[i-1]) if M[i] is not None and M[i-1] is not None and M[i]!=M[i-1] else None)
+    hit("20日合計5日方向", lambda i: (M[i]-M[i-5]) if M[i] is not None and M[i-5] is not None and M[i]!=M[i-5] else None)
+    c=stt.correlation([S[i] for i in Y[:-1]],[r(i,1) for i in Y[:-1]]); out.append(f"每日價差 vs 隔日 相關 {c:.2f}")
+    c=stt.correlation([S[i] for i in Y],[r0[i] for i in Y]); out.append(f"每日價差 vs 當日 相關 {c:.2f}")
+    for L in (3,5):
+        for kind in ("底","頂"):
+            ev=[]
+            for i in Y:
+                w=M[i-L-2:i+1]
+                if None in w: continue
+                d=[w[j+1]-w[j] for j in range(len(w)-1)]
+                ok=(all(x<0 for x in d[:L]) and all(x>0 for x in d[L:])) if kind=="底" else (all(x>0 for x in d[:L]) and all(x<0 for x in d[L:]))
+                if ok and (not ev or i-ev[-1]>5): ev.append(i)
+            out.append(f"連{'跌' if kind=='底' else '漲'}{L}天後轉{'上' if kind=='底' else '下'}｜"+"｜".join(f"{k}日 {stat(ev,k)}" for k in (5,20))+"｜"+",".join(D[i][5:] for i in ev))
+    # 每月：月底 20 日合計 vs 下月漲跌
+    out.append("月份｜月底20日合計｜當月指數")
+    mo={}
+    for i in Y: mo.setdefault(D[i][:7],[]).append(i)
+    for m,L in mo.items(): out.append(f"  {m}｜{M[L[-1]]:.0f}｜{T[L[-1]]/T[L[0]-1]-1:+.1%}")
+    out.append("===YEND===")
     out.append("===TURN===")
     # 轉折：20 日合計連跌 >=L 天後連漲 2 天（觸底轉上），或連漲 >=L 天後連跌 2 天（觸頂轉下）
     base={k:stt.mean([r(i,k) for i in range(n) if r(i,k) is not None]) for k in (1,5,10,20)}
