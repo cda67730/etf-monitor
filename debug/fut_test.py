@@ -60,6 +60,30 @@ try:
     test("20日合計 翻正/翻負", lambda i: (1 if M[i]>0 else -1) if g(i,1) and (M[i]>0)!=(M[i-1]>0) else None)
     test("每日價差 由負翻正/由正翻負", lambda i: (1 if S[i]>0 else -1) if i and S[i]*S[i-1]<0 else None)
     test("每日價差 連3天同號", lambda i: (1 if S[i]>0 else -1) if i>=2 and S[i]*S[i-1]>0 and S[i-1]*S[i-2]>0 and (i<3 or S[i-3]*S[i]<=0) else None)
+    out.append("===TURN===")
+    # 轉折：20 日合計連跌 >=L 天後連漲 2 天（觸底轉上），或連漲 >=L 天後連跌 2 天（觸頂轉下）
+    base={k:stt.mean([r(i,k) for i in range(n) if r(i,k) is not None]) for k in (1,5,10,20)}
+    baseu={k:sum(r(i,k)>0 for i in range(n) if r(i,k) is not None)/len([1 for i in range(n) if r(i,k) is not None]) for k in (1,5,10,20)}
+    out.append("全部日子 基準：" + "｜".join(f"{k}日 {base[k]:+.2%} 漲{baseu[k]:.0%}" for k in (1,5,10,20)))
+    for L in (3,5):
+        for kind in ("底","頂"):
+            ev=[]
+            for i in range(L+2,n):
+                w=M[i-L-2:i+1]
+                if None in w: continue
+                d=[w[j+1]-w[j] for j in range(len(w)-1)]
+                pre,post=d[:L],d[L:]
+                ok=(all(x<0 for x in pre) and all(x>0 for x in post)) if kind=="底" else (all(x>0 for x in pre) and all(x<0 for x in post))
+                if ok and (not ev or i-ev[-1]>5): ev.append(i)
+            parts=[]
+            for k in (1,5,10,20):
+                rs=[r(i,k) for i in ev if r(i,k) is not None]
+                if rs: parts.append(f"{k}日 {stt.mean(rs):+.2%} 漲{sum(x>0 for x in rs)/len(rs):.0%}")
+            out.append(f"20日合計 連{'跌' if kind=='底' else '漲'}{L}天後轉{'上' if kind=='底' else '下'}（{kind}） n={len(ev)}｜"+"｜".join(parts))
+            if L==5:
+                for i in ev:
+                    out.append(f"   {D[i]} 合計 {M[i]:.0f}｜5日 {r(i,5) and format(r(i,5),'+.1%')}｜20日 {r(i,20) and format(r(i,20),'+.1%')}")
+    out.append("===END===")
     out.append("")
     out.append("20 日合計分區間 → 之後 5／20 日報酬（平均、上漲比例）")
     bins=[(-9e9,-400),(-400,-250),(-250,-100),(-100,0),(0,100),(100,9e9)]
