@@ -97,6 +97,20 @@ try:
     for i in Y: mo.setdefault(D[i][:7],[]).append(i)
     for m,L in mo.items(): out.append(f"  {m}｜{M[L[-1]]:.0f}｜{T[L[-1]]/T[L[0]-1]-1:+.1%}")
     out.append("===YEND===")
+    out.append("===LAG===")
+    def win(i,a,b): return T[i+b]/T[i+a]-1 if i+b<n else None    # 第 a 天收盤到第 b 天收盤
+    W=[(0,1),(1,2),(2,3),(1,5),(5,10),(10,20),(20,40),(40,60)]
+    for lab,L in (("全期",list(range(n))),("2026",[i for i in range(n) if D[i]>="2026-01-01"])):
+        for nm,X in (("每日價差",S),("5日合計",[sum(S[i-4:i+1]) if i>=4 else None for i in range(n)]),("20日合計",M)):
+            parts=[]
+            for a,b in W:
+                pr=[(X[i],win(i,a,b)) for i in L if X[i] is not None and win(i,a,b) is not None]
+                if len(pr)>10:
+                    c=stt.correlation([x for x,_ in pr],[y for _,y in pr])
+                    neg=[y for x,y in pr if x<0]; pos=[y for x,y in pr if x>0]
+                    parts.append(f"T+{a+1}~{b}: r={c:+.2f}")
+            out.append(f"{lab} {nm}｜"+"｜".join(parts))
+    out.append("===LEND===")
     out.append("===TURN===")
     # 轉折：20 日合計連跌 >=L 天後連漲 2 天（觸底轉上），或連漲 >=L 天後連跌 2 天（觸頂轉下）
     base={k:stt.mean([r(i,k) for i in range(n) if r(i,k) is not None]) for k in (1,5,10,20)}
