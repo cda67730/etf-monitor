@@ -1,5 +1,64 @@
-/api/report/etf?scope=aggr 401 0.4s date=None model=None created=None notes=null detail=報告尚未產生；產生報告需要登入
-/api/report/etf?scope=all 401 0.5s date=None model=None created=None notes=null detail=報告尚未產生；產生報告需要登入
-/api/inst-cobuy/observe 200 0.4s date=20261015 model=gemini-3.8-flash+查證 created=2026-10-15 18:41 notes=null detail=None
-/api/picks 200 0.3s date=2026-10-13 model=gemini-3.1-pro-preview+查證 created=2026-10-13 21:56 notes=null detail=None
-pdf anon 302 /login?next=/report/etf.pdf%3Fscope%3Daggr None 0 0.4s
+## twse openapi IS: 200 1420766B 2.1s ct=application/json
+[
+{"出表日期":"1151021","年度":"115","季別":"2","公司代號":"1101","公司名稱":"台泥","營業收入":"71289957.00","營業成本":"58298233.00","原始認列生物資產及農產品之利益（損失）":"","生物資產當期公允價值減出售成本之變動利益（損失）":"","營業毛利（毛損）":"12991724.00","未實現銷貨（損）益":"","已實現銷貨（損）益":"","營業毛利（毛損）淨額":"12991724.00","營業費用":"7821547.00","其他收益及費損淨額":"","營業利益（損失）":"5170177.00","營業外收入及支出":"1464159.00","稅前淨利（淨損）":"6634336.00","所得稅費用（利益）":"2064537.00","繼續營業單位本期淨利（淨損）":"4569799.00","停業單位損益":"","合併前非屬共同控制股權損益":"","本期淨利（淨損）":"4569799.00","其他綜合損益（淨額）":"11092920.00","合併前非屬共同控制股權綜合損益淨額":"","本期綜合損益總額":"15662719.00","淨利（淨損）歸屬於母公司業主":"3279780.00","淨利（淨損）歸屬於共同控制下前手權益":"","淨利（淨損）歸屬
+
+## twse openapi BS: 200 895789B 1.3s ct=application/json
+[
+{"出表日期":"1151021","年度":"115","季別":"2","公司代號":"1101","公司名稱":"台泥","流動資產":"195322468.00","非流動資產":"400694063.00","資產總計":"596016531.00","流動負債":"108722932.00","非流動負債":"187971533.00","負債總計":"296694465.00","股本":"77231817.00","權益─具證券性質之虛擬通貨":"","資本公積":"68922587.00","保留盈餘":"62929089.00","其他權益":"29325114.00","庫藏股票":"-979439.00","歸屬於母公司業主之權益合計":"237429168.00","共同控制下前手權益":"","合併前非屬共同控制股權":"","非控制權益":"61892898.00","權益總計":"299322066.00","待註銷股本股數":"","預收股款（權益項下）之約當發行股數（單位：股）":"0.00","母公司暨子公司所持有之母公司庫藏股股數（單位：股）":"30000000.00","每股參考淨值":"30.86"},
+{"出表日期":"1151021","年度":"115","季別":"2","公司代號":"1102","公司名稱":"亞泥","
+
+## tpex openapi IS: 200 1183323B 34.3s ct=application/json
+[
+{"Date":"1151021","Year":"115","Season":"2","SecuritiesCompanyCode":"1240","CompanyName":"茂生農經","營業收入":"1440672.00","營業成本":"1267704.00","原始認列生物資產及農產品之利益（損失）":"21939.00","生物資產當期公允價值減出售成本之變動利益（損失）":"24180.00","營業毛利（毛損）":"219087.00","未實現銷貨（損）益":"","已實現銷貨（損）益":"","營業毛利（毛損）淨額":"219087.00","營業費用":"131685.00","其他收益及費損淨額":"","營業利益（損失）":"87402.00","營業外收入及支出":"54301.00","稅前淨利（淨損）":"141703.00","所得稅費用（利益）":"15197.00","繼續營業單位本期淨利（淨損）":"126506.00","停業單位損益":"","合併前非屬共同控制股權損益":"","本期淨利（淨損）":"126506.00","其他綜合損益（淨額）":"4025.00","合併前非屬共同控制股權綜合損益淨額":"","本期綜合損益總額":"130531.00","淨利（淨損）歸屬於母公司業主":"126188.00","淨利（淨損）歸
+
+## tpex openapi BS: ERR ("Connection broken: InvalidChunkLength(got length b'', 0 bytes read)", InvalidChunkLength(got length b'', 0 bytes read))
+
+## mops t163sb04 2025Q4 sii: 200 800B 3.2s ct=text/html; charset=UTF-8
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+</head>
+<body> 
+因為安全性考量，您所執行的頁面無法呈現。<BR>
+FOR SECURITY REASONS, THIS PAGE CAN NOT BE ACCESSED.<BR>
+<BR>
+您可以<A HREF="javascript:history.back()">回上一頁</A>繼續其他動作，或撥打以下電話通報問題：(02)8101-5840, (02)8101-5834。<BR>
+YOU COULD GO <A HREF="javascript:history.back()">BACK</A> TO PREVIOUS PAGE OR CALL US FOR FURTHER HELP：(02)8101-5840, (02)8101-5834。<BR>
+<BR>
+錯誤代碼：7641438222709009605<BR>
+<script type="application/javascript">
+	function getIP(json) {
+	document.write("您的IP：", json.ip);
+	}
+</script>
+<script type="application/javascr
+
+## mopsov t163sb04: 200 1640981B 119.6s ct=text/html; charset=UTF-8
+
+
+
+<html>
+<head>
+	<title>公開資訊觀測站</title>
+	
+	
+	<link href="css/css2.css" rel="stylesheet" type="text/css" Media="Screen"/> 
+	
+	<script type="text/javascript" src="js/mops2.js"></script>
+	
+	
+	
+</head>
+
+<body>
+
+
+<div id="div01" >
+<form action='/mops/web/ajax_t163sb04'  method='post' onsubmit='return false;' name='fm'>
+<table class='noBorder' style='margin-right:0px !important; margin-left:0px !important;'><tr class='reportCont'><td style='text-align:center !important;'><h2>上市公司第四季資料</h2></td></tr><tr class='reportCont'><td style='text-align:left !important;'>註1：依證券交易法第36條及證券期貨局相關函令規定，財務報告申報期限如下：
+
+## finmind fs 2330: 200 61320B 0.6s ct=application/json
+{"msg":"success","status":200,"data":[{"date":"2021-03-31","stock_id":"2330","type":"OTHNOE","value":-189407000.0,"origin_name":"\u5176\u4ed6\u6536\u76ca\u53ca\u8cbb\u640d\u6de8\u984d"},{"date":"2021-03-31","stock_id":"2330","type":"OtherComprehensiveIncome","value":5967010000.0,"origin_name":"\u5176\u4ed6\u7d9c\u5408\u640d\u76ca\uff08\u6de8\u984d\uff09"},{"date":"2021-03-31","stock_id":"2330","type":"RealizedGain","value":64211000.0,"origin_name":"\u5df2\u5be6\u73fe\u92b7\u8ca8\uff08\u640d\uff09\u76ca"},{"date":"2021-03-31","stock_id":"2330","type":"TAX","value":15325640000.0,"origin_name":"\
+
+## finmind fs all-stock one date: 400 160B 0.5s ct=application/json
+{"msg":"Your level is free. Please update your user level. Detail information:https://finmindtrade.com/analysis/#/Sponsor/sponsor","status":400,"token_tail":""}
