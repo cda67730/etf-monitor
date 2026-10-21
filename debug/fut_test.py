@@ -46,6 +46,21 @@ try:
         hb=[(S[i]>0)==(r(i,k)>0) for i in range(n) if r(i,k) is not None and abs(S[i])>=th]
         out.append(f"  價差正負猜之後 {k} 日方向：猜中 {sum(hit)/len(hit):.0%}（都猜漲 {sum(up)/len(up):.0%}）｜只看最大 20% 的日子（|價差|≥{th:.0f}）猜中 {sum(hb)/len(hb):.0%}，n={len(hb)}")
     out.append("")
+    def test(name, sig):
+        for k in (1,5,20):
+            idx=[i for i in range(n) if sig(i) is not None and r(i,k) is not None]
+            if not idx: continue
+            hit=[(sig(i)>0)==(r(i,k)>0) for i in idx]
+            up=[i for i in idx if sig(i)>0]; dn=[i for i in idx if sig(i)<0]
+            mu=lambda L: f"{stt.mean([r(i,k) for i in L]):+.2%}（漲 {sum(r(i,k)>0 for i in L)/len(L):.0%}，n={len(L)}）" if L else "-"
+            out.append(f"{name}｜之後 {k:>2} 日 猜中 {sum(hit)/len(hit):.0%}｜轉多/向上時 {mu(up)}｜轉空/向下時 {mu(dn)}")
+    g=lambda i,j: M[i] is not None and i-j>=0 and M[i-j] is not None
+    test("20日合計 1日方向", lambda i: (M[i]-M[i-1]) if g(i,1) and M[i]!=M[i-1] else None)
+    test("20日合計 5日方向", lambda i: (M[i]-M[i-5]) if g(i,5) and M[i]!=M[i-5] else None)
+    test("20日合計 翻正/翻負", lambda i: (1 if M[i]>0 else -1) if g(i,1) and (M[i]>0)!=(M[i-1]>0) else None)
+    test("每日價差 由負翻正/由正翻負", lambda i: (1 if S[i]>0 else -1) if i and S[i]*S[i-1]<0 else None)
+    test("每日價差 連3天同號", lambda i: (1 if S[i]>0 else -1) if i>=2 and S[i]*S[i-1]>0 and S[i-1]*S[i-2]>0 and (i<3 or S[i-3]*S[i]<=0) else None)
+    out.append("")
     out.append("20 日合計分區間 → 之後 5／20 日報酬（平均、上漲比例）")
     bins=[(-9e9,-400),(-400,-250),(-250,-100),(-100,0),(0,100),(100,9e9)]
     for lo,hi in bins:
