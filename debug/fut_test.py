@@ -14,8 +14,12 @@ try:
         @contextlib.contextmanager
         def get_connection(s): yield s.c
     st=F.FutStore(DB())
-    for s,e in [(dt.date(2023,10,1),dt.date(2024,9,30)),(dt.date(2024,10,1),dt.date(2025,9,30)),(dt.date(2025,10,1),dt.date(2026,10,20))]:
-        st._save(st.fetch(s,e))
+    s=dt.date(2023,11,1)
+    while s<=dt.date(2026,10,20):
+        e=min(s+dt.timedelta(days=180),dt.date(2026,10,20))
+        try: st._save(st.fetch(s,e))
+        except Exception as ex: out.append(f"skip {s}~{e}: {str(ex)[:60]}")
+        s=e+dt.timedelta(days=1)
     m=dt.date(2023,10,1); ms=[]
     while m<=dt.date(2026,10,1): ms.append(m); m=(m+dt.timedelta(days=32)).replace(day=1)
     st.update_taiex(ms)
