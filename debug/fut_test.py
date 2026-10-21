@@ -1,45 +1,59 @@
-import sys, datetime as dt, json, requests, collections
+import sys, datetime as dt, sqlite3, contextlib, statistics as stt
 sys.path.insert(0, "debug")
 import fut_flow_new as F
-out=[]; rows=[]
-for s,e in [(dt.date(2024,10,21),dt.date(2025,10,19)),(dt.date(2025,10,20),dt.date(2026,10,20))]:
-    rows+=F.FutStore.fetch(s,e)
-PRODS={"美國費城半導體期貨":("^SOX","費半"),"美國那斯達克100期貨":("^NDX","那指"),"美國道瓊期貨":("^DJI","道瓊"),"美國標普500期貨":("^GSPC","標普")}
-fut=collections.defaultdict(dict)
-for r in rows:
-    if r[1] in PRODS: fut[(r[1],r[2])][r[0]]=r[6]
-us={}
-for p,(sym,_) in PRODS.items():
-    j=requests.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}",params={"range":"2y","interval":"1d"},headers={"User-Agent":"Mozilla/5.0"},timeout=30).json()
-    res=j["chart"]["result"][0]; ts=res["timestamp"]; cl=res["indicators"]["quote"][0]["close"]
-    days=[(dt.datetime.utcfromtimestamp(t)-dt.timedelta(hours=4)).date().isoformat() for t in ts]
-    us[p]=[(d,c) for d,c in zip(days,cl) if c]
-def ret(prod, d, k):
-    """台灣日期 d 當晚起算 k 個美國交易日的報酬（k=1 當晚）"""
-    L=us[prod]; i=next((i for i,(x,_) in enumerate(L) if x>=d),None)
-    if i is None or i==0 or L[i][0]!=d or i+k-1>=len(L): return None
-    return L[i+k-1][1]/L[i-1][1]-1
-def run(prod,inst,name,cond):
-    f=fut[(prod,inst)]; ds=sorted(f); res={1:[0,0,0],5:[0,0,0]}
-    for i in range(5,len(ds)):
-        d=ds[i]; sig=cond(f,ds,i)
-        if not sig: continue
-        for k in (1,5):
-            r=ret(prod,d,k)
-            if r is None: continue
-            res[k][0]+=1; res[k][1]+=(sig>0)==(r>0); res[k][2]+=r>0
-    a,b=res[1],res[5]
-    if a[0]<8: return f"  {name}: 天數 {a[0]}（太少）"
-    return f"  {name}: 天數 {a[0]}｜當晚猜中 {a[1]/a[0]:.0%}（當晚漲 {a[2]/a[0]:.0%}）｜5 日猜中 {b[1]/max(b[0],1):.0%}（5 日漲 {b[2]/max(b[0],1):.0%}）"
-dl=lambda f,ds,i,j=0: f[ds[i-j]]-f[ds[i-j-1]]
-conds={
- "淨部位翻正負（淨空→淨多或反過來）": lambda f,ds,i: (1 if f[ds[i]]>0 else -1) if (f[ds[i]]>0)!=(f[ds[i-1]]>0) and f[ds[i]]!=0 else 0,
- "連 3 天同向後反轉": lambda f,ds,i: (1 if dl(f,ds,i)>0 else -1) if dl(f,ds,i)*dl(f,ds,i,1)<0 and dl(f,ds,i,1)*dl(f,ds,i,2)>0 and dl(f,ds,i,2)*dl(f,ds,i,3)>0 else 0,
-}
-for pct in (10,20,30,50):
-    conds[f"單日變動 ≥ 前日部位 {pct}%"]=(lambda p: lambda f,ds,i: (1 if dl(f,ds,i)>0 else -1) if abs(f[ds[i-1]])>=50 and abs(dl(f,ds,i))>=abs(f[ds[i-1]])*p/100 else 0)(pct)
-for prod,(sym,short) in PRODS.items():
-    for inst,nm in (("外資及陸資","外資"),("自營商","自營")):
-        out.append(f"## {short}・{nm}")
-        for name,c in conds.items(): out.append(run(prod,inst,name,c))
+out=[]
+class DB:
+    db_type="sqlite"
+    def __init__(s): s.c=sqlite3.connect(":memory:",check_same_thread=False); s.c.row_factory=sqlite3.Row
+    def execute_query(s,sql,p=(),fetch="none"):
+        cur=s.c.execute(sql,p); s.c.commit()
+        if fetch=="one": r=cur.fetchone(); return dict(r) if r else None
+        if fetch=="all": return [dict(r) for r in cur.fetchall()]
+    @contextlib.contextmanager
+    def get_connection(s): yield s.c
+st=F.FutStore(DB())
+for s,e in [(dt.date(2023,10,1),dt.date(2024,9,30)),(dt.date(2024,10,1),dt.date(2025,9,30)),(dt.date(2025,10,1),dt.date(2026,10,20))]:
+    st._save(st.fetch(s,e))
+m=dt.date(2023,10,1); ms=[]
+while m<=dt.date(2026,10,1): ms.append(m); m=(m+dt.timedelta(days=32)).replace(day=1)
+st.update_taiex(ms)
+sp=st.spread("foreign",800)
+D=sp["dates"]; S=sp["spread"]; M=sp["sum20"]; T=sp["taiex"]
+ok=[i for i in range(len(D)) if T[i] and S[i] is not None]
+D=[D[i] for i in ok]; S=[S[i] for i in ok]; M=[M[i] for i in ok]; T=[T[i] for i in ok]
+n=len(D); out.append(f"期間 {D[0]} ~ {D[-1]}，{n} 個交易日")
+r=lambda i,k: T[i+k]/T[i]-1 if i+k<n else None   # i 收盤到 i+k 收盤
+r0=[T[i]/T[i-1]-1 if i else None for i in range(n)]
+def corr(a,b):
+    p=[(x,y) for x,y in zip(a,b) if x is not None and y is not None]
+    return stt.correlation([x for x,_ in p],[y for _,y in p]), len(p)
+c,k=corr(S,r0); out.append(f"同日：價差 vs 當天指數漲跌 相關係數 {c:.2f}（n={k}）")
+same=[(S[i]<0)==(r0[i]<0) for i in range(1,n) if S[i]!=0]; out.append(f"同日方向一致（價差負＝指數跌）{sum(same)/len(same):.0%}")
+for k in (1,5,20):
+    c,nn=corr(S,[r(i,k) for i in range(n)]); out.append(f"每日價差 vs 之後 {k} 日漲跌 相關 {c:.2f}")
+    hit=[(S[i]>0)==(r(i,k)>0) for i in range(n) if r(i,k) is not None and S[i]!=0]; up=[r(i,k)>0 for i in range(n) if r(i,k) is not None]
+    big=sorted(abs(x) for x in S); th=big[int(len(big)*.8)]
+    hb=[(S[i]>0)==(r(i,k)>0) for i in range(n) if r(i,k) is not None and abs(S[i])>=th]
+    out.append(f"  價差正負猜之後 {k} 日方向：猜中 {sum(hit)/len(hit):.0%}（都猜漲 {sum(up)/len(up):.0%}）｜只看最大 20% 的日子（|價差|≥{th:.0f}）猜中 {sum(hb)/len(hb):.0%}，n={len(hb)}")
+out.append("")
+out.append("20 日合計分區間 → 之後 5／20 日報酬（平均、上漲比例）")
+bins=[(-9e9,-400),(-400,-250),(-250,-100),(-100,0),(0,100),(100,9e9)]
+for lo,hi in bins:
+    idx=[i for i in range(n) if M[i] is not None and lo<=M[i]<hi]
+    for k in (5,20):
+        rs=[r(i,k) for i in idx if r(i,k) is not None]
+        if rs: out.append(f"  20日合計 {lo:>6.0f}~{hi:<6.0f} n={len(rs):>3}｜之後 {k:>2} 日 平均 {stt.mean(rs):+.2%} 上漲 {sum(x>0 for x in rs)/len(rs):.0%}")
+allr={k:[r(i,k) for i in range(n) if r(i,k) is not None] for k in (5,20)}
+out.append(f"  全部日子：之後 5 日平均 {stt.mean(allr[5]):+.2%} 上漲 {sum(x>0 for x in allr[5])/len(allr[5]):.0%}｜20 日平均 {stt.mean(allr[20]):+.2%} 上漲 {sum(x>0 for x in allr[20])/len(allr[20]):.0%}")
+out.append("")
+# 轉折：20 日合計從 ≤ -300 回升（連 3 天上升）＝ 底部訊號
+ev=[]
+for i in range(23,n):
+    if M[i-3] is not None and min(M[i-10:i-2] if None not in M[i-10:i-2] else [0])<=-300 and M[i]>M[i-1]>M[i-2]>M[i-3]:
+        if not ev or i-ev[-1]>15: ev.append(i)
+for i in ev:
+    out.append(f"  底部回升 {D[i]} 20日合計 {M[i]:.0f}｜之後 5 日 {r(i,5) and f'{r(i,5):+.1%}'}，20 日 {r(i,20) and f'{r(i,20):+.1%}'}")
+# 同期：20 日合計 vs 過去 20 日指數漲跌
+c,k=corr(M,[T[i]/T[i-20]-1 if i>=20 else None for i in range(n)]); out.append(f"20 日合計 vs 同期 20 日指數漲跌 相關 {c:.2f}")
+c,k=corr(M,[r(i,20) for i in range(n)]); out.append(f"20 日合計 vs 之後 20 日指數漲跌 相關 {c:.2f}")
 open("debug/fut_result.txt","w").write("\n".join(out))
