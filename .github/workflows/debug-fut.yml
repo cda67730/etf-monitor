@@ -2,7 +2,7 @@ name: debug fut
 on:
   push:
     branches: [debug-report]
-    paths: ['debug/fut_test.py', '.github/workflows/debug-fut.yml']
+    paths: ['debug/fut_test.py', 'debug/fut_flow_new.py', '.github/workflows/debug-fut.yml']
 permissions:
   contents: write
 jobs:
