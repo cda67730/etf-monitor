@@ -26,7 +26,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
-KINDS = {"slow_bull": "慢牛", "backtest": "回測突破", "ae_monitor": "Autoencoder 監測", "three_rates": "三率三升", "revenue_high": "營收創新高"}
+KINDS = {"slow_bull": "慢牛", "backtest": "回測突破", "ae_monitor": "Autoencoder 監測", "three_rates": "三率三升", "revenue_high": "營收創新高", "quality": "品質因子"}
 MAX_BODY = 3 * 1024 * 1024        # 一次最多 3MB
 MAX_ROWS = 5000
 SKEW = 300                        # 時間戳容許誤差（秒）
