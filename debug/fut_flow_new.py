@@ -166,8 +166,9 @@ class FutStore:
         return n
 
     def spread(self, inst="foreign", days=120):
-        """台指期交易價差（點）＝賣出均價 − 買進均價；均價＝契約金額 ÷（口數 × 200）
-        負值＝當天賣得比買得低（盤中往下追殺），20 日合計看持續性"""
+        """台指期交易價差（點）＝買進均價 − 賣出均價；均價＝契約金額 ÷（口數 × 200）
+        負值＝當天賣在高、買在低（先空後補，盤中主導下殺）；20 日合計看持續性。
+        正負方向已用 2026-10 實際資料對照節目圖（大跌日 10/15 為負、7 月回檔時 20 日合計大幅為負）"""
         key = ("spread", inst, days)
         if key in self._cache:
             return self._cache[key]
@@ -179,7 +180,7 @@ class FutStore:
         pts = []
         for r in rows:
             b, sl = avg(r["long_amt"], r["long_trade"]), avg(r["short_amt"], r["short_trade"])
-            pts.append({"d": r["d"], "buy": b, "sell": sl, "spread": round(sl - b, 1) if b and sl else None})
+            pts.append({"d": r["d"], "buy": b, "sell": sl, "spread": round(b - sl, 1) if b and sl else None})
         for i, p in enumerate(pts):                              # 20 日合計（不足 20 天不算）
             w = [x["spread"] for x in pts[max(0, i - 19):i + 1] if x["spread"] is not None]
             p["sum20"] = round(sum(w), 1) if i >= 19 else None
@@ -381,7 +382,7 @@ def create_router(templates):
 
     @router.get("/api/futures/spread")
     async def futures_spread(inst: str = Query("foreign"), days: int = Query(120, ge=20, le=750)):
-        """台指期交易價差（賣出均價−買進均價，點）與 20 日合計、加權指數收盤"""
+        """台指期交易價差（買進均價−賣出均價，點）與 20 日合計、加權指數收盤"""
         if not store:
             raise HTTPException(status_code=503, detail="資料庫無法使用")
         if inst not in INSTS:
