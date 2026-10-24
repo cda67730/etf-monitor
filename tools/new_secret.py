@@ -67,7 +67,7 @@ def main():
     if copy(value):
         print("📋 已複製到剪貼簿")
     elif not a.show:
-        print("⚠ 無法複製到剪貼簿，請加 --show 重跑並手動複製")
+        print(f"⚠ 無法複製到剪貼簿，請手動複製：{value}")
 
     print("\n接下來：")
     print(f"  1. Railway → etf-monitor → Variables → {a.name}，貼上（Ctrl+V）→ 存檔 → Deploy")
