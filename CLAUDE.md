@@ -5,7 +5,7 @@
 ## 部署與執行環境
 - **Railway** 自動部署本 repo 的 `main` 分支（push 即部署）。網址：https://etf-monitor-production.up.railway.app/
 - 入口：`Dockerfile` → `uvicorn fastapi_app_cloud:app`
-- 資料庫：Railway PostgreSQL（`DATABASE_URL`）；連不上時 `database_config.py` 退回 SQLite `etf_holdings.db`
+- 資料庫：Railway PostgreSQL（網站服務的 `DATABASE_URL`＝`${{Postgres.DATABASE_URL}}` 參照，走內部網路 `postgres.railway.internal`）；啟動時內部 DNS 可能晚幾秒才通，連線遇到解析失敗／拒絕／逾時會每 5 秒重試、最多 12 次；仍連不上才退回 SQLite `etf_holdings.db`
 - 登入：單一密碼 `WEB_PASSWORD`（未設＝隨機值，無法登入；程式裡沒有預設密碼），session 存記憶體（重新部署後需重新登入）；密碼與 token 用 `hmac.compare_digest` 比對
 - **2026-10 起只有管理功能需要登入**：`/admin/etfs`、`/api/admin/*`、`/manual-scrape*`、`/test-scrape`、`/api/scheduler/*`、`/diagnostic`、`/debug/db-status`；其他瀏覽頁全部公開。登入後依 `next` 參數返回（預設 `/admin/etfs`）
 - 排程呼叫用 token：`SCHEDULER_TOKEN`（`/trigger-scrape*` 端點以 `Authorization: Bearer <token>` 驗證；未設＝隨機值，等於停用）

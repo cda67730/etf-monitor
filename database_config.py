@@ -1,5 +1,6 @@
 # database_config_improved.py - 改進版本，增強調試和錯誤處理，添加權證支持
 import os
+import time
 import sqlite3
 import psycopg2
 import psycopg2.extras
@@ -166,12 +167,21 @@ class DatabaseConfig:
             logger.info("執行連接測試...")
             test_conn = None
             try:
-                test_conn = psycopg2.connect(
-                    database_url,
-                    cursor_factory=psycopg2.extras.RealDictCursor,
-                    sslmode='require',
-                    connect_timeout=15
-                )
+                # Railway 內部網路（*.railway.internal）在容器剛啟動的幾秒內可能還解析不到，重試一陣子
+                for attempt in range(1, 13):
+                    try:
+                        test_conn = psycopg2.connect(
+                            database_url,
+                            cursor_factory=psycopg2.extras.RealDictCursor,
+                            sslmode='require',
+                            connect_timeout=15
+                        )
+                        break
+                    except psycopg2.OperationalError as e:
+                        if attempt == 12 or not any(k in str(e) for k in ("translate host name", "Connection refused", "timeout expired")):
+                            raise
+                        logger.warning(f"PostgreSQL 第 {attempt} 次連線失敗，5 秒後重試：{str(e).strip()[:120]}")
+                        time.sleep(5)
                 test_conn.autocommit = True
                 
                 with test_conn.cursor() as cur:
