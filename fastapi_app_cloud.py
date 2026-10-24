@@ -4,6 +4,7 @@ import re
 import logging
 import traceback
 import hashlib
+import hmac
 import secrets
 import time
 from collections import defaultdict
@@ -28,10 +29,15 @@ class Settings:
         self.debug = os.getenv("DEBUG", "true").lower() == "true"
         self.allowed_hosts = os.getenv("ALLOWED_HOSTS", "*").split(",")
         self.port = int(os.getenv("PORT", 8080))
-        self.scheduler_token = os.getenv("SCHEDULER_TOKEN", "default-secret-token")
+        # 沒設就用隨機值（等於停用），不再有寫在公開 repo 裡的預設密碼／token
+        self.scheduler_token = os.getenv("SCHEDULER_TOKEN", "").strip() or secrets.token_hex(32)
         
         # 安全設定
-        self.web_password = os.getenv("WEB_PASSWORD", "etf2024")
+        self.web_password = os.getenv("WEB_PASSWORD", "").strip() or secrets.token_hex(32)
+        if not os.getenv("WEB_PASSWORD", "").strip():
+            logging.getLogger(__name__).error("❌ 未設定 WEB_PASSWORD：管理功能無法登入")
+        if not os.getenv("SCHEDULER_TOKEN", "").strip():
+            logging.getLogger(__name__).warning("⚠ 未設定 SCHEDULER_TOKEN：/trigger-scrape 端點停用")
         self.session_secret = os.getenv("SESSION_SECRET", secrets.token_hex(32))
         self.session_timeout = int(os.getenv("SESSION_TIMEOUT", "28800"))
         
@@ -451,7 +457,7 @@ AGG_SORTS = {
 # ============ 安全檢查函數（保持原有代碼不變）============
 def verify_password(input_password: str) -> bool:
     """驗證密碼"""
-    return input_password == settings.web_password
+    return hmac.compare_digest((input_password or "").encode(), settings.web_password.encode())
 
 async def check_authentication(request: Request) -> bool:
     """檢查認證"""
@@ -1983,7 +1989,7 @@ async def trigger_scrape(request: Request):
     try:
         # 檢查調度器令牌
         token = request.headers.get("Authorization", "").replace("Bearer ", "")
-        if token != settings.scheduler_token:
+        if not hmac.compare_digest(token.encode(), settings.scheduler_token.encode()):
             raise HTTPException(status_code=401, detail="Invalid scheduler token")
         
         if not scraper:
@@ -2016,7 +2022,7 @@ async def trigger_scrape_warrants(request: Request):
     try:
         # 檢查調度器令牌
         token = request.headers.get("Authorization", "").replace("Bearer ", "")
-        if token != settings.scheduler_token:
+        if not hmac.compare_digest(token.encode(), settings.scheduler_token.encode()):
             raise HTTPException(status_code=401, detail="Invalid scheduler token")
         
         if not warrant_scraper:
@@ -2237,7 +2243,7 @@ async def shutdown_event():
 # ============ 排程狀態與手動執行 ============
 async def _scheduler_authorized(request: Request) -> bool:
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    return token == settings.scheduler_token or await check_authentication(request)
+    return hmac.compare_digest(token.encode(), settings.scheduler_token.encode()) or await check_authentication(request)
 
 @app.get("/api/scheduler/status")
 async def scheduler_status(request: Request):

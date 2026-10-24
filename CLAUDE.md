@@ -6,9 +6,9 @@
 - **Railway** 自動部署本 repo 的 `main` 分支（push 即部署）。網址：https://etf-monitor-production.up.railway.app/
 - 入口：`Dockerfile` → `uvicorn fastapi_app_cloud:app`
 - 資料庫：Railway PostgreSQL（`DATABASE_URL`）；連不上時 `database_config.py` 退回 SQLite `etf_holdings.db`
-- 登入：單一密碼 `WEB_PASSWORD`，session 存記憶體（重新部署後需重新登入）
+- 登入：單一密碼 `WEB_PASSWORD`（未設＝隨機值，無法登入；程式裡沒有預設密碼），session 存記憶體（重新部署後需重新登入）；密碼與 token 用 `hmac.compare_digest` 比對
 - **2026-10 起只有管理功能需要登入**：`/admin/etfs`、`/api/admin/*`、`/manual-scrape*`、`/test-scrape`、`/api/scheduler/*`、`/diagnostic`、`/debug/db-status`；其他瀏覽頁全部公開。登入後依 `next` 參數返回（預設 `/admin/etfs`）
-- 排程呼叫用 token：`SCHEDULER_TOKEN`（`/trigger-scrape*` 端點以 `Authorization: Bearer <token>` 驗證；未設時預設值不安全，務必在 Railway 設定）
+- 排程呼叫用 token：`SCHEDULER_TOKEN`（`/trigger-scrape*` 端點以 `Authorization: Bearer <token>` 驗證；未設＝隨機值，等於停用）
 - ⚠ 每次 push 到 main 都會觸發 Railway 重新部署 → 不要讓排程每天 commit 資料回 repo
 
 ## 主要檔案
@@ -130,4 +130,4 @@
 
 ## 其他備註
 - Google AdSense（ca-pub-5437045809111179）：`base.html` 的 `<head>` 載入 adsbygoogle.js（`/admin`、`/lab`、`/login`、`/diagnostic`、`/debug` 不載入；`login.html` 本來就不繼承 base）；`/privacy` 隱私權政策頁（`privacy.html`，含 AdSense 規定的第三方 Cookie 說明與停用連結），`base.html` 底部小字頁尾連過去（另開分頁）；`GET /ads.txt` 回 `google.com, pub-5437045809111179, DIRECT, f08c47fec0942fa0`。AdSense 審核多半不收 `*.up.railway.app` 這種共用子網域，建議綁自訂網域再送審
-- `database_config.py`、`diagnose_password_issue.py` 請確認沒有寫死密碼或連線字串（repo 為公開）。
+- repo 為公開：不得寫死密碼、token、連線字串；2026-10 Railway 資安事件後已移除 WEB_PASSWORD／SCHEDULER_TOKEN 預設值與 diagnose_password_issue.py、test.py
