@@ -11,8 +11,9 @@
 
 環境變數：
   GEMINI_API_KEY          沒設就全部用程式模板句子
-  GEMINI_MODEL            預設 gemini-3.8-flash（2026-10 為省錢從 Pro 改成 Flash）
-  GEMINI_FALLBACK_MODEL   主模型失敗時改用，預設 gemini-3.1-pro-preview
+  GEMINI_DRAFT_MODEL      初稿用的模型，預設 gemini-3.1-flash-lite（2026-10 為省錢；失敗再依序改用下面兩個）
+  GEMINI_MODEL            查證（開 Google 搜尋）用的模型，預設 gemini-3.8-flash
+  GEMINI_FALLBACK_MODEL   上面失敗時改用，預設 gemini-3.1-pro-preview
   GEMINI_VERIFY           預設 true；設 false 跳過第 3 步查證（不建議）
 """
 import datetime as dt
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 KEY = os.getenv("GEMINI_API_KEY", "").strip()
 MODELS = [m for m in (os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip(),
                       os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-pro-preview").strip()) if m]
+DRAFT_MODELS = list(dict.fromkeys(m for m in [os.getenv("GEMINI_DRAFT_MODEL", "gemini-3.1-flash-lite").strip()] + MODELS if m))
 VERIFY = os.getenv("GEMINI_VERIFY", "true").strip().lower() not in ("0", "false", "no", "off")
 HERE = os.path.dirname(os.path.abspath(__file__))
 UA = {"User-Agent": "Mozilla/5.0 (etf-monitor report)"}
@@ -449,7 +451,7 @@ class Report:
         draft, by = None, None
         t_start = time.time()
         over = lambda: time.time() - t_start > BUDGET
-        for model in MODELS:                                   # 1. 初稿
+        for model in DRAFT_MODELS:                             # 1. 初稿（便宜模型優先）
             if over():
                 notes.append(f"超過 {BUDGET} 秒，不再嘗試 {model}"); break
             try:
@@ -463,9 +465,9 @@ class Report:
                 logger.warning(f"[{self.TAG}] {model} 初稿失敗：{e}")
         if draft is None:
             return tpl, "template", notes
-        if VERIFY:                                             # 2. 查證（初稿模型優先，失敗換另一個）
+        if VERIFY:                                             # 2. 查證（用查證模型，失敗換備援）
             done = False
-            for model in [by] + [m for m in MODELS if m != by]:
+            for model in MODELS:
                 if over():
                     notes.append(f"超過 {BUDGET} 秒，不再嘗試 {model} 查證"); break
                 try:
