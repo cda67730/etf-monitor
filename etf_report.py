@@ -415,6 +415,10 @@ class Report:
                 raise ValueError(f"回應沒有 JSON：{text[:120]!r}")
             text = text[i:j + 1]
         gm = cand.get("groundingMetadata") or {}
+        u = r.json().get("usageMetadata") or {}
+        logger.info(f"[gemini] {model}{' +搜尋' if search else ''} tokens 輸入 {u.get('promptTokenCount', 0)}"
+                    f"／輸出 {u.get('candidatesTokenCount', 0)}／思考 {u.get('thoughtsTokenCount', 0)}"
+                    f"／搜尋 {len(gm.get('webSearchQueries') or [])} 次")
         meta = {"queries": gm.get("webSearchQueries") or [],
                 "sources": [c["web"].get("title") or c["web"].get("uri") for c in gm.get("groundingChunks") or [] if c.get("web")]}
         return json.loads(text), meta
