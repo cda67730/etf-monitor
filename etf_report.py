@@ -14,6 +14,7 @@
   GEMINI_DRAFT_MODEL      初稿用的模型，預設 gemini-3.1-flash-lite（2026-10 為省錢；失敗再依序改用下面兩個）
   GEMINI_MODEL            查證（開 Google 搜尋）用的模型，預設 gemini-3.8-flash
   GEMINI_FALLBACK_MODEL   上面失敗時改用，預設 gemini-3.1-pro-preview
+  GEMINI_THINKING         空白＝模型預設；設 low 降低思考 token（思考按輸出計價；模型不接受就自動改回預設）
   GEMINI_VERIFY           預設 true；設 false 跳過第 3 步查證（不建議）
 """
 import datetime as dt
@@ -34,6 +35,8 @@ KEY = os.getenv("GEMINI_API_KEY", "").strip()
 MODELS = [m for m in (os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip(),
                       os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-pro-preview").strip()) if m]
 DRAFT_MODELS = list(dict.fromkeys(m for m in [os.getenv("GEMINI_DRAFT_MODEL", "gemini-3.1-flash-lite").strip()] + MODELS if m))
+THINKING = os.getenv("GEMINI_THINKING", "").strip().lower()   # 空白＝模型預設；low／medium／high 降低思考 token（按輸出計價）
+_no_thinking = set()                                            # 不接受 thinkingConfig 的模型，之後不再帶
 VERIFY = os.getenv("GEMINI_VERIFY", "true").strip().lower() not in ("0", "false", "no", "off")
 HERE = os.path.dirname(os.path.abspath(__file__))
 UA = {"User-Agent": "Mozilla/5.0 (etf-monitor report)"}
@@ -403,8 +406,18 @@ class Report:
             body["tools"] = [{"google_search": {}}]
         else:
             body["generationConfig"] = {"responseMimeType": "application/json"}
-        r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                          headers={"x-goog-api-key": KEY, "Content-Type": "application/json"}, timeout=(15, CALL_TIMEOUT), json=body)
+        if THINKING and model not in _no_thinking:
+            body.setdefault("generationConfig", {})["thinkingConfig"] = {"thinkingLevel": THINKING}
+        post = lambda b: requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                                       headers={"x-goog-api-key": KEY, "Content-Type": "application/json"}, timeout=(15, CALL_TIMEOUT), json=b)
+        r = post(body)
+        if r.status_code == 400 and "thinkingConfig" in json.dumps(body) and "think" in r.text.lower():
+            logger.warning(f"[gemini] {model} 不接受 thinkingLevel={THINKING}，改用預設：{r.text[:150]}")
+            _no_thinking.add(model)
+            body["generationConfig"].pop("thinkingConfig", None)
+            if not body["generationConfig"]:
+                body.pop("generationConfig")
+            r = post(body)
         if r.status_code != 200:
             raise RuntimeError(f"HTTP {r.status_code}: {r.text[:300]}")
         cand = (r.json().get("candidates") or [{}])[0]
