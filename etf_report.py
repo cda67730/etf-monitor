@@ -14,7 +14,7 @@
   GEMINI_DRAFT_MODEL      初稿用的模型，預設 gemini-3.1-flash-lite（2026-10 為省錢；失敗再依序改用下面兩個）
   GEMINI_MODEL            查證（開 Google 搜尋）用的模型，預設 gemini-3.8-flash
   GEMINI_FALLBACK_MODEL   上面失敗時改用，預設 gemini-3.1-pro-preview
-  GEMINI_THINKING         空白＝模型預設；設 low 降低思考 token（思考按輸出計價；模型不接受就自動改回預設）
+  GEMINI_THINKING         預設 low（降低思考 token，思考按輸出計價；模型不接受就自動改回預設）；設 none＝模型預設
   GEMINI_VERIFY           預設 true；設 false 跳過第 3 步查證（不建議）
 """
 import datetime as dt
@@ -35,7 +35,7 @@ KEY = os.getenv("GEMINI_API_KEY", "").strip()
 MODELS = [m for m in (os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip(),
                       os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-pro-preview").strip()) if m]
 DRAFT_MODELS = list(dict.fromkeys(m for m in [os.getenv("GEMINI_DRAFT_MODEL", "gemini-3.1-flash-lite").strip()] + MODELS if m))
-THINKING = os.getenv("GEMINI_THINKING", "").strip().lower()   # 空白＝模型預設；low／medium／high 降低思考 token（按輸出計價）
+THINKING = os.getenv("GEMINI_THINKING", "low").strip().lower()   # 預設 low 降低思考 token（按輸出計價）；設 none 或空字串＝模型預設
 _no_thinking = set()                                            # 不接受 thinkingConfig 的模型，之後不再帶
 VERIFY = os.getenv("GEMINI_VERIFY", "true").strip().lower() not in ("0", "false", "no", "off")
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -406,7 +406,7 @@ class Report:
             body["tools"] = [{"google_search": {}}]
         else:
             body["generationConfig"] = {"responseMimeType": "application/json"}
-        if THINKING and model not in _no_thinking:
+        if THINKING and THINKING != "none" and model not in _no_thinking:
             body.setdefault("generationConfig", {})["thinkingConfig"] = {"thinkingLevel": THINKING}
         post = lambda b: requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                                        headers={"x-goog-api-key": KEY, "Content-Type": "application/json"}, timeout=(15, CALL_TIMEOUT), json=b)
