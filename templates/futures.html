@@ -53,6 +53,14 @@
   .spr select { border: 1px solid var(--rule); border-radius: 6px; padding: 3px 8px; font-size: .86rem; background: #fff; color: var(--ink); }
   @media (max-width: 560px) { .spr { padding: 10px 10px 6px; } .spr .cv1 { height: 210px; } .spr .cv2 { height: 120px; } }
 
+  /* 盤中指標：大盤 vs 台指期、每日正逆價差 */
+  .live2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-top: 16px; }
+  @media (max-width: 960px) { .live2 { grid-template-columns: minmax(0, 1fr); } }
+  .live2 .spr { margin-top: 0; }
+  .live2 .cv1 { height: 230px; }
+  @media (max-width: 560px) { .live2 .cv1 { height: 190px; } }
+  .badge-live { font-size: .72rem; padding: 1px 7px; border-radius: 10px; background: #fde8e8; color: #c0392b; font-weight: 600; margin-left: 6px; }
+
   /* 放大檢視 */
   .fdlg { border: 0; border-radius: 12px; padding: 0; width: min(960px, 96vw); max-height: 92vh; box-shadow: 0 20px 60px rgba(15, 27, 45, .35); }
   .fdlg::backdrop { background: rgba(15, 27, 45, .55); }
@@ -81,6 +89,22 @@
       </div>
     </div>
   </header>
+
+  <div class="live2">
+    <section class="spr" aria-labelledby="iv-t">
+      <div class="hd"><h2 id="iv-t">大盤 vs 台指期<span class="badge-live" id="iv-live" hidden>盤中</span></h2><span class="meta" id="iv-d" style="margin:0"></span></div>
+      <div class="meta" id="iv-m"></div>
+      <div class="cv1"><canvas id="iv-c" aria-label="今日加權指數與台指期近月走勢"></canvas></div>
+      <p class="note" style="margin-top:6px">黑線＝加權指數（09:00～13:30），橘線＝台指期近月（08:45～13:45），每 2 分鐘一筆；盤中開著頁面每分鐘自動更新。資料來源：臺灣期貨交易所行情資訊網。</p>
+    </section>
+    <section class="spr" aria-labelledby="bs-t">
+      <div class="hd"><h2 id="bs-t">每日正逆價差</h2>
+        <select id="bs-days" aria-label="期間"><option value="60" selected>近 3 月</option><option value="120">近半年</option><option value="250">近 1 年</option><option value="500">近 2 年</option></select></div>
+      <div class="meta" id="bs-m"></div>
+      <div class="cv1"><canvas id="bs-c" aria-label="每日正逆價差"></canvas></div>
+      <p class="note" style="margin-top:6px">正逆價差＝台指期近月收盤 − 加權指數收盤（點）。正值（紅）＝正價差，期貨比現貨貴，偏多；負值（綠）＝逆價差，期貨比現貨便宜，偏空或反映除息。近月以當天有收盤價的最近到期月份計，結算日前後會跳月。</p>
+    </section>
+  </div>
 
   <div class="fgrid" id="grid">
     {% for p, short in products %}
@@ -306,6 +330,77 @@
   sprSel.addEventListener('change', loadSpread);
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', loadSpread));
   loadSpread();
+})();
+</script>
+<script>
+(() => {
+  if (typeof Chart === 'undefined') return;
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const UP = css('--up') || '#d64545', DOWN = css('--down') || '#2e9e5b';
+  const fmt = (v, d = 2) => v == null ? '—' : v.toLocaleString('zh-TW', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const pct = (v, ref) => (v != null && ref) ? (v / ref - 1) * 100 : null;
+  const cls = v => v > 0 ? 'up' : v < 0 ? 'down' : '';
+  const sgn = (v, d = 2) => v == null ? '—' : (v > 0 ? '+' : '') + fmt(v, d);
+
+  // ── 大盤 vs 台指期（盤中） ──
+  let ivChart = null, ivTimer = null;
+  async function loadIntraday() {
+    let j;
+    try { j = await (await fetch('/api/futures/intraday')).json(); } catch (e) { return; }
+    const m = document.getElementById('iv-m');
+    if (!j.rows || !j.rows.length) { m.textContent = '尚無盤中資料（平日 08:45 起每 2 分鐘記錄一次）'; return; }
+    document.getElementById('iv-d').textContent = j.date.slice(5).replace('-', '/');
+    document.getElementById('iv-live').hidden = !j.live;
+    const labels = j.rows.map(r => r[0]), spot = j.rows.map(r => r[1]), fut = j.rows.map(r => r[2]);
+    const ls = [...spot].reverse().find(v => v != null), lf = [...fut].reverse().find(v => v != null);
+    const ps = pct(ls, j.spot_ref), pf = pct(lf, j.fut_ref);
+    const b = (ls != null && lf != null) ? lf - ls : null;
+    m.innerHTML = `<span>加權 <b>${fmt(ls)}</b> <b class="${cls(ps)}">${sgn(ps)}%</b></span>` +
+      `<span>${j.contract || '台指期近月'} <b>${fmt(lf, 0)}</b> <b class="${cls(pf)}">${sgn(pf)}%</b></span>` +
+      (b == null ? '' : `<span>${b >= 0 ? '正價差' : '逆價差'} <b class="${cls(b)}">${fmt(Math.abs(b))}</b> 點</span>`);
+    if (ivChart) ivChart.destroy();
+    ivChart = new Chart(document.getElementById('iv-c'), {
+      type: 'line',
+      data: { labels, datasets: [
+        { label: '加權指數', data: spot, borderColor: '#222', borderWidth: 1.6, pointRadius: 0, spanGaps: true, tension: .15 },
+        { label: '台指期近月', data: fut, borderColor: '#e67e22', borderWidth: 1.6, pointRadius: 0, spanGaps: true, tension: .15 },
+      ] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { afterBody: it => { const i = it[0] ? it[0].dataIndex : -1, s = spot[i], f = fut[i];
+            return (s != null && f != null) ? `價差 ${sgn(f - s)} 點` : ''; } } } },
+        scales: { x: { ticks: { maxTicksLimit: 7, font: { size: 10 } }, grid: { display: false } },
+                  y: { ticks: { font: { size: 10 }, callback: v => v.toLocaleString() } } } },
+    });
+    clearTimeout(ivTimer);
+    if (j.live) ivTimer = setTimeout(loadIntraday, 60000);
+  }
+
+  // ── 每日正逆價差 ──
+  let bsChart = null;
+  const bsDays = document.getElementById('bs-days');
+  async function loadBasis() {
+    let j;
+    try { j = await (await fetch('/api/futures/basis?days=' + bsDays.value)).json(); } catch (e) { return; }
+    const m = document.getElementById('bs-m');
+    if (!j.dates || !j.dates.length) { m.textContent = '資料補齊中，稍後再看'; return; }
+    const n = j.dates.length - 1, v = j.basis[n], pv = n > 0 ? j.basis[n - 1] : null;
+    m.innerHTML = `<span>${j.dates[n].slice(5).replace('-', '/')} ${v >= 0 ? '正價差' : '逆價差'} <b class="${cls(v)}">${fmt(Math.abs(v))}</b> 點</span>` +
+      (pv != null ? `<span>前一日 <b class="${cls(pv)}">${sgn(pv)}</b></span>` : '') +
+      (j.month ? `<span>近月 ${j.month.slice(0, 4)}/${j.month.slice(4)}</span>` : '');
+    if (bsChart) bsChart.destroy();
+    bsChart = new Chart(document.getElementById('bs-c'), {
+      type: 'bar',
+      data: { labels: j.dates.map(d => d.slice(5).replace('-', '/')),
+              datasets: [{ label: '正逆價差（點）', data: j.basis, backgroundColor: j.basis.map(x => x >= 0 ? UP : DOWN), borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { display: false },
+          tooltip: { callbacks: { label: c => `${c.raw >= 0 ? '正' : '逆'}價差 ${fmt(Math.abs(c.raw))} 點（期 ${fmt(j.fut[c.dataIndex], 0)}／現 ${fmt(j.spot[c.dataIndex])}）` } } },
+        scales: { x: { ticks: { maxTicksLimit: 8, font: { size: 10 } }, grid: { display: false } }, y: { ticks: { font: { size: 10 } } } } },
+    });
+  }
+  bsDays.addEventListener('change', loadBasis);
+  loadIntraday(); loadBasis();
 })();
 </script>
 {% endblock %}

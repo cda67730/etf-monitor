@@ -205,6 +205,7 @@ async def start_scheduler():
             extra.append(("mood_cnn", "CNN 恐懼貪婪（盤中）", lambda: market_mood.store.update(only={"cnn_fg"}), "SCHED_MOOD_CNN", "0 22 * * 1-5; 0 0,2,4 * * 2-6"))
         if fut_flow.store:
             extra.append(("fut", "期貨三大法人未平倉", fut_flow.store.update, "SCHED_FUT", "10 15,18 * * 1-5"))
+            extra.append(("fut_live", "盤中大盤 vs 台指期（每 2 分鐘）", fut_flow.store.poll_live, "SCHED_FUT_LIVE", "45-59/2 8 * * 1-5; */2 9-13 * * 1-5"))
         if etf_report.report:
             extra.append(("report", "日報 PDF（Gemini 說明）", etf_report.report.run_daily, "SCHED_REPORT", "50 20 * * 1-5"))
         if inst_report.report:

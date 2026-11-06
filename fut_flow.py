@@ -33,6 +33,12 @@ _int = lambda s: int(str(s).replace(",", "").strip() or 0)
 # 交易價差只算台指期（外資主要部位；小台、微台是散戶指標不算）：每點 200 元
 SPREAD_PRODUCT, SPREAD_MULT = "臺股期貨", 200
 TWSE = "https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK"   # 每月每日加權指數收盤
+# 盤中：期交所行情資訊網一次回臺指現貨（TXF-S）與各月份台指期（TXF??-F），美國機房連得到
+LIVE_URL = "https://mis.taifex.com.tw/futures/api/getQuoteList"
+LIVE_BODY = {"MarketType": "0", "SymbolType": "F", "KindID": "1", "CID": "TXF", "ExpireMonth": "",
+             "RowSize": "全部", "PageNo": "", "SortColumn": "", "AscDesc": "A"}
+INTRADAY_KEEP_DAYS = 14
+TZ = dt.timezone(dt.timedelta(hours=8))
 
 
 class FutStore:
@@ -51,6 +57,13 @@ class FutStore:
         self._q("""CREATE TABLE IF NOT EXISTS taiex_close (d TEXT PRIMARY KEY, close REAL)""")
         self._q("""CREATE TABLE IF NOT EXISTS fut_oi (
             d TEXT NOT NULL, product TEXT NOT NULL, oi INTEGER, PRIMARY KEY (d, product))""")
+        # 盤中大盤 vs 台指期近月（每 2 分鐘一筆，只留近兩週）
+        self._q("""CREATE TABLE IF NOT EXISTS fut_intraday (
+            d TEXT NOT NULL, t TEXT NOT NULL, spot REAL, fut REAL, spot_ref REAL, fut_ref REAL, contract TEXT,
+            PRIMARY KEY (d, t))""")
+        # 台指期近月每日收盤（一般時段），算正逆價差＝近月收盤 − 加權指數收盤
+        self._q("""CREATE TABLE IF NOT EXISTS tx_close (d TEXT PRIMARY KEY, month TEXT, close REAL)""")
+        self._live_at = 0.0
 
     @property
     def ph(self):
@@ -301,8 +314,120 @@ class FutStore:
             except Exception as e:
                 n_oi = f"失敗：{e}"
                 logger.warning(f"[fut] 全市場未平倉抓取失敗：{e}")
+            try:
+                n_bs = self.update_basis(today)
+            except Exception as e:
+                n_bs = f"失敗：{e}"
+                logger.warning(f"[fut] 台指期近月收盤抓取失敗：{e}")
             self._cache.clear()
-            return f"寫入 {total} 筆，最新 {self.last_date()}；小台未平倉 {n_oi} 天；加權指數 {n_tx} 天"
+            return f"寫入 {total} 筆，最新 {self.last_date()}；小台未平倉 {n_oi} 天；加權指數 {n_tx} 天；台指期近月 {n_bs} 天"
+
+    # ---------- 正逆價差（每日） ----------
+    @staticmethod
+    def fetch_tx_close(start, end):
+        """台指期每日行情（期交所 futDataDown，一次約一個月）→ {日期: (近月月份, 收盤價)}；
+        只看一般時段、6 碼月份（排除週契約），取當天有收盤價的最近月份"""
+        r = requests.post(OI_URL, headers=UA, timeout=120, data={
+            "down_type": "1", "commodity_id": "TX", "commodity_id2": "",
+            "queryStartDate": start.strftime("%Y/%m/%d"), "queryEndDate": end.strftime("%Y/%m/%d")})
+        r.raise_for_status()
+        rows = list(csv.reader(io.StringIO(r.content.decode("cp950", errors="replace"))))
+        if not rows or rows[0][:2] != ["交易日期", "契約"]:
+            raise ValueError("期交所行情回應格式不符（查詢區間可能太長）")
+        h = rows[0]
+        im, ic, it = h.index("到期月份(週別)"), h.index("收盤價"), h.index("交易時段")
+        out = {}
+        for x in rows[1:]:
+            if len(x) <= max(im, ic, it) or x[it].strip() != "一般":
+                continue
+            m, c = x[im].strip(), x[ic].strip().replace(",", "")
+            if not (len(m) == 6 and m.isdigit()):
+                continue
+            try:
+                c = float(c)
+            except ValueError:
+                continue
+            d = x[0].strip().replace("/", "-")
+            if d not in out or m < out[d][0]:
+                out[d] = (m, c)
+        return out
+
+    def update_basis(self, today=None):
+        today = today or dt.datetime.now(TZ).date()
+        r = self._q("SELECT MAX(d) AS d FROM tx_close", fetch="one") or {}
+        s = dt.date.fromisoformat(r["d"]) if r.get("d") else today - dt.timedelta(days=BACKFILL_DAYS)
+        n = 0
+        while s <= today:
+            e = min(s + dt.timedelta(days=27), today)
+            for d, (m, c) in self.fetch_tx_close(s, e).items():
+                self._q("INSERT INTO tx_close (d, month, close) VALUES (?, ?, ?) "
+                        "ON CONFLICT (d) DO UPDATE SET month = EXCLUDED.month, close = EXCLUDED.close", (d, m, c))
+                n += 1
+            s = e + dt.timedelta(days=1)
+            time.sleep(1)
+        return n
+
+    def basis(self, days=120):
+        rows = self._q("SELECT t.d, t.month, t.close AS fut, x.close AS spot FROM tx_close t JOIN taiex_close x ON x.d = t.d "
+                       "ORDER BY t.d DESC LIMIT ?", (int(days),), fetch="all") or []
+        rows = rows[::-1]
+        return {"dates": [r["d"] for r in rows], "fut": [r["fut"] for r in rows], "spot": [r["spot"] for r in rows],
+                "basis": [round(r["fut"] - r["spot"], 2) for r in rows], "month": rows[-1]["month"] if rows else None}
+
+    # ---------- 盤中大盤 vs 台指期 ----------
+    @staticmethod
+    def fetch_live():
+        r = requests.post(LIVE_URL, json=LIVE_BODY, timeout=15,
+                          headers={**UA, "Referer": "https://mis.taifex.com.tw/futures/RegularSession/EquityIndices/FuturesDomestic/"})
+        r.raise_for_status()
+        q = (r.json().get("RtData") or {}).get("QuoteList") or []
+        num = lambda v: float(str(v).replace(",", "")) if v not in (None, "", "-") else None
+        spot = next((x for x in q if str(x.get("SymbolID", "")).endswith("-S")), None)
+        fut = next((x for x in q if str(x.get("SymbolID", "")).endswith("-F") and num(x.get("CLastPrice"))), None)
+        if not spot or not fut:
+            raise ValueError(f"期交所盤中行情格式不符：{str(q)[:150]}")
+        return {"d": spot.get("CDate") or fut.get("CDate"),
+                "spot": num(spot.get("CLastPrice")), "spot_ref": num(spot.get("CRefPrice")), "spot_time": spot.get("CTime", ""),
+                "fut": num(fut.get("CLastPrice")), "fut_ref": num(fut.get("CRefPrice")), "fut_time": fut.get("CTime", ""),
+                "contract": fut.get("DispCName", "")}
+
+    def poll_live(self, force=False):
+        """存一筆盤中快照（平日 08:45～13:46）；force＝不管時間窗（測試用）"""
+        now = dt.datetime.now(TZ)
+        hm = now.strftime("%H:%M")
+        if not force and (now.weekday() >= 5 or not ("08:45" <= hm <= "13:46")):
+            return "非盤中"
+        q = self.fetch_live()
+        today = now.strftime("%Y%m%d")
+        if q["d"] != today:
+            return f"期交所資料日 {q['d']} 不是今天（可能休市）"
+        spot = q["spot"] if q["spot_time"] >= "090000" else None      # 現貨 09:00 才開盤，之前是昨收
+        self._q("INSERT INTO fut_intraday (d, t, spot, fut, spot_ref, fut_ref, contract) VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (d, t) DO UPDATE SET spot = EXCLUDED.spot, fut = EXCLUDED.fut, spot_ref = EXCLUDED.spot_ref, "
+                "fut_ref = EXCLUDED.fut_ref, contract = EXCLUDED.contract",
+                (now.date().isoformat(), hm, spot, q["fut"], q["spot_ref"], q["fut_ref"], q["contract"]))
+        self._live_at = time.time()
+        self._q("DELETE FROM fut_intraday WHERE d < ?", ((now.date() - dt.timedelta(days=INTRADAY_KEEP_DAYS)).isoformat(),))
+        return f"{hm} 加權 {spot} 台指期 {q['fut']}"
+
+    def intraday(self):
+        """最近一個有盤中資料的交易日；盤中開頁時若超過 60 秒沒更新就先抓一筆"""
+        now = dt.datetime.now(TZ)
+        if (now.weekday() < 5 and "08:45" <= now.strftime("%H:%M") <= "13:46"
+                and time.time() - self._live_at > 60):
+            try:
+                self.poll_live()
+            except Exception as e:
+                logger.warning(f"[fut] 盤中行情抓取失敗：{e}")
+        r = self._q("SELECT MAX(d) AS d FROM fut_intraday", fetch="one") or {}
+        if not r.get("d"):
+            return {"date": None, "rows": []}
+        rows = self._q("SELECT t, spot, fut, spot_ref, fut_ref, contract FROM fut_intraday WHERE d = ? ORDER BY t",
+                       (r["d"],), fetch="all") or []
+        last = rows[-1]
+        return {"date": r["d"], "rows": [[x["t"], x["spot"], x["fut"]] for x in rows],
+                "spot_ref": last["spot_ref"], "fut_ref": last["fut_ref"], "contract": last["contract"],
+                "live": r["d"] == now.date().isoformat() and now.strftime("%H:%M") <= "13:46"}
 
     # ---------- 查詢 ----------
     def series(self, inst="foreign", days=120):
@@ -359,6 +484,8 @@ def init(db_config):
                 logger.info(f"[fut] 補交易口數與金額（交易價差用）：{n} 筆")
             if not (store._q("SELECT COUNT(*) AS n FROM taiex_close", fetch="one") or {}).get("n"):
                 logger.info(f"[fut] 補加權指數收盤：{store.update_taiex()} 天")
+            if not (store._q("SELECT COUNT(*) AS n FROM tx_close", fetch="one") or {}).get("n"):
+                logger.info(f"[fut] 補台指期近月收盤（正逆價差用）：{store.update_basis()} 天")
         except Exception as e:
             logger.error(f"[fut] 補資料失敗：{e}")
     threading.Thread(target=_first, daemon=True).start()
@@ -413,5 +540,19 @@ def create_router(templates):
         if inst not in INSTS:
             raise HTTPException(status_code=400, detail="inst 只能是 foreign、trust、dealer")
         return JSONResponse(await run_in_threadpool(store.spread, inst, days))
+
+    @router.get("/api/futures/intraday")
+    async def futures_intraday():
+        """盤中加權指數 vs 台指期近月（每 2 分鐘一筆）"""
+        if not store:
+            raise HTTPException(status_code=503, detail="資料庫無法使用")
+        return JSONResponse(await run_in_threadpool(store.intraday))
+
+    @router.get("/api/futures/basis")
+    async def futures_basis(days: int = Query(120, ge=20, le=750)):
+        """每日正逆價差＝台指期近月收盤 − 加權指數收盤（點）"""
+        if not store:
+            raise HTTPException(status_code=503, detail="資料庫無法使用")
+        return JSONResponse(await run_in_threadpool(store.basis, days))
 
     return router
