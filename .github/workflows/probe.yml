@@ -1,0 +1,17 @@
+name: probe
+on:
+  push:
+    branches: [probe-mood]
+    paths: ['debug/probe.py', '.github/workflows/probe.yml']
+permissions:
+  contents: write
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install requests && python debug/probe.py > debug/probe_result.txt 2>&1 || true
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add debug/probe_result.txt; git commit -m "probe result" && git push
