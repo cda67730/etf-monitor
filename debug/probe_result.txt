@@ -1,10 +1,6 @@
-title ['臺灣期貨交易所-統計資料-臺指選擇權波動率指數下載-當月臺指選擇權波動率指數']
-5
-/cht/7/vixDaily3MNew
-/cht/7/vixMin3MNew
-/cht/7/vixMinNew
-/cht/7/vixQA
-https://www.facebook.com/sharer/sharer.php?u=https://www.taifex.com.tw/cht/7/vixMinNew
-歷史 "/cht/3/dailyFXRate" /> 每日外幣參考匯率查詢</a></li> <li><a href="/cht/3/hisAppForm" /> 交易歷史資料申請</a></li> <li><a href="/cht/3/dlFutDailyMarketView" /> 資料下載專區</a></li> <li><a
-下載 ontent-Type" content="text/html; charset=utf-8" /> --> <!-- <meta http-equiv="X-UA-Compatible" content="IE=edge"> --> <title>臺灣期貨交易所-統計資料-臺指選擇權波動率指數下載-當月臺指選擇權波動率指數</title> <!-- favicon --> <link rel="shortcut icon" type="image/x-icon" href="/cht/resources/front/cht/images/favicon.ico"> <meta 
-zip </div> </div> <script type="text/javascript"> var fileAry = [ "xlsx", "xls", "pdf", "csv", "odt", "odf", "ods", "doc", "docx", "zip", "txt", "rar" ]; function isFile(link) { let index = link.lastIndexOf("\/"); let lastPath = link.substring(index + 1, link.le
+CNYES TWS:VIXTWN:INDEX 200 0 {'statusCode': 200, 'message': 'OK', 'data': {'s': 'ok', 't': [], 'o': [], 'h': [], 'l': [], 'c': [], 'v': [], 'vwap': [], 'quote': None, 'session': [
+CNYES TWS:TAIEXVIX:INDEX 200 0 {'statusCode': 200, 'message': 'OK', 'data': {'s': 'ok', 't': [], 'o': [], 'h': [], 'l': [], 'c': [], 'v': [], 'vwap': [], 'quote': None, 'session': [
+CNYES TWS:VIX:INDEX 200 0 {'statusCode': 200, 'message': 'OK', 'data': {'s': 'ok', 't': [], 'o': [], 'h': [], 'l': [], 'c': [], 'v': [], 'vwap': [], 'quote': None, 'session': [
+CNYES TWF:VIX:INDEX 200 0 {'statusCode': 200, 'message': 'OK', 'data': {'s': 'ok', 't': [], 'o': [], 'h': [], 'l': [], 'c': [], 'v': [], 'vwap': [], 'quote': None, 'session': N
+CNYES TWS:TWVIX:INDEX 200 0 {'statusCode': 200, 'message': 'OK', 'data': {'s': 'ok', 't': [], 'o': [], 'h': [], 'l': [], 'c': [], 'v': [], 'vwap': [], 'quote': None, 'session': [
+3M links []
