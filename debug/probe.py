@@ -1,14 +1,14 @@
-import requests, io, zipfile, datetime as d, time
-UA={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"}
-for day in [d.date.today(), d.date.today()-d.timedelta(days=1)]:
-    u=f"https://www.taifex.com.tw/file/taifex/Dailydownload/DailydownloadCSV/Daily_{day:%Y_%m_%d}.zip"
-    t=time.time()
-    try:
-        r=requests.get(u,headers=UA,timeout=120); print(u[-25:], r.status_code, len(r.content), round(time.time()-t,1),"s", r.content[:4])
-        if r.content[:2]==b"PK":
-            z=zipfile.ZipFile(io.BytesIO(r.content)); n=z.namelist(); print(n)
-            raw=z.read(n[0]); txt=raw.decode("cp950","replace").splitlines()
-            print(len(txt)); print("\n".join(txt[:3]))
-            tx=[l for l in txt if l.split(",")[1:2]==["TX      "] or (len(l.split(","))>1 and l.split(",")[1].strip()=="TX")]
-            print("TX lines", len(tx)); print("\n".join(tx[:3])); print("\n".join(tx[-2:]))
-    except Exception as e: print("ERR", repr(e)[:200])
+import sys, sqlite3, datetime as dt, time
+sys.path.insert(0, "debug")
+import fut_flow_new as F
+class DB:
+    db_type="sqlite"
+    def __init__(s): s.c=sqlite3.connect(":memory:",check_same_thread=False); s.c.row_factory=sqlite3.Row
+    def execute_query(s,sql,p=(),fetch="none"):
+        cur=s.c.execute(sql,p); s.c.commit()
+        if fetch=="one": r=cur.fetchone(); return dict(r) if r else None
+        if fetch=="all": return [dict(r) for r in cur.fetchall()]
+st=F.FutStore(DB())
+st._q("INSERT INTO taiex_close VALUES ('2026-11-05', 41574.72)"); st._q("INSERT INTO tx_close VALUES ('2026-11-05','202611',41882)")
+t=time.time(); n=st.backfill_intraday(dt.date(2026,11,6)); print("n",n, round(time.time()-t,1),"s")
+r=st._q("SELECT * FROM fut_intraday ORDER BY t", fetch="all"); print(r[:3]); print(r[5:8]); print(r[-3:])
