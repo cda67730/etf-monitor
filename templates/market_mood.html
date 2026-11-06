@@ -389,7 +389,18 @@
   function openBig(title, sub, spec) {
     document.getElementById('mm-modal-title').textContent = title;
     document.getElementById('mm-modal-sub').textContent = sub;
-    bigSpec = spec; range.value = '365';
+    bigSpec = spec;
+    // 只列出資料涵蓋得到的期間（例如台股 VIX 只有幾個月，就不顯示 1 年／2 年），多留一個剛好蓋過全部的選項
+    const src = spec.dataLong && spec.dataLong.length ? spec.dataLong : spec.data;
+    const span = src.length ? (Date.now() - new Date(src[0][0])) / 864e5 : 0;
+    let covered = false, def = null;
+    [...range.options].forEach(o => {
+      const show = !covered;
+      if (+o.value >= span * 0.9) covered = true;
+      o.hidden = !show; o.disabled = !show;
+      if (show && +o.value <= 365) def = o.value;
+    });
+    range.value = def || range.options[0].value;
     modal.showModal();
     drawBig();
   }
