@@ -143,12 +143,6 @@
     <div class="term-top">
       <div>
         <h1>市場情緒指標</h1>
-        <div class="stat" role="status">
-          {% if rep.spx %}<span>S&amp;P 500 <b>{{ "{:,.2f}".format(rep.spx.close) }}</b> <b class="{{ 'chg-up' if rep.spx.chg > 0 else 'chg-down' }}">{{ "%+.2f"|format(rep.spx.chg) }}%</b>（{{ rep.spx.date[5:].replace('-', '/') }}）</span><span>距一年高 <b>{{ "%.1f"|format(rep.spx.off_high) }}%</b></span>{% endif %}
-          <span class="sig-{{ rep.level.signal }} dt-only"><a href="#sells">賣出條件 <b>{{ rep.n_met }}/{{ rep.sells|length }}</b></a></span>
-          {% for t in rep.terms %}<span class="dt-only"><a href="#{{ t.key }}">{{ t.name }} <b>{{ t.red|length }}/{{ t.n_valid }}</b>{% for x in t['items'] %}<i class="pip s-{{ x.signal }}" title="{{ x.name }}：{{ x.label }}"></i>{% endfor %}</a></span>{% endfor %}
-        </div>
-        <div class="verdict">{{ rep.headline }}</div>
       </div>
     </div>
   </header>
