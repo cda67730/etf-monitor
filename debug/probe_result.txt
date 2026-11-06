@@ -1,0 +1,15 @@
+/home/runner/work/etf-monitor/etf-monitor/debug/probe.py:8: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  print("CNN",u[-12:],r.status_code,len(h),d.datetime.utcfromtimestamp(h[0]["x"]/1000).date(),d.datetime.utcfromtimestamp(h[-1]["x"]/1000).date())
+CNN ed/graphdata 200 251 2025-11-06 2026-11-05
+CNN a/2024-11-01 200 504 2024-11-01 2026-11-05
+CNN a/2020-01-01 ERR Expecting value: line 1 column 1 (char 0)
+TWVIX 202611 200 ok 4 rows
+TWVIX 202609 200 ok 20 rows
+TWVIX 202606 200 html 0 rows
+TWVIX 202601 200 html 0 rows
+TWVIX 202511 200 html 0 rows
+TWVIX 202505 200 html 0 rows
+TWVIX 202411 200 html 0 rows
+ALT https://www.taifex.com.tw/cht/7/vixMinNew 200 146052 b'<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/st'
+ALT https://www.taifex.com.tw/cht/7/vixHistory 200 402 b"<HTML  xmlns='http://www.w3.org/1999/xhtml' lang='zh-TW'><head><meta http-equiv="
+ALT https://www.taifex.com.tw/file/taifex/Dailydownload/vix/vixhistory.csv 200 402 b"<HTML  xmlns='http://www.w3.org/1999/xhtml' lang='zh-TW'><head><meta http-equiv="
