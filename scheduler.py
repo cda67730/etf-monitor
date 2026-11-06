@@ -63,6 +63,16 @@ class JobRunner:
                               "last_status": None, "last_message": None, "last_seconds": None}
         self.locks[job_id] = threading.Lock()
 
+    @staticmethod
+    def _trim():
+        """工作跑完把用不到的記憶體還給系統（glibc 不會自己還，Railway 依常駐記憶體計費）"""
+        import gc, ctypes
+        gc.collect()
+        try:
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
+        except Exception:
+            pass
+
     def run(self, job_id):
         lock = self.locks[job_id]
         st = self.state[job_id]
@@ -83,6 +93,8 @@ class JobRunner:
             st.update(running=False, last_end=_now(),
                       last_seconds=round(time.time() - t0, 1))
             lock.release()
+            if job_id != "fut_live":          # 每 2 分鐘的小工作不用每次整理
+                self._trim()
 
     def run_or_wait(self, job_id, fresh_sec=600, timeout=1200):
         """給外部同步呼叫（例如 BookReview 的 /manual-scrape）：

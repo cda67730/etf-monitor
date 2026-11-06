@@ -11,6 +11,8 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PIP_NO_CACHE_DIR=1
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+# 限制 glibc 記憶體分區（多執行緒時常駐記憶體會膨脹；Railway 依記憶體計費）
+ENV MALLOC_ARENA_MAX=2
 
 # 安裝系統依賴
 # 日報 PDF：WeasyPrint 需要 Pango，中文用思源黑體（fonts-noto-cjk）

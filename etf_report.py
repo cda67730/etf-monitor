@@ -581,6 +581,8 @@ class Report:
             html = self.render(rep, templates)
             self._pdf = {k: v for k, v in self._pdf.items() if k[:2] != (date, scope)}
             self._pdf[key] = HTML(string=html, base_url=HERE).write_pdf()
+            while len(self._pdf) > 6:                        # 只留最近 6 份 PDF 在記憶體
+                self._pdf.pop(next(iter(self._pdf)))
         return self._pdf[key]
 
     def run_daily(self):
