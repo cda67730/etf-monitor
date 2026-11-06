@@ -468,7 +468,7 @@ async def check_authentication(request: Request) -> bool:
     logger.debug(f"🔍 認證檢查: {request.url.path}, session_id: {session_id[:8] if session_id else 'None'}..., IP: {client_ip}")
     
     if not session_manager.validate_session(session_id, request):
-        logger.warning(f"❌ 認證失敗: {request.url.path}, IP: {client_ip}")
+        logger.info(f"🔒 未登入，轉登入頁: {request.url.path}, IP: {client_ip}")   # 只是沒登入（重新部署後 session 會清空），不是密碼錯
         return False
     
     logger.debug(f"✅ 認證成功: {request.url.path}, IP: {client_ip}")
