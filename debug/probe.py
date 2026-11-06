@@ -1,16 +1,14 @@
-import sys, sqlite3, datetime as dt
-sys.path.insert(0, "debug")
-import fut_flow_new as F
-class DB:
-    db_type="sqlite"
-    def __init__(s): s.c=sqlite3.connect(":memory:",check_same_thread=False); s.c.row_factory=sqlite3.Row
-    def execute_query(s,sql,p=(),fetch="none"):
-        cur=s.c.execute(sql,p); s.c.commit()
-        if fetch=="one": r=cur.fetchone(); return dict(r) if r else None
-        if fetch=="all": return [dict(r) for r in cur.fetchall()]
-st=F.FutStore(DB())
-print("live", F.FutStore.fetch_live())
-print("poll", st.poll_live(force=True))
-t=dt.date.today(); m=F.FutStore.fetch_tx_close(t-dt.timedelta(days=40), t-dt.timedelta(days=13))
-print("txclose", len(m), sorted(m.items())[:3], sorted(m.items())[-2:])
-print("basis_upd", st.update_basis(t) if False else "skip")
+import requests, io, zipfile, datetime as d, time
+UA={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"}
+for day in [d.date.today(), d.date.today()-d.timedelta(days=1)]:
+    u=f"https://www.taifex.com.tw/file/taifex/Dailydownload/DailydownloadCSV/Daily_{day:%Y_%m_%d}.zip"
+    t=time.time()
+    try:
+        r=requests.get(u,headers=UA,timeout=120); print(u[-25:], r.status_code, len(r.content), round(time.time()-t,1),"s", r.content[:4])
+        if r.content[:2]==b"PK":
+            z=zipfile.ZipFile(io.BytesIO(r.content)); n=z.namelist(); print(n)
+            raw=z.read(n[0]); txt=raw.decode("cp950","replace").splitlines()
+            print(len(txt)); print("\n".join(txt[:3]))
+            tx=[l for l in txt if l.split(",")[1:2]==["TX      "] or (len(l.split(","))>1 and l.split(",")[1].strip()=="TX")]
+            print("TX lines", len(tx)); print("\n".join(tx[:3])); print("\n".join(tx[-2:]))
+    except Exception as e: print("ERR", repr(e)[:200])
