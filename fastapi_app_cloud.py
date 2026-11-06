@@ -167,6 +167,8 @@ market_mood.init(db_config)
 # ============ 期貨籌碼（fut_inst，期交所三大法人各期貨契約）============
 import fut_flow
 fut_flow.init(db_config)
+import margin_flow
+margin_flow.init(db_config)
 if fut_flow.store:
     market_mood.EXTRA["tmf_retail"] = fut_flow.store.retail_series   # 市場情緒短期加「微台散戶淨多空」
 
@@ -206,6 +208,8 @@ async def start_scheduler():
         if fut_flow.store:
             extra.append(("fut", "期貨三大法人未平倉", fut_flow.store.update, "SCHED_FUT", "10 15,18 * * 1-5"))
             extra.append(("fut_live", "盤中大盤 vs 台指期（每 2 分鐘）", fut_flow.store.poll_live, "SCHED_FUT_LIVE", "45-59/2 8 * * 1-5; */2 9-13 * * 1-5"))
+        if margin_flow.store:
+            extra.append(("margin", "融資融券（融資現償）", margin_flow.store.update, "SCHED_MARGIN", "40 21 * * 1-5; 30 22 * * 1-5"))
         if etf_report.report:
             extra.append(("report", "日報 PDF（Gemini 說明）", etf_report.report.run_daily, "SCHED_REPORT", "50 20 * * 1-5"))
         if inst_report.report:
@@ -2358,6 +2362,7 @@ async def admin_etf_delete(request: Request, code: str):
 app.include_router(inst_flow.create_router(templates, check_authentication))
 app.include_router(market_mood.create_router(templates))
 app.include_router(fut_flow.create_router(templates))
+app.include_router(margin_flow.create_router(templates))
 
 # ============ Google AdSense：網站根目錄的 ads.txt ============
 ADSENSE_PUB = "pub-5437045809111179"
