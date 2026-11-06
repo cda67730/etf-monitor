@@ -1,10 +1,13 @@
-import requests, re
+import requests, time, datetime as d
 UA={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"}
-r=requests.get("https://www.taifex.com.tw/cht/7/vixMinNew",headers=UA,timeout=30)
-t=r.text
-print("title", re.findall(r"<title>(.*?)</title>", t, re.S)[:1])
-links=sorted(set(re.findall(r'(?:href|src|value)=["\']([^"\']*(?:vix|VIX|log2|zip|txt|csv)[^"\']*)["\']', t)))
-print(len(links)); print("\n".join(links[:80]))
-for kw in ["歷史","下載","log2data","zip"]:
-    for m in re.finditer(kw, t):
-        print(kw, re.sub(r"\s+"," ",t[max(0,m.start()-150):m.start()+150])); break
+now=int(time.time()); frm=now-800*86400
+for sym in ["TWS:VIXTWN:INDEX","TWS:TAIEXVIX:INDEX","TWS:VIX:INDEX","TWF:VIX:INDEX","TWS:TWVIX:INDEX"]:
+    u=f"https://ws.api.cnyes.com/ws/api/v1/charting/history?symbol={sym}&resolution=D&quote=1&from={now}&to={frm}"
+    try:
+        r=requests.get(u,headers=UA,timeout=30); j=r.json(); dd=(j.get("data") or {})
+        t=dd.get("t") or []; c=dd.get("c") or []
+        print("CNYES",sym,r.status_code,len(t), (d.date.fromtimestamp(min(t)),d.date.fromtimestamp(max(t)),c[:3]) if t else str(j)[:150])
+    except Exception as e: print("CNYES",sym,"ERR",str(e)[:120])
+for u in ["https://www.taifex.com.tw/cht/7/vixDaily3MNew"]:
+    r=requests.get(u,headers=UA,timeout=30); import re
+    print("3M links", sorted(set(re.findall(r'href=["\']([^"\']*(?:txt|csv|zip)[^"\']*)', r.text)))[:20])
