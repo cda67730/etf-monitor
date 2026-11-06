@@ -95,7 +95,7 @@
 - 來源：POST `https://www.taifex.com.tw/cht/3/futContractsDateDown`（queryStartDate／queryEndDate `YYYY/MM/DD`、commodityId 空白＝全部），回 CP950 CSV，一次最多查一年；免金鑰，Actions 機房連得到
 - 存 `fut_inst`（d, product, inst, net_trade, long_oi, short_oi, net_oi, net_oi_amt）；身份別原文「外資及陸資」「投信」「自營商」
 - 頁面 8 張圖（股票期貨、金融期貨、那斯達克100、道瓊、台指期、電子期貨、標普500、費城半導體）＝未平倉多空淨額（口，所有月份合計）；可切外資／投信／自營商，卡片固定顯示近 3 個月（60 個交易日，資料庫保留全部歷史不刪）；每張圖最後一天實心點、前一天空心點，旁邊標「較昨日 ±N」（`dayDiff` 外掛）；手機 2 欄小卡，點卡片放大；放大圖有期間下拉（近 3 月／半年／1 年（預設）／2 年＝60／120／250／500 個交易日，另外打 `/api/futures?days=` 並快取）
-- 排程 `fut` 平日 15:10、18:10（`SCHED_FUT`）；資料庫空的時候啟動即背景補兩年（`BACKFILL_DAYS=730`，批次寫入）；每次啟動 `backfill_older()` 檢查最早日期，不滿兩年就往前補
+- 排程 `fut` 平日 15:10、18:10（`SCHED_FUT`）；另外有人打開 `/futures` 時，平日 15:00 後且資料庫還沒有今天的資料，就背景跑一次 `update()`（`refresh_if_stale`，10 分鐘內最多一次；期交所一天只在盤後公布一次，盤中沒有新資料）；資料庫空的時候啟動即背景補兩年（`BACKFILL_DAYS=730`，批次寫入）；每次啟動 `backfill_older()` 檢查最早日期，不滿兩年就往前補
 - **外資台指期交易價差**（8 張卡片下方，跟著外資／投信／自營切換）：`fut_trade`（d, product, inst, long_trade, long_amt, short_trade, short_amt）只存臺股期貨（大台；小台、微台是散戶指標不算）的多方／空方交易口數與契約金額（千元），同一份 futContractsDateDown CSV；價差（點）＝買進均價 − 賣出均價，均價＝金額×1000 ÷（口數×200）；負值＝賣在高買在低（盤中先空後補）；另算 20 日合計；黑線是加權指數收盤（`taiex_close`，證交所 FMTQIK 每月一次，`update()` 補缺的月份）；`GET /api/futures/spread?inst=&days=`；正負方向已用 2026-10 實際資料對照節目圖確認；首次部署 `backfill_trade()` 依 fut_inst 期間重抓補齊、`update_taiex()` 補兩年
 - 公開頁，不需登入
 - 小台散戶多空比：`fut_oi`（d, product, oi）存小型臺指期貨全市場未平倉（POST `cht/3/futDataDown`，down_type=1、commodity_id=MTX，一般時段各月份未沖銷契約數加總；查詢區間超過約一個月會回 HTML，所以按 28 天分段）；`retail()`＝−(三大法人小台淨額合計)÷全市場未平倉；`update()` 順便更新，`fut_oi` 空的時候啟動即背景補 120 天

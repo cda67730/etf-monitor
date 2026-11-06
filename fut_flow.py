@@ -365,11 +365,36 @@ def init(db_config):
     return store
 
 
+_last_try = 0.0
+
+
+def refresh_if_stale():
+    """有人打開期貨頁時：平日 15:00 後、資料庫還沒有今天的資料，就在背景抓一次（10 分鐘內最多一次）。
+    期交所三大法人期貨資料一天只在盤後公布一次（約 15:00），盤中沒有可抓的新資料。"""
+    global _last_try
+    if not store or store.lock.locked():
+        return
+    now = dt.datetime.now(dt.timezone(dt.timedelta(hours=8)))
+    if now.weekday() >= 5 or now.hour < 15 or time.time() - _last_try < 600:
+        return
+    if (store.last_date() or "") >= now.date().isoformat():
+        return
+    _last_try = time.time()
+
+    def run():
+        try:
+            logger.info("[fut] 開頁觸發更新：" + str(store.update()))
+        except Exception as e:
+            logger.warning(f"[fut] 開頁觸發更新失敗：{e}")
+    threading.Thread(target=run, daemon=True).start()
+
+
 def create_router(templates):
     router = APIRouter()
 
     @router.get("/futures", response_class=HTMLResponse)
     async def futures_page(request: Request):
+        await run_in_threadpool(refresh_if_stale)
         return templates.TemplateResponse("futures.html", {"request": request, "products": PRODUCTS, "insts": INSTS})
 
     @router.get("/api/futures")
