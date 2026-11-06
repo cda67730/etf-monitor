@@ -58,9 +58,14 @@ def vix(since="2023-01-01"):
     return out
 
 
-def cnn_fear_greed():
-    """CNN 恐懼貪婪指數（近一年日資料）"""
-    j = _get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata").json()
+def cnn_fear_greed(days=760):
+    """CNN 恐懼貪婪指數（日資料）；網址後面加起始日可拿到兩年，太早（例如 2020）會回空白，失敗就退回預設的近一年"""
+    base = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+    try:
+        j = _get(f"{base}/{_iso(dt.date.today() - dt.timedelta(days=days))}").json()
+        j["fear_and_greed_historical"]["data"][0]
+    except Exception:
+        j = _get(base).json()
     seen = {}
     for p in j.get("fear_and_greed_historical", {}).get("data", []):
         day = _iso(dt.datetime.utcfromtimestamp(p["x"] / 1000).date())
