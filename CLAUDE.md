@@ -88,7 +88,7 @@
    3. 三大法人買賣超及連買
    4. 市場情緒指標
    - 最下方是「AI 籌碼焦點 10 檔」（`pick_report.py`），沒產生過就不顯示
-   - 卡片下方另有兩個小方塊：台股 VIX（折線，虛線＝30 恐慌）、微台散戶淨多空（長條，正紅負綠，附較前日），趨勢圖用 `market_mood` items 的 `chart`，`hub.html` 的 `spark` 巨集在伺服器端畫 SVG；點了到 `/market-mood`
+   - 卡片下方另有兩個小方塊：台股 VIX（折線，虛線＝30 恐慌）、微台散戶淨多空（長條，正紅負綠，附較前日），趨勢圖用 `market_mood` items 的 `chart`，`hub.html` 的 `spark` 巨集在伺服器端畫 SVG；點了直接跳到 `/market-mood#ind-tw_vix`／`#ind-tmf_retail`（該指標卡片 `id="ind-{id}"`，`:target` 加藍框；圖表畫完後 100／600 毫秒再對準一次）
 6. ✅ 市場情緒指標（`/market-mood`，首頁第四張卡片）
 
 ## 期貨籌碼（fut_flow）

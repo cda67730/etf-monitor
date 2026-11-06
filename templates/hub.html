@@ -159,13 +159,13 @@
 {% set tv = (mood['items']|selectattr('id', 'equalto', 'tw_vix')|first) if mood else none %}
 {% set tr = (mood['items']|selectattr('id', 'equalto', 'tmf_retail')|first) if mood else none %}
 <div class="hub-grid hub-tw mt-3">
-  <a class="hub-card hub-mini" href="/market-mood">
+  <a class="hub-card hub-mini" href="/market-mood#ind-tw_vix">
     <span class="hub-sub">台股 VIX</span>
     <b class="{{ 'text-danger' if tv and tv.signal == 'red' else 'text-warning' if tv and tv.signal == 'yellow' else '' }}">{{ tv.display if tv else '—' }}</b>
     <span class="hub-sub">{% if tv and tv.signal != 'gray' %}{{ tv.label }}{{ ' ' ~ tv.sub if tv.get('sub') }}{% endif %}</span>
     {{ spark(tv.chart if tv else [], refs=[(30, '恐慌')]) }}
   </a>
-  <a class="hub-card hub-mini" href="/market-mood">
+  <a class="hub-card hub-mini" href="/market-mood#ind-tmf_retail">
     <span class="hub-sub">微台散戶淨多空</span>
     <b class="{{ 'text-danger' if retail and retail.net > 0 else 'text-success' if retail and retail.net < 0 else '' }}">{{ ('淨多' if retail.net >= 0 else '淨空') ~ ' ' ~ '{:,}'.format(retail.net|abs) ~ ' 口' if retail else '—' }}</b>
     <span class="hub-sub">{% if retail and retail.chg is not none %}較前日 {{ '{:+,}'.format(retail.chg) }} 口{% endif %}</span>

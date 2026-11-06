@@ -80,6 +80,7 @@
   /* 章節 */
   .mm h2 { font-size: 1.3rem; margin: 34px 0 4px; scroll-margin-top: 64px; }
   .mm section { scroll-margin-top: 64px; }
+  .mm .ent:target { box-shadow: 0 0 0 3px rgba(52,152,219,.55); transition: box-shadow .3s; }
   .mm .h2-sub { color: var(--mute); font-size: .88rem; margin-bottom: 12px; padding-left: 12px; }
   .mm .take { font-size: 1.02rem; line-height: 1.9; color: var(--ink); padding-left: 14px; border-left: 3px solid var(--c); margin: 0 0 8px; max-width: 46em; }
 
@@ -367,6 +368,11 @@
     if (l.offsetLeft < nv.scrollLeft || l.offsetLeft + l.offsetWidth > nv.scrollLeft + nv.clientWidth) nv.scrollLeft = l.offsetLeft - 8;
   };
   addEventListener('scroll', markNav, { passive: true }); markNav();
+  // 從首頁帶 #ind-xxx 進來：圖表畫完版面會變高，等一下再對準一次
+  if (location.hash.startsWith('#ind-')) {
+    const tgt = document.getElementById(location.hash.slice(1));
+    if (tgt) [100, 600].forEach(ms => setTimeout(() => tgt.scrollIntoView({ block: 'start' }), ms));
+  }
   if (typeof Chart === 'undefined') return;
   const modal = document.getElementById('mm-modal');
   let bigChart = null, bigSpec = null;
