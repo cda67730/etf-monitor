@@ -318,9 +318,8 @@ class FutStore:
                 logger.warning(f"[fut] 全市場未平倉抓取失敗：{e}")
             if dt.datetime.now(TZ).strftime("%H:%M") >= "13:50":
                 try:
-                    have = (self._q("SELECT COUNT(*) AS n FROM fut_intraday WHERE d = ?", (today.isoformat(),), fetch="one") or {}).get("n") or 0
-                    if have < 120:
-                        self.backfill_intraday(today)
+                    if self.intraday_incomplete(today):
+                        logger.info(f"[fut] 盤後補今日走勢：{self.backfill_intraday(today)}")
                 except Exception as e:
                     logger.info(f"[fut] 盤後補今日走勢略過：{e}")
             try:
@@ -420,28 +419,27 @@ class FutStore:
         return f"{hm} 加權 {spot} 台指期 {q['fut']}"
 
     def backfill_intraday(self, day=None):
-        """盤後補當天完整走勢（網站沒在跑或剛部署時）：台指期近月用期交所每筆成交檔、加權指數用證交所每 5 秒指數，
-        每 2 分鐘取一點；已有的盤中快照不覆蓋"""
+        """盤後補當天完整走勢（網站沒在跑或剛部署時）：加權指數用證交所每 5 秒指數（收盤後就有），
+        台指期近月用期交所每筆成交檔（日盤約 16:45 才併進檔案，之前只補得到加權）；每 2 分鐘取一點，已有的值不覆蓋"""
         import zipfile
         day = day or dt.datetime.now(TZ).date()
         ds = day.strftime("%Y%m%d")
-        r = requests.get(TICK_URL.format(day), headers=UA, timeout=120)
-        r.raise_for_status()
-        if r.content[:2] != b"PK":
-            raise ValueError("期交所每筆成交檔還沒出來")
-        z = zipfile.ZipFile(io.BytesIO(r.content))
         ticks = {}                                               # 月份 → [(HHMMSS, 價)]
-        for line in z.read(z.namelist()[0]).decode("cp950", errors="replace").splitlines():
-            p = line.split(",")
-            if len(p) < 5 or p[0] != ds or p[1].strip() != "TX":
-                continue
-            m, t = p[2].strip(), p[3].strip()
-            if len(m) == 6 and m.isdigit() and "084500" <= t <= "134500":
-                ticks.setdefault(m, []).append((t, float(p[4])))
-        if not ticks:
-            raise ValueError(f"{ds} 每筆成交檔沒有台指期日盤資料")
-        month = min(ticks)
-        fut_ticks = sorted(ticks[month])
+        try:
+            r = requests.get(TICK_URL.format(day), headers=UA, timeout=120)
+            if r.status_code == 200 and r.content[:2] == b"PK":
+                z = zipfile.ZipFile(io.BytesIO(r.content))
+                for line in z.read(z.namelist()[0]).decode("cp950", errors="replace").splitlines():
+                    p = line.split(",")
+                    if len(p) < 5 or p[0] != ds or p[1].strip() != "TX":
+                        continue
+                    m, t = p[2].strip(), p[3].strip()
+                    if len(m) == 6 and m.isdigit() and "084500" <= t <= "134500":
+                        ticks.setdefault(m, []).append((t, float(p[4])))
+        except Exception as e:
+            logger.info(f"[fut] 每筆成交檔讀取失敗：{e}")
+        month = min(ticks) if ticks else None
+        fut_ticks = sorted(ticks[month]) if month else []
         j = requests.get(MI5_URL, params={"response": "json", "date": ds}, headers=UA, timeout=30).json()
         spot_at = {}
         for row in j.get("data") or []:
@@ -459,20 +457,29 @@ class FutStore:
             t += dt.timedelta(minutes=2)
         if slots[-1] != "13:45":
             slots.append("13:45")
+        if not fut_ticks and not spot_at:
+            raise ValueError(f"{ds} 盤後資料還沒出來")
+        contract = f"臺指期 {month[:4]}/{month[4:]}" if month else None
         n, i, last = 0, 0, None
         for hm in slots:
             lim = hm.replace(":", "") + "59"
             while i < len(fut_ticks) and fut_ticks[i][0] <= lim:
                 last = fut_ticks[i][1]
                 i += 1
-            if last is None:
-                continue
             spot = spot_at.get(hm) if "09:00" <= hm <= "13:30" else None
+            if last is None and spot is None:
+                continue
             self._q("INSERT INTO fut_intraday (d, t, spot, fut, spot_ref, fut_ref, contract) VALUES (?, ?, ?, ?, ?, ?, ?) "
-                    "ON CONFLICT (d, t) DO NOTHING",
-                    (day.isoformat(), hm, spot, last, spot_ref, fut_ref, f"臺指期 {month[:4]}/{month[4:]}"))
+                    "ON CONFLICT (d, t) DO UPDATE SET spot = COALESCE(fut_intraday.spot, EXCLUDED.spot), "
+                    "fut = COALESCE(fut_intraday.fut, EXCLUDED.fut), spot_ref = COALESCE(fut_intraday.spot_ref, EXCLUDED.spot_ref), "
+                    "fut_ref = COALESCE(fut_intraday.fut_ref, EXCLUDED.fut_ref), contract = COALESCE(fut_intraday.contract, EXCLUDED.contract)",
+                    (day.isoformat(), hm, spot, last, spot_ref, fut_ref, contract))
             n += 1
-        return n
+        return f"{n} 點（加權 {len(spot_at)}、台指期{'成交 ' + str(len(fut_ticks)) + ' 筆' if fut_ticks else '每筆成交檔還沒出來'}）"
+
+    def intraday_incomplete(self, day):
+        r = self._q("SELECT COUNT(spot) AS s, COUNT(fut) AS f FROM fut_intraday WHERE d = ?", (day.isoformat(),), fetch="one") or {}
+        return (r.get("s") or 0) < 100 or (r.get("f") or 0) < 120
 
     def intraday(self):
         """最近一個有盤中資料的交易日；盤中開頁時若超過 60 秒沒更新就先抓一筆；
@@ -485,8 +492,7 @@ class FutStore:
             except Exception as e:
                 logger.warning(f"[fut] 盤中行情抓取失敗：{e}")
         if now.weekday() < 5 and now.strftime("%H:%M") >= "13:50" and time.time() - getattr(self, "_bf_at", 0) > 600:
-            have = (self._q("SELECT COUNT(*) AS n FROM fut_intraday WHERE d = ?", (now.date().isoformat(),), fetch="one") or {}).get("n") or 0
-            if have < 120:
+            if self.intraday_incomplete(now.date()):
                 self._bf_at = time.time()
                 try:
                     logger.info(f"[fut] 盤後補今日走勢：{self.backfill_intraday(now.date())} 點")
