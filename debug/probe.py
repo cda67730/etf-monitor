@@ -1,15 +1,18 @@
-import requests, json
-UA={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"}
-d="20261105"
-r=requests.get("https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN",params={"date":d,"selectType":"ALL","response":"json"},headers=UA,timeout=30)
-j=r.json(); print("TWSE", r.status_code, j.get("stat"), list(j.keys()))
-for t in j.get("tables",[]):
-    print("TABLE", t.get("title"), t.get("fields"), len(t.get("data") or []), (t.get("data") or [])[:3], t.get("groups"))
-for u,p in [("https://www.tpex.org.tw/www/zh-tw/margin/balance",{"date":"2026/11/05","response":"json"}),
-            ("https://www.tpex.org.tw/web/stock/margin_trading/margin_balance/margin_bal_result.php",{"l":"zh-tw","o":"json","d":"115/11/05"})]:
-    try:
-        r=requests.get(u,params=p,headers=UA,timeout=30); j=r.json(); print("TPEX",u[-40:],r.status_code,list(j.keys()))
-        for t in (j.get("tables") or [])[:3]:
-            print(" T",t.get("title"),t.get("fields"),len(t.get("data") or []),(t.get("data") or [])[:2], t.get("summary"))
-        if "aaData" in j: print(" aa", j.get("iTotalRecords"), j["aaData"][:2], j.get("tfootData_one"), j.get("tfootData_two"))
-    except Exception as e: print("TPEX ERR",u[-40:],repr(e)[:150])
+import sys, sqlite3, datetime as dt, contextlib
+sys.path.insert(0, "debug")
+import margin_new as M
+class DB:
+    db_type="sqlite"
+    def __init__(s): s.c=sqlite3.connect(":memory:",check_same_thread=False); s.c.row_factory=sqlite3.Row
+    def execute_query(s,sql,p=(),fetch="none"):
+        cur=s.c.execute(sql,p); s.c.commit()
+        if fetch=="one": r=cur.fetchone(); return dict(r) if r else None
+        if fetch=="all": return [dict(r) for r in cur.fetchall()]
+st=M.MarginStore(DB())
+print(st.update(backfill_days=40))
+t=st.totals(60); print("totals", len(t["dates"]), t["dates"][-3:], t["repay"][-3:], t["amt"][-3:], t["bal_amt"][-1], t["partial"])
+for p in (1,5):
+    r=st.ranking(None,p); print("rank",p,r["date"],r["start"],len(r["down"]),len(r["repay"]))
+    print(" down", [(x["id"],x["name"],x["chg"],x["chg_pct"],x["repay"]) for x in r["down"][:4]])
+    print(" rep", [(x["id"],x["name"],x["repay"],x["ratio"],x["repay_pct"]) for x in r["repay"][:4]])
+print("skip", st._q("SELECT * FROM margin_skip", fetch="all"))
