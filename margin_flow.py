@@ -173,9 +173,10 @@ class MarginStore:
         rows = self._q("SELECT d, SUM(repay) AS repay, SUM(repay_amt) AS amt, SUM(bal) AS bal, SUM(bal_amt) AS bal_amt, COUNT(*) AS n "
                        "FROM margin_total GROUP BY d ORDER BY d DESC LIMIT ?", (int(days),), fetch="all") or []
         rows = rows[::-1]
+        # PostgreSQL 的 SUM(BIGINT) 回 Decimal，先轉 float 才能和浮點數運算
         return {"dates": [r["d"] for r in rows], "repay": [int(r["repay"] or 0) for r in rows],
-                "amt": [round((r["amt"] or 0) / 1e5, 2) for r in rows],
-                "bal_amt": [round((r["bal_amt"] or 0) / 1e5, 1) for r in rows],
+                "amt": [round(float(r["amt"] or 0) / 1e5, 2) for r in rows],
+                "bal_amt": [round(float(r["bal_amt"] or 0) / 1e5, 1) for r in rows],
                 "partial": [r["d"] for r in rows if r["n"] < 2]}
 
     def ranking(self, date=None, period=1, top=150):
@@ -196,19 +197,19 @@ class MarginStore:
         if prior:
             for r in self._q("SELECT stock_id, SUM(repay) AS s FROM margin_daily WHERE d >= ? AND d <= ? GROUP BY stock_id",
                              (prior[-1], prior[0]), fetch="all") or []:
-                base[r["stock_id"]] = (r["s"] or 0) / len(prior)
+                base[r["stock_id"]] = float(r["s"] or 0) / len(prior)
         out = []
         for r in rows:
-            bal, prev = r["bal"], r["prev"]
+            bal, prev = (int(r["bal"]) if r["bal"] is not None else None), (int(r["prev"]) if r["prev"] is not None else None)
             if bal is None or prev is None:
                 continue
             chg = bal - prev
-            avg = (r["repay"] or 0) / period
+            avg = float(r["repay"] or 0) / period
             b = base.get(r["stock_id"], 0)
             out.append({"id": r["stock_id"], "name": r["name"], "market": r["market"], "bal": bal, "prev": prev, "chg": chg,
-                        "chg_pct": round(chg / prev * 100, 2) if prev else None, "repay": r["repay"] or 0,
-                        "repay_pct": round((r["repay"] or 0) / prev * 100, 2) if prev else None,
-                        "ratio": round(avg / max(b, RATIO_FLOOR), 1), "buy": r["buy"] or 0, "sell": r["sell"] or 0})
+                        "chg_pct": round(chg / prev * 100, 2) if prev else None, "repay": int(r["repay"] or 0),
+                        "repay_pct": round(int(r["repay"] or 0) / prev * 100, 2) if prev else None,
+                        "ratio": round(avg / max(b, RATIO_FLOOR), 1), "buy": int(r["buy"] or 0), "sell": int(r["sell"] or 0)})
         # 融資大減：至少減 100 張，依減幅（%）排；現償大增：期間現償至少 50 張，依倍數排（沒有基期的放後面）
         down = sorted([x for x in out if x["chg"] <= -100 and x["chg_pct"] is not None], key=lambda x: x["chg_pct"])[:top]
         rep = sorted([x for x in out if x["repay"] >= 50 * period ** 0.5], key=lambda x: (-x["ratio"], -x["repay"]))[:top]

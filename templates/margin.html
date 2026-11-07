@@ -86,7 +86,11 @@
   let unit = 'amt', tot = null, chart = null;
   const daysSel = document.getElementById('c-days');
   async function loadTotals() {
-    try { tot = await (await fetch('/api/margin/totals?days=' + daysSel.value)).json(); } catch (e) { return; }
+    try {
+      const r = await fetch('/api/margin/totals?days=' + daysSel.value);
+      if (!r.ok) throw new Error(r.status);
+      tot = await r.json();
+    } catch (e) { document.getElementById('c-m').textContent = '資料讀取失敗，請稍後重新整理'; return; }
     draw();
   }
   function draw() {
@@ -123,7 +127,11 @@
   const pSel = document.getElementById('r-period'), dSel = document.getElementById('r-date');
   async function loadRank() {
     const q = new URLSearchParams({ period: pSel.value }); if (dSel.value) q.set('date', dSel.value);
-    try { rk = await (await fetch('/api/margin/ranking?' + q)).json(); } catch (e) { return; }
+    try {
+      const r = await fetch('/api/margin/ranking?' + q);
+      if (!r.ok) throw new Error(r.status);
+      rk = await r.json();
+    } catch (e) { const em = document.getElementById('r-empty'); em.hidden = false; em.textContent = '資料讀取失敗，請稍後重新整理'; return; }
     sortK = null; render();
   }
   function render() {
