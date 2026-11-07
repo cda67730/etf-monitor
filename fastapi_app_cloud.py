@@ -210,6 +210,8 @@ async def start_scheduler():
             extra.append(("fut_live", "盤中大盤 vs 台指期（每 2 分鐘）", fut_flow.store.poll_live, "SCHED_FUT_LIVE", "45-59/2 8 * * 1-5; */2 9-13 * * 1-5"))
         if margin_flow.store:
             extra.append(("margin", "融資融券（融資現償）", margin_flow.store.update, "SCHED_MARGIN", "40 21 * * 1-5; 30 22 * * 1-5"))
+        # 每 30 分鐘整理一次記憶體：啟動時的背景補資料、網頁請求用過的記憶體不經過排程，靠這個還給系統（Railway 依記憶體計費）
+        extra.append(("trim", "整理記憶體", lambda: "ok", "SCHED_TRIM", "*/30 * * * *"))
         if etf_report.report:
             extra.append(("report", "日報 PDF（Gemini 說明）", etf_report.report.run_daily, "SCHED_REPORT", "50 20 * * 1-5"))
         if inst_report.report:

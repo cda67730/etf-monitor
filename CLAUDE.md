@@ -9,7 +9,7 @@
 - 登入：單一密碼 `WEB_PASSWORD`（未設＝隨機值，無法登入；程式裡沒有預設密碼），session 存記憶體（重新部署後需重新登入）；密碼與 token 用 `hmac.compare_digest` 比對
 - **2026-10 起只有管理功能需要登入**：`/admin/etfs`、`/api/admin/*`、`/manual-scrape*`、`/test-scrape`、`/api/scheduler/*`、`/diagnostic`、`/debug/db-status`；其他瀏覽頁全部公開。登入後依 `next` 參數返回（預設 `/admin/etfs`）
 - 排程呼叫用 token：`SCHEDULER_TOKEN`（`/trigger-scrape*` 端點以 `Authorization: Bearer <token>` 驗證；未設＝隨機值，等於停用）
-- 費用：Hobby 方案（月費 5 美元抵 5 美元用量）；2026-11 實測 9 成以上是記憶體（兩個服務平均約 0.7GB），流量／CPU 幾乎不計；省記憶體：Dockerfile `MALLOC_ARENA_MAX=2`、排程工作跑完 `gc.collect()`＋`malloc_trim(0)`（`fut_live` 除外）、PDF 快取最多 6 份
+- 費用：Hobby 方案（月費 5 美元抵 5 美元用量）；2026-11 實測 9 成以上是記憶體（兩個服務平均約 0.7GB），流量／CPU 幾乎不計；省記憶體：Dockerfile `MALLOC_ARENA_MAX=2`、排程工作跑完 `gc.collect()`＋`malloc_trim(0)`（`fut_live` 除外）、另有 `trim` 工作每 30 分鐘整理一次（啟動時背景補資料、網頁請求用過的記憶體也能還回去）、PDF 快取最多 6 份
 - ⚠ 每次 push 到 main 都會觸發 Railway 重新部署 → 不要讓排程每天 commit 資料回 repo
 
 ## 主要檔案

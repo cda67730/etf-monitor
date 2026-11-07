@@ -260,6 +260,8 @@ def init(db_config):
             if not store.last_date():
                 logger.info(f"[margin] 首次補資料：{store.update()}")
             logger.info(f"[margin] {store.backfill_history()}")
+            from scheduler import JobRunner
+            JobRunner._trim()
         except Exception as e:
             logger.error(f"[margin] 首次補資料失敗：{e}")
     threading.Thread(target=bg, daemon=True).start()
