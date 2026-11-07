@@ -38,15 +38,15 @@
 
   <section class="panel" aria-labelledby="c-t">
     <div class="sec-head">
-      <div><h2 id="c-t">每日現償與累加</h2><div class="sub">上市＋上櫃，長條＝每日融資現金償還，折線＝期間累加</div></div>
+      <div><h2 id="c-t">每日融資現償</h2><div class="sub">上市＋上櫃所有股票當天的現償加總，虛線＝期間日均</div></div>
       <div class="ctl">
         <div class="seg" role="group" aria-label="單位"><button type="button" data-u="amt" class="on">金額</button><button type="button" data-u="repay">張數</button></div>
         <select class="sel" id="c-days" aria-label="期間"><option value="20">近 1 月</option><option value="60" selected>近 3 月</option><option value="120">近半年</option><option value="250">近 1 年</option><option value="500">近 2 年</option><option value="1500">全部（2024 起）</option></select>
       </div>
     </div>
     <div class="meta" id="c-m"></div>
-    <div class="cv"><canvas id="c-c" aria-label="每日融資現償與累加"></canvas></div>
-    <p class="note">融資現償＝融資戶拿現金還款、了結融資（不是賣股還款），金額越大代表越多人主動退場或降低槓桿；連續放大常出現在急跌後的斷頭潮或籌碼沉澱期。累加從期間第一天開始算。資料來源：臺灣證券交易所、證券櫃檯買賣中心，每個交易日約 21:00 後更新。</p>
+    <div class="cv"><canvas id="c-c" aria-label="每日融資現償"></canvas></div>
+    <p class="note">融資現償＝融資戶拿現金還款、了結融資（不是賣股還款），金額越大代表越多人主動退場或降低槓桿；連續放大常出現在急跌後的斷頭潮或籌碼沉澱期。資料來源：臺灣證券交易所、證券櫃檯買賣中心，每個交易日約 21:00 後更新。</p>
   </section>
 
   <section class="panel" aria-labelledby="r-t">
@@ -97,24 +97,24 @@
     const m = document.getElementById('c-m');
     if (!tot || !tot.dates.length) { m.textContent = '資料補齊中（第一次部署會在背景補一年資料），稍後再看'; return; }
     const v = tot[unit], u = unit === 'amt' ? '億元' : '張', dp = unit === 'amt' ? 2 : 0;
-    let s = 0; const cum = v.map(x => (s += x, Math.round(s * 100) / 100));
     const n = v.length - 1, avg = v.reduce((a, b) => a + b, 0) / v.length;
+    const pv = n > 0 ? v[n - 1] : null;
     m.innerHTML = `<span>${md(tot.dates[n])} 現償 <b>${fmt(v[n], dp)}</b> ${u}</span>` +
-      `<span>期間累加 <b>${fmt(cum[n], dp)}</b> ${u}</span><span>日均 <b>${fmt(avg, dp)}</b> ${u}</span>` +
+      (pv != null ? `<span>前一日 <b>${fmt(pv, dp)}</b> ${u}</span>` : '') +
+      `<span>期間日均 <b>${fmt(avg, dp)}</b> ${u}</span><span>當日是日均的 <b>${fmt(v[n] / avg, 1)}</b> 倍</span>` +
       `<span>融資餘額 <b>${fmt(tot.bal_amt[n], 0)}</b> 億元</span>`;
     document.getElementById('hd-stat').innerHTML = `資料日 <b>${tot.dates[n].replace(/-/g, '/')}</b> ・ 現償 <b>${fmt(tot.amt[n], 2)}</b> 億元／<b>${fmt(tot.repay[n])}</b> 張`;
     if (chart) chart.destroy();
     chart = new Chart(document.getElementById('c-c'), {
       data: { labels: tot.dates.map(md), datasets: [
         { type: 'bar', label: `每日現償（${u}）`, data: v, backgroundColor: v.map(x => x >= avg * 2 ? RED : 'rgba(45,106,168,.55)'), yAxisID: 'y', order: 2 },
-        { type: 'line', label: `累加（${u}）`, data: cum, borderColor: '#e67e22', borderWidth: 2, pointRadius: 0, tension: .1, yAxisID: 'y1', order: 1 },
+        { type: 'line', label: `期間日均（${u}）`, data: v.map(() => Math.round(avg * 100) / 100), borderColor: '#e67e22', borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0, yAxisID: 'y', order: 1 },
       ] },
       options: { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
         plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } },
           tooltip: { callbacks: { label: c => `${c.dataset.label}：${fmt(c.raw, dp)}` } } },
         scales: { x: { ticks: { maxTicksLimit: 8, font: { size: 10 } }, grid: { display: false } },
-                  y: { position: 'left', ticks: { font: { size: 10 } }, title: { display: true, text: '每日', font: { size: 10 } } },
-                  y1: { position: 'right', grid: { display: false }, ticks: { font: { size: 10 } }, title: { display: true, text: '累加', font: { size: 10 } } } } },
+                  y: { ticks: { font: { size: 10 } }, title: { display: true, text: u, font: { size: 10 } } } } },
     });
   }
   document.querySelectorAll('.seg button[data-u]').forEach(b => b.addEventListener('click', () => {
