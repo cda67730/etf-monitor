@@ -26,6 +26,7 @@ UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.3
 TWSE = "https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN"
 TPEX = "https://www.tpex.org.tw/www/zh-tw/margin/balance"
 BACKFILL_DAYS = 400          # 第一次啟動補約一年多（日曆天）
+HISTORY_START = dt.date(2024, 1, 1)   # 歷史資料往前補到這天（啟動時背景檢查，缺的才補）
 PUBLISH_HOUR = 21            # 21:00 後才試抓當天
 RATIO_FLOOR = 10             # 現償倍數的分母（前 20 日日均現償）至少以 10 張計，避免平常幾乎沒現償的冷門股倍數爆表
 
@@ -159,6 +160,31 @@ class MarginStore:
         finally:
             self.lock.release()
 
+    def backfill_history(self, since=HISTORY_START):
+        """把最早一天之前、到 since 為止缺的交易日補齊（只補一次，之後最早日期就到了）"""
+        r = self._q("SELECT MIN(d) AS d FROM margin_total", fetch="one") or {}
+        if not r.get("d") or dt.date.fromisoformat(r["d"]) <= since + dt.timedelta(days=7):
+            return "歷史資料已齊"
+        if not self.lock.acquire(blocking=False):
+            return "另一個更新正在執行"
+        try:
+            end = dt.date.fromisoformat(r["d"]) - dt.timedelta(days=1)
+            skip = {x["d"] for x in self._q("SELECT d FROM margin_skip WHERE d >= ? AND d <= ?",
+                                             (since.isoformat(), end.isoformat()), fetch="all") or []}
+            n, day = 0, since
+            while day <= end:
+                ds = day.isoformat()
+                if day.weekday() < 5 and ds not in skip:
+                    st = self.fetch_day(day)
+                    if st == "ok":
+                        n += 1
+                    elif st == "empty":
+                        self._q("INSERT INTO margin_skip (d) VALUES (?) ON CONFLICT (d) DO NOTHING", (ds,))
+                day += dt.timedelta(days=1)
+            return f"歷史補到 {since}：{n} 天"
+        finally:
+            self.lock.release()
+
     def last_date(self):
         r = self._q("SELECT MAX(d) AS d FROM margin_total", fetch="one") or {}
         return r.get("d")
@@ -233,6 +259,7 @@ def init(db_config):
         try:
             if not store.last_date():
                 logger.info(f"[margin] 首次補資料：{store.update()}")
+            logger.info(f"[margin] {store.backfill_history()}")
         except Exception as e:
             logger.error(f"[margin] 首次補資料失敗：{e}")
     threading.Thread(target=bg, daemon=True).start()
@@ -253,7 +280,7 @@ def create_router(templates):
         return templates.TemplateResponse("margin.html", {"request": request, "dates": dates})
 
     @router.get("/api/margin/totals")
-    async def margin_totals(days: int = Query(120, ge=5, le=750)):
+    async def margin_totals(days: int = Query(120, ge=5, le=1500)):
         return JSONResponse(await run_in_threadpool(need().totals, days))
 
     @router.get("/api/margin/ranking")
