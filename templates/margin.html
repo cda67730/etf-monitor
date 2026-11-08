@@ -24,6 +24,21 @@
   .mg .tbl th.sorted { color: var(--ink); }
   .up { color: var(--up); } .down { color: var(--down); }
   @media (max-width: 640px) { .mg .tbl .opt { display: none; } }
+  .mg .cv.zoomable { cursor: zoom-in; }
+  .mg .zbtn { border: 1px solid var(--rule); background: var(--bg); border-radius: 6px; padding: 3px 10px; font-size: .84rem; color: var(--body); cursor: pointer; }
+  .mg .tbl th[data-k]::after { content: ' ↕'; color: var(--mute); font-size: .75em; }
+  .mg .tbl th.sorted.asc::after { content: ' ▲'; color: var(--ink); }
+  .mg .tbl th.sorted.desc::after { content: ' ▼'; color: var(--ink); }
+  .fdlg { border: 0; border-radius: 12px; padding: 0; width: min(1100px, 96vw); max-height: 92vh; box-shadow: 0 20px 60px rgba(15, 27, 45, .35); }
+  .fdlg::backdrop { background: rgba(15, 27, 45, .55); }
+  .fdlg .in { padding: 14px 18px 16px; }
+  .fdlg .hd { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .fdlg h3 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--ink); }
+  .fdlg .hd-r { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .fdlg .x { border: 0; background: none; font-size: 1.4rem; line-height: 1; color: var(--mute); cursor: pointer; padding: 2px 6px; }
+  .fdlg .meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .84rem; color: var(--body); margin: 6px 0 8px; }
+  .fdlg .meta b { font-family: var(--num); font-weight: 600; color: var(--ink); }
+  .fdlg .cv { position: relative; height: min(62vh, 520px); }
 </style>
 
 <article class="ed mg">
@@ -41,11 +56,12 @@
       <div><h2 id="c-t">每日融資現償</h2><div class="sub">上市＋上櫃所有股票當天的現償加總，虛線＝期間日均</div></div>
       <div class="ctl">
         <div class="seg" role="group" aria-label="單位"><button type="button" data-u="amt" class="on">金額</button><button type="button" data-u="repay">張數</button></div>
+        <button type="button" class="zbtn" id="c-zoom" aria-label="放大圖表">⤢ 放大</button>
         <select class="sel" id="c-days" aria-label="期間"><option value="20">近 1 月</option><option value="60" selected>近 3 月</option><option value="120">近半年</option><option value="250">近 1 年</option><option value="500">近 2 年</option><option value="1500">全部（2024 起）</option></select>
       </div>
     </div>
     <div class="meta" id="c-m"></div>
-    <div class="cv"><canvas id="c-c" aria-label="每日融資現償"></canvas></div>
+    <div class="cv zoomable" id="c-box" title="點圖放大"><canvas id="c-c" aria-label="每日融資現償"></canvas></div>
     <p class="note">融資現償＝融資戶拿現金還款、了結融資（不是賣股還款），金額越大代表越多人主動退場或降低槓桿；連續放大常出現在急跌後的斷頭潮或籌碼沉澱期。資料來源：臺灣證券交易所、證券櫃檯買賣中心，每個交易日約 21:00 後更新。</p>
   </section>
 
@@ -61,7 +77,7 @@
     <div class="tbl-wrap">
       <table class="tbl" id="r-tbl">
         <thead><tr>
-          <th>股票</th><th data-k="chg">融資增減</th><th data-k="chg_pct">增減%</th><th data-k="repay">現償</th>
+          <th data-k="id">股票</th><th data-k="chg">融資增減</th><th data-k="chg_pct">增減%</th><th data-k="repay">現償</th>
           <th data-k="repay_pct" class="opt">現償占餘額%</th><th data-k="ratio">現償倍數</th><th data-k="bal" class="opt">融資餘額</th>
         </tr></thead>
         <tbody></tbody>
@@ -69,9 +85,21 @@
     </div>
     <div class="empty" id="r-empty" hidden></div>
     <p class="note">單位：張。<b>融資大減</b>＝期間融資餘額減少至少 100 張，依減幅排序；<b>現償大增</b>＝期間現償合計夠多（當日至少 50 張），依「現償倍數」排序。
-      現償倍數＝期間每日平均現償 ÷ 期間之前 20 個交易日的每日平均現償（平常太少的以 10 張計，避免冷門股倍數爆表），例如 5 倍代表現償量是平常的 5 倍。只列普通股（含 KY），不含 ETF。點表頭可排序。</p>
+      現償倍數＝期間每日平均現償 ÷ 期間之前 20 個交易日的每日平均現償（平常太少的以 10 張計，避免冷門股倍數爆表），例如 5 倍代表現償量是平常的 5 倍。只列普通股（含 KY），不含 ETF。點表頭可排序（再點一次反向，▲ 由小到大、▼ 由大到小）。</p>
   </section>
 </article>
+
+<dialog class="fdlg mg" id="dlg" aria-labelledby="dlg-t">
+  <div class="in">
+    <div class="hd"><h3 id="dlg-t" tabindex="-1" autofocus style="outline:none">每日融資現償</h3>
+      <div class="hd-r">
+        <div class="seg" role="group" aria-label="單位"><button type="button" data-zu="amt" class="on">金額</button><button type="button" data-zu="repay">張數</button></div>
+        <select class="sel" id="dlg-days" aria-label="期間"><option value="20">近 1 月</option><option value="60">近 3 月</option><option value="120">近半年</option><option value="250" selected>近 1 年</option><option value="500">近 2 年</option><option value="1500">全部（2024 起）</option></select>
+        <button type="button" class="x" aria-label="關閉">×</button></div></div>
+    <div class="meta" id="dlg-m"></div>
+    <div class="cv"><canvas id="dlg-c" aria-label="每日融資現償（放大）"></canvas></div>
+  </div>
+</dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
@@ -82,48 +110,86 @@
   const cls = n => n > 0 ? 'up' : n < 0 ? 'down' : '';
   const md = d => d.slice(5).replace('-', '/');
 
-  // ── 每日現償與累加 ──
-  let unit = 'amt', tot = null, chart = null;
-  const daysSel = document.getElementById('c-days');
-  async function loadTotals() {
-    try {
-      const r = await fetch('/api/margin/totals?days=' + daysSel.value);
-      if (!r.ok) throw new Error(r.status);
-      tot = await r.json();
-    } catch (e) { document.getElementById('c-m').textContent = '資料讀取失敗，請稍後重新整理'; return; }
-    draw();
+  // ── 每日融資現償（卡片＋放大） ──
+  const cache = {};
+  async function getTotals(days) {
+    if (cache[days]) return cache[days];
+    const r = await fetch('/api/margin/totals?days=' + days);
+    if (!r.ok) throw new Error(r.status);
+    return (cache[days] = await r.json());
   }
-  function draw() {
-    const m = document.getElementById('c-m');
-    if (!tot || !tot.dates.length) { m.textContent = '資料補齊中（第一次部署會在背景補一年資料），稍後再看'; return; }
+  function paint(canvas, metaEl, tot, unit, old, big) {
+    if (old) old.destroy();
+    if (!tot || !tot.dates.length) { metaEl.textContent = '資料補齊中（第一次部署會在背景補資料），稍後再看'; return null; }
     const v = tot[unit], u = unit === 'amt' ? '億元' : '張', dp = unit === 'amt' ? 2 : 0;
     const n = v.length - 1, avg = v.reduce((a, b) => a + b, 0) / v.length;
-    const pv = n > 0 ? v[n - 1] : null;
-    m.innerHTML = `<span>${md(tot.dates[n])} 現償 <b>${fmt(v[n], dp)}</b> ${u}</span>` +
+    const pv = n > 0 ? v[n - 1] : null, mx = Math.max(...v), mi = v.indexOf(mx);
+    metaEl.innerHTML = `<span>${md(tot.dates[n])} 現償 <b>${fmt(v[n], dp)}</b> ${u}</span>` +
       (pv != null ? `<span>前一日 <b>${fmt(pv, dp)}</b> ${u}</span>` : '') +
       `<span>期間日均 <b>${fmt(avg, dp)}</b> ${u}</span><span>當日是日均的 <b>${fmt(v[n] / avg, 1)}</b> 倍</span>` +
+      (big ? `<span>期間最高 <b>${fmt(mx, dp)}</b> ${u}（${tot.dates[mi].replace(/-/g, '/')}）</span>` : '') +
       `<span>融資餘額 <b>${fmt(tot.bal_amt[n], 0)}</b> 億元</span>`;
-    document.getElementById('hd-stat').innerHTML = `資料日 <b>${tot.dates[n].replace(/-/g, '/')}</b> ・ 現償 <b>${fmt(tot.amt[n], 2)}</b> 億元／<b>${fmt(tot.repay[n])}</b> 張`;
-    if (chart) chart.destroy();
-    chart = new Chart(document.getElementById('c-c'), {
-      data: { labels: tot.dates.map(md), datasets: [
-        { type: 'bar', label: `每日現償（${u}）`, data: v, backgroundColor: v.map(x => x >= avg * 2 ? RED : 'rgba(45,106,168,.55)'), yAxisID: 'y', order: 2 },
-        { type: 'line', label: `期間日均（${u}）`, data: v.map(() => Math.round(avg * 100) / 100), borderColor: '#e67e22', borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0, yAxisID: 'y', order: 1 },
+    const long = tot.dates.length > 300;
+    return new Chart(canvas, {
+      data: { labels: tot.dates.map(d => long ? d.slice(2, 7).replace('-', '/') + '/' + d.slice(8) : md(d)), datasets: [
+        { type: 'bar', label: `每日現償（${u}）`, data: v, backgroundColor: v.map(x => x >= avg * 2 ? RED : 'rgba(45,106,168,.55)'), order: 2 },
+        { type: 'line', label: `期間日均（${u}）`, data: v.map(() => Math.round(avg * 100) / 100), borderColor: '#e67e22', borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0, order: 1 },
       ] },
       options: { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
         plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } },
-          tooltip: { callbacks: { label: c => `${c.dataset.label}：${fmt(c.raw, dp)}` } } },
-        scales: { x: { ticks: { maxTicksLimit: 8, font: { size: 10 } }, grid: { display: false } },
+          tooltip: { callbacks: { title: it => tot.dates[it[0].dataIndex].replace(/-/g, '/'), label: c => `${c.dataset.label}：${fmt(c.raw, dp)}` } } },
+        scales: { x: { ticks: { maxTicksLimit: big ? 14 : 8, font: { size: 10 } }, grid: { display: false } },
                   y: { ticks: { font: { size: 10 } }, title: { display: true, text: u, font: { size: 10 } } } } },
     });
+  }
+
+  let unit = 'amt', tot = null, chart = null;
+  const daysSel = document.getElementById('c-days');
+  async function loadTotals() {
+    try { tot = await getTotals(daysSel.value); }
+    catch (e) { document.getElementById('c-m').textContent = '資料讀取失敗，請稍後重新整理'; return; }
+    draw();
+  }
+  function draw() {
+    chart = paint(document.getElementById('c-c'), document.getElementById('c-m'), tot, unit, chart, false);
+    if (tot && tot.dates.length) {
+      const n = tot.dates.length - 1;
+      document.getElementById('hd-stat').innerHTML = `資料日 <b>${tot.dates[n].replace(/-/g, '/')}</b> ・ 現償 <b>${fmt(tot.amt[n], 2)}</b> 億元／<b>${fmt(tot.repay[n])}</b> 張`;
+    }
   }
   document.querySelectorAll('.seg button[data-u]').forEach(b => b.addEventListener('click', () => {
     unit = b.dataset.u; document.querySelectorAll('.seg button[data-u]').forEach(x => x.classList.toggle('on', x === b)); draw();
   }));
   daysSel.addEventListener('change', loadTotals);
 
+  // 放大：另開對話框，有自己的單位與期間
+  const dlg = document.getElementById('dlg'), dDays = document.getElementById('dlg-days');
+  let zUnit = 'amt', zChart = null;
+  async function drawBig() {
+    let t;
+    try { t = await getTotals(dDays.value); } catch (e) { document.getElementById('dlg-m').textContent = '資料讀取失敗'; return; }
+    zChart = paint(document.getElementById('dlg-c'), document.getElementById('dlg-m'), t, zUnit, zChart, true);
+  }
+  function openBig() {
+    if (typeof dlg.showModal !== 'function') return;
+    zUnit = unit;
+    document.querySelectorAll('.seg button[data-zu]').forEach(x => x.classList.toggle('on', x.dataset.zu === zUnit));
+    if (+dDays.value < +daysSel.value) dDays.value = daysSel.value;
+    dlg.showModal(); drawBig();
+  }
+  document.getElementById('c-box').addEventListener('click', openBig);
+  document.getElementById('c-zoom').addEventListener('click', openBig);
+  dDays.addEventListener('change', drawBig);
+  document.querySelectorAll('.seg button[data-zu]').forEach(b => b.addEventListener('click', () => {
+    zUnit = b.dataset.zu; document.querySelectorAll('.seg button[data-zu]').forEach(x => x.classList.toggle('on', x === b)); drawBig();
+  }));
+  dlg.querySelector('.x').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+  dlg.addEventListener('close', () => { if (zChart) { zChart.destroy(); zChart = null; } });
+
   // ── 融資大減、現償大增 ──
-  let list = 'down', rk = null, sortK = null, sortDir = 1;
+  const DEF = { down: ['chg_pct', 1], repay: ['ratio', -1] };     // 各清單預設排序（和後端一致）
+  let list = 'down', rk = null, sortK = DEF.down[0], sortDir = DEF.down[1];
   const pSel = document.getElementById('r-period'), dSel = document.getElementById('r-date');
   async function loadRank() {
     const q = new URLSearchParams({ period: pSel.value }); if (dSel.value) q.set('date', dSel.value);
@@ -132,15 +198,20 @@
       if (!r.ok) throw new Error(r.status);
       rk = await r.json();
     } catch (e) { const em = document.getElementById('r-empty'); em.hidden = false; em.textContent = '資料讀取失敗，請稍後重新整理'; return; }
-    sortK = null; render();
+    [sortK, sortDir] = DEF[list]; render();
   }
   function render() {
     const tb = document.querySelector('#r-tbl tbody'), em = document.getElementById('r-empty');
     const rows = rk ? [...(rk[list] || [])] : [];
     document.getElementById('r-sub').textContent = rk && rk.date
       ? (rk.period > 1 ? `${md(rk.start)}～${md(rk.date)}（${rk.period} 個交易日）` : md(rk.date)) + `，共 ${rows.length} 檔` : '';
-    if (sortK) rows.sort((a, b) => ((a[sortK] ?? -1e15) - (b[sortK] ?? -1e15)) * sortDir);
-    document.querySelectorAll('#r-tbl th[data-k]').forEach(th => th.classList.toggle('sorted', th.dataset.k === sortK));
+    if (sortK === 'id') rows.sort((a, b) => a.id.localeCompare(b.id) * sortDir);
+    else if (sortK) rows.sort((a, b) => ((a[sortK] ?? -1e15) - (b[sortK] ?? -1e15)) * sortDir);
+    document.querySelectorAll('#r-tbl th[data-k]').forEach(th => {
+      const on = th.dataset.k === sortK;
+      th.classList.toggle('sorted', on); th.classList.toggle('asc', on && sortDir > 0); th.classList.toggle('desc', on && sortDir < 0);
+      th.setAttribute('aria-sort', on ? (sortDir > 0 ? 'ascending' : 'descending') : 'none');
+    });
     em.hidden = rows.length > 0; em.textContent = rk && rk.date ? '這段期間沒有符合條件的股票' : '資料補齊中，稍後再看';
     tb.innerHTML = rows.map(r => `<tr>
       <td class="stk"><b>${r.name}</b><small>${r.id}</small></td>
@@ -149,10 +220,10 @@
       <td>${r.ratio == null ? '—' : fmt(r.ratio, 1) + ' 倍'}</td><td class="opt">${fmt(r.bal)}</td></tr>`).join('');
   }
   document.querySelectorAll('.seg button[data-l]').forEach(b => b.addEventListener('click', () => {
-    list = b.dataset.l; sortK = null; document.querySelectorAll('.seg button[data-l]').forEach(x => x.classList.toggle('on', x === b)); render();
+    list = b.dataset.l; [sortK, sortDir] = DEF[list]; document.querySelectorAll('.seg button[data-l]').forEach(x => x.classList.toggle('on', x === b)); render();
   }));
   document.querySelectorAll('#r-tbl th[data-k]').forEach(th => th.addEventListener('click', () => {
-    const k = th.dataset.k; sortDir = sortK === k ? -sortDir : (k === 'chg' || k === 'chg_pct' ? 1 : -1); sortK = k; render();
+    const k = th.dataset.k; sortDir = sortK === k ? -sortDir : (['chg', 'chg_pct', 'id'].includes(k) ? 1 : -1); sortK = k; render();
   }));
   pSel.addEventListener('change', loadRank); dSel.addEventListener('change', loadRank);
 
