@@ -23,7 +23,7 @@
   .mg .tbl th[data-k] { cursor: pointer; } .mg .tbl th[data-k]:hover { color: var(--ink); }
   .mg .tbl th.sorted { color: var(--ink); }
   .up { color: var(--up); } .down { color: var(--down); }
-  @media (max-width: 640px) { .mg .tbl .opt { display: none; } }
+  @media (max-width: 640px) { .mg .tbl td.stk { flex: 1 1 100%; } }
   .mg .cv.zoomable { cursor: zoom-in; }
   .mg .zbtn { border: 1px solid var(--rule); background: var(--bg); border-radius: 6px; padding: 3px 10px; font-size: .84rem; color: var(--body); cursor: pointer; }
   .mg .tbl th[data-k]::after { content: ' ↕'; color: var(--mute); font-size: .75em; }
@@ -74,6 +74,11 @@
         <select class="sel" id="r-date" aria-label="日期">{% for d in dates %}<option value="{{ d }}">{{ d[5:].replace('-', '/') }}</option>{% endfor %}</select>
       </div>
     </div>
+    <div class="sort-m" id="r-sortm" role="group" aria-label="排序">排序
+      <button type="button" class="sort" data-k="chg_pct">增減%</button><button type="button" class="sort" data-k="chg">融資增減</button>
+      <button type="button" class="sort" data-k="repay">現償</button><button type="button" class="sort" data-k="ratio">現償倍數</button>
+      <button type="button" class="sort" data-k="repay_pct">現償占餘額%</button><button type="button" class="sort" data-k="bal">融資餘額</button>
+      <button type="button" class="sort" data-k="id">代號</button></div>
     <div class="tbl-wrap">
       <table class="tbl" id="r-tbl">
         <thead><tr>
@@ -212,17 +217,22 @@
       th.classList.toggle('sorted', on); th.classList.toggle('asc', on && sortDir > 0); th.classList.toggle('desc', on && sortDir < 0);
       th.setAttribute('aria-sort', on ? (sortDir > 0 ? 'ascending' : 'descending') : 'none');
     });
+    document.querySelectorAll('#r-sortm button[data-k]').forEach(bt => {   // 手機版排序鈕（窄螢幕表頭隱藏）
+      const on = bt.dataset.k === sortK;
+      bt.classList.toggle('on', on);
+      bt.textContent = bt.textContent.replace(/ [▲▼]$/, '') + (on ? (sortDir > 0 ? ' ▲' : ' ▼') : '');
+    });
     em.hidden = rows.length > 0; em.textContent = rk && rk.date ? '這段期間沒有符合條件的股票' : '資料補齊中，稍後再看';
     tb.innerHTML = rows.map(r => `<tr>
       <td class="stk"><b>${r.name}</b><small>${r.id}</small></td>
-      <td class="${cls(r.chg)}">${sgn(r.chg)}</td><td class="${cls(r.chg_pct)}">${sgn(r.chg_pct, 1)}%</td>
-      <td>${fmt(r.repay)}</td><td class="opt">${r.repay_pct == null ? '—' : fmt(r.repay_pct, 1) + '%'}</td>
-      <td>${r.ratio == null ? '—' : fmt(r.ratio, 1) + ' 倍'}</td><td class="opt">${fmt(r.bal)}</td></tr>`).join('');
+      <td class="${cls(r.chg)}" data-l="融資增減">${sgn(r.chg)}</td><td class="${cls(r.chg_pct)}" data-l="增減">${sgn(r.chg_pct, 1)}%</td>
+      <td data-l="現償">${fmt(r.repay)}</td><td class="opt" data-l="占餘額">${r.repay_pct == null ? '—' : fmt(r.repay_pct, 1) + '%'}</td>
+      <td data-l="倍數">${r.ratio == null ? '—' : fmt(r.ratio, 1) + ' 倍'}</td><td class="opt" data-l="餘額">${fmt(r.bal)}</td></tr>`).join('');
   }
   document.querySelectorAll('.seg button[data-l]').forEach(b => b.addEventListener('click', () => {
     list = b.dataset.l; [sortK, sortDir] = DEF[list]; document.querySelectorAll('.seg button[data-l]').forEach(x => x.classList.toggle('on', x === b)); render();
   }));
-  document.querySelectorAll('#r-tbl th[data-k]').forEach(th => th.addEventListener('click', () => {
+  document.querySelectorAll('#r-tbl th[data-k], #r-sortm button[data-k]').forEach(th => th.addEventListener('click', () => {
     const k = th.dataset.k; sortDir = sortK === k ? -sortDir : (['chg', 'chg_pct', 'id'].includes(k) ? 1 : -1); sortK = k; render();
   }));
   pSel.addEventListener('change', loadRank); dSel.addEventListener('change', loadRank);
