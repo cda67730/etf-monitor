@@ -10,7 +10,7 @@
 - **2026-10 起只有管理功能需要登入**：`/admin/etfs`、`/api/admin/*`、`/manual-scrape*`、`/test-scrape`、`/api/scheduler/*`、`/diagnostic`、`/debug/db-status`；其他瀏覽頁全部公開。登入後依 `next` 參數返回（預設 `/admin/etfs`）
 - 排程呼叫用 token：`SCHEDULER_TOKEN`（`/trigger-scrape*` 端點以 `Authorization: Bearer <token>` 驗證；未設＝隨機值，等於停用）
 - 費用：Hobby 方案（月費 5 美元抵 5 美元用量）；2026-11 實測 9 成以上是記憶體（兩個服務平均約 0.7GB），流量／CPU 幾乎不計；省記憶體：Dockerfile `MALLOC_ARENA_MAX=2`、排程工作跑完 `gc.collect()`＋`malloc_trim(0)`（`fut_live` 除外）、另有 `trim` 工作每 30 分鐘整理一次（啟動時背景補資料、網頁請求用過的記憶體也能還回去）、PDF 快取最多 6 份
-- **吃記憶體的工作另開子程序**（2026-11）：`jobs.py <工作>` 跑完整個程序結束，記憶體全還；主程式只負責網頁與排程。走子程序的：排程 `etf`、`inst`、`fut`、`margin`，啟動補資料 `fut_startup`、`margin_startup`、`inst_seed`（`scheduler.spawn`），期貨頁開頁觸發的 `fut` 更新與盤後 `fut_intraday`。包裝在 `scheduler.subprocess_job(name, fallback, timeout, after)`：子程序 log 直接輸出到同一 stdout、結果字串寫暫存檔、結束碼非 0 拋例外；`after` 在主程式清快取（期貨 `_cache`、市場情緒 `_cache`、`etf_registry._cache`）。jobs.py 只建資料表物件，不呼叫各模組 `init()`（避免再開背景工作）。新增重工作就在 jobs.py 加 `job_<名稱>`。`JOBS_SUBPROCESS=false` 改回在主程式裡跑。小工作（mood、fut_live、報告）仍在主程式
+- **吃記憶體的工作另開子程序**（2026-11）：`jobs.py <工作>` 跑完整個程序結束，記憶體全還；主程式只負責網頁與排程。走子程序的：排程 `etf`、`inst`、`fut`、`margin`，啟動補資料 `fut_startup`、`margin_startup`、`inst_seed`（`scheduler.spawn`），期貨頁開頁觸發的 `fut` 更新與盤後 `fut_intraday`。包裝在 `scheduler.subprocess_job(name, fallback, timeout, after)`：子程序 log 直接輸出到同一 stdout、結果字串寫暫存檔、結束碼非 0 拋例外；`after` 在主程式清快取（三大法人 `InstFlow._invalidate()`、期貨 `_cache`、市場情緒 `_cache`、`etf_registry._cache`；**新增子程序工作時一定要檢查主程式有沒有記憶體快取**，2026-11-09 漏清三大法人 `_mem` 導致頁面停在舊日期）。jobs.py 只建資料表物件，不呼叫各模組 `init()`（避免再開背景工作）。新增重工作就在 jobs.py 加 `job_<名稱>`。`JOBS_SUBPROCESS=false` 改回在主程式裡跑。小工作（mood、fut_live、報告）仍在主程式
 - ⚠ 每次 push 到 main 都會觸發 Railway 重新部署 → 不要讓排程每天 commit 資料回 repo
 
 ## 主要檔案

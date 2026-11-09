@@ -210,7 +210,7 @@ async def start_scheduler():
     try:
         extra = []
         if inst_flow.flow:
-            extra.append(("inst", "三大法人買賣超", app_scheduler.subprocess_job("inst", inst_flow.flow.scrape), "SCHED_INST", "0 16 * * 1-5; 20 18 * * 1-5"))
+            extra.append(("inst", "三大法人買賣超", app_scheduler.subprocess_job("inst", inst_flow.flow.scrape, after=inst_flow.flow._invalidate), "SCHED_INST", "0 16 * * 1-5; 20 18 * * 1-5"))
         if market_mood.store:
             extra.append(("mood", "市場情緒指標", market_mood.store.update, "SCHED_MOOD", "30 7 * * 2-6"))
             # 台股 VIX：期交所收盤後當天更新；CNN 恐懼貪婪：美股盤中每 2 小時（台北 22、0、2、4 點），早上 07:30 那次是收盤值

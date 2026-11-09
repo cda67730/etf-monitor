@@ -312,7 +312,7 @@ def init(db_config):
     def _seed():
         with flow.lock:
             return flow.import_seed()
-    scheduler.spawn("inst_seed", _seed)
+    scheduler.spawn("inst_seed", _seed, after=flow._invalidate)   # 子程序寫進資料庫，主程式的記憶體快取要清掉
     return flow
 
 
