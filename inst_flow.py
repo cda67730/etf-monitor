@@ -308,13 +308,11 @@ def init(db_config):
         logger.error(f"❌ 三大法人資料表初始化失敗: {e}")
         return None
 
+    import scheduler
     def _seed():
-        try:
-            with flow.lock:
-                flow.import_seed()
-        except Exception as e:
-            logger.error(f"❌ 三大法人歷史資料匯入失敗: {e}")
-    threading.Thread(target=_seed, daemon=True).start()
+        with flow.lock:
+            return flow.import_seed()
+    scheduler.spawn("inst_seed", _seed)
     return flow
 
 

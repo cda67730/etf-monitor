@@ -193,12 +193,24 @@ except Exception as e:
 # ============ 統一排程（APScheduler）============
 import scheduler as app_scheduler
 
+def _fut_after():
+    """期貨工作在子程序跑完：主程式的快取要清掉才看得到新資料"""
+    fut_flow.store._cache.clear()
+    if market_mood.store:
+        market_mood.store._cache = None      # 微台散戶淨多空
+
+
+def _etf_after():
+    if etf_registry.registry:
+        etf_registry.registry._cache = None
+
+
 @app.on_event("startup")
 async def start_scheduler():
     try:
         extra = []
         if inst_flow.flow:
-            extra.append(("inst", "三大法人買賣超", inst_flow.flow.scrape, "SCHED_INST", "0 16 * * 1-5; 20 18 * * 1-5"))
+            extra.append(("inst", "三大法人買賣超", app_scheduler.subprocess_job("inst", inst_flow.flow.scrape), "SCHED_INST", "0 16 * * 1-5; 20 18 * * 1-5"))
         if market_mood.store:
             extra.append(("mood", "市場情緒指標", market_mood.store.update, "SCHED_MOOD", "30 7 * * 2-6"))
             # 台股 VIX：期交所收盤後當天更新；CNN 恐懼貪婪：美股盤中每 2 小時（台北 22、0、2、4 點），早上 07:30 那次是收盤值
@@ -206,10 +218,10 @@ async def start_scheduler():
             extra.append(("mood_twvix_live", "台股 VIX（盤中）", market_mood.store.update_twvix_live, "SCHED_MOOD_TWVIX_LIVE", "0,15,30,45 9-13 * * 1-5"))
             extra.append(("mood_cnn", "CNN 恐懼貪婪（盤中）", lambda: market_mood.store.update(only={"cnn_fg"}), "SCHED_MOOD_CNN", "0 22 * * 1-5; 0 0,2,4 * * 2-6"))
         if fut_flow.store:
-            extra.append(("fut", "期貨三大法人未平倉", fut_flow.store.update, "SCHED_FUT", "10 15,18 * * 1-5"))
+            extra.append(("fut", "期貨三大法人未平倉", app_scheduler.subprocess_job("fut", fut_flow.store.update, after=_fut_after), "SCHED_FUT", "10 15,18 * * 1-5"))
             extra.append(("fut_live", "盤中大盤 vs 台指期（每 2 分鐘）", fut_flow.store.poll_live, "SCHED_FUT_LIVE", "45-59/2 8 * * 1-5; */2 9-13 * * 1-5"))
         if margin_flow.store:
-            extra.append(("margin", "融資融券（融資現償）", margin_flow.store.update, "SCHED_MARGIN", "40 21 * * 1-5; 30 22 * * 1-5"))
+            extra.append(("margin", "融資融券（融資現償）", app_scheduler.subprocess_job("margin", margin_flow.store.update), "SCHED_MARGIN", "40 21 * * 1-5; 30 22 * * 1-5"))
         # 每 30 分鐘整理一次記憶體：啟動時的背景補資料、網頁請求用過的記憶體不經過排程，靠這個還給系統（Railway 依記憶體計費）
         extra.append(("trim", "整理記憶體", lambda: "ok", "SCHED_TRIM", "*/30 * * * *"))
         if etf_report.report:
@@ -218,7 +230,7 @@ async def start_scheduler():
             extra.append(("inst_report", "三大法人今日觀察（Gemini）", inst_report.report.run_daily, "SCHED_INST_REPORT", "30 16 * * 1-5; 40 18,20 * * 1-5"))
         if pick_report.report:
             extra.append(("pick", "AI 籌碼焦點 10 檔（Gemini）", pick_report.report.run_daily, "SCHED_PICK", "30 21 * * 1-5"))
-        app_scheduler.setup(scraper=scraper, warrant_scraper=warrant_scraper, extra_jobs=extra)
+        app_scheduler.setup(scraper=scraper, warrant_scraper=warrant_scraper, extra_jobs=extra, etf_after=_etf_after)
     except Exception as e:
         logger.error(f"排程啟動失敗: {e}")
         logger.error(traceback.format_exc())

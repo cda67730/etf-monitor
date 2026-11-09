@@ -255,17 +255,18 @@ def init(db_config):
         logger.error(f"❌ 融資融券資料表初始化失敗: {e}")
         return None
 
-    def bg():
-        try:
-            if not store.last_date():
-                logger.info(f"[margin] 首次補資料：{store.update()}")
-            logger.info(f"[margin] {store.backfill_history()}")
-            from scheduler import JobRunner
-            JobRunner._trim()
-        except Exception as e:
-            logger.error(f"[margin] 首次補資料失敗：{e}")
-    threading.Thread(target=bg, daemon=True).start()
+    import scheduler
+    scheduler.spawn("margin_startup", lambda: startup(store))
     return store
+
+
+def startup(st):
+    """啟動時補資料（首次補 400 天、往前補到 HISTORY_START）；預設在獨立子程序跑（jobs.py margin_startup）"""
+    out = []
+    if not st.last_date():
+        out.append(f"首次補資料：{st.update()}")
+    out.append(str(st.backfill_history()))
+    return "；".join(out)
 
 
 def create_router(templates):

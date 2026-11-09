@@ -495,7 +495,9 @@ class FutStore:
             if self.intraday_incomplete(now.date()):
                 self._bf_at = time.time()
                 try:
-                    logger.info(f"[fut] 盤後補今日走勢：{self.backfill_intraday(now.date())} 點")
+                    import scheduler      # 要下載每筆成交 zip，另開子程序做，記憶體跑完就還
+                    job = scheduler.subprocess_job("fut_intraday", lambda: self.backfill_intraday(now.date()), timeout=300)
+                    logger.info(f"[fut] 盤後補今日走勢：{job()}")
                 except Exception as e:
                     logger.warning(f"[fut] 盤後補今日走勢失敗：{e}")
         r = self._q("SELECT MAX(d) AS d FROM fut_intraday", fetch="one") or {}
@@ -550,25 +552,28 @@ def init(db_config):
     except Exception as e:
         logger.error(f"❌ 期貨籌碼資料表初始化失敗: {e}")
         return None
-    no_oi = not (store._q("SELECT COUNT(*) AS n FROM fut_oi", fetch="one") or {}).get("n")
-    def _first():
-        try:
-            if not store.last_date() or no_oi:
-                logger.info("[fut] 首次補資料：" + store.update())
-            n = store.backfill_older()
-            if n:
-                logger.info(f"[fut] 往前補到兩年：{n} 筆")
-            n = store.backfill_trade()
-            if n:
-                logger.info(f"[fut] 補交易口數與金額（交易價差用）：{n} 筆")
-            if not (store._q("SELECT COUNT(*) AS n FROM taiex_close", fetch="one") or {}).get("n"):
-                logger.info(f"[fut] 補加權指數收盤：{store.update_taiex()} 天")
-            if not (store._q("SELECT COUNT(*) AS n FROM tx_close", fetch="one") or {}).get("n"):
-                logger.info(f"[fut] 補台指期近月收盤（正逆價差用）：{store.update_basis()} 天")
-        except Exception as e:
-            logger.error(f"[fut] 補資料失敗：{e}")
-    threading.Thread(target=_first, daemon=True).start()
+    import scheduler
+    scheduler.spawn("fut_startup", lambda: startup(store), after=lambda: store._cache.clear())
     return store
+
+
+def startup(st):
+    """啟動時補資料（首次補兩年、往前補、交易口數、加權收盤、近月收盤）；預設在獨立子程序跑（jobs.py fut_startup）"""
+    no_oi = not (st._q("SELECT COUNT(*) AS n FROM fut_oi", fetch="one") or {}).get("n")
+    out = []
+    if not st.last_date() or no_oi:
+        out.append("首次補資料：" + str(st.update()))
+    n = st.backfill_older()
+    if n:
+        out.append(f"往前補到兩年 {n} 筆")
+    n = st.backfill_trade()
+    if n:
+        out.append(f"補交易口數與金額 {n} 筆")
+    if not (st._q("SELECT COUNT(*) AS n FROM taiex_close", fetch="one") or {}).get("n"):
+        out.append(f"補加權指數收盤 {st.update_taiex()} 天")
+    if not (st._q("SELECT COUNT(*) AS n FROM tx_close", fetch="one") or {}).get("n"):
+        out.append(f"補台指期近月收盤 {st.update_basis()} 天")
+    return "；".join(out) or "不用補"
 
 
 _last_try = 0.0
@@ -589,7 +594,9 @@ def refresh_if_stale():
 
     def run():
         try:
-            logger.info("[fut] 開頁觸發更新：" + str(store.update()))
+            import scheduler
+            job = scheduler.subprocess_job("fut", store.update, after=lambda: store._cache.clear())
+            logger.info("[fut] 開頁觸發更新：" + str(job()))
         except Exception as e:
             logger.warning(f"[fut] 開頁觸發更新失敗：{e}")
     threading.Thread(target=run, daemon=True).start()

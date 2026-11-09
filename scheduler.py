@@ -28,6 +28,59 @@ _TZ = ZoneInfo(TZ)
 def _now():
     return datetime.now(_TZ).isoformat(timespec="seconds")
 ENABLED = os.getenv("SCHEDULER_ENABLED", "false").lower() == "true"
+# 吃記憶體的工作（ETF 持股、三大法人、期貨、融資、啟動補資料）另開子程序跑（jobs.py），跑完整個程序結束、記憶體全部還給系統；
+# 主程式常駐記憶體不會被撐大（Railway 依記憶體計費）。設 JOBS_SUBPROCESS=false 改回在主程式裡跑
+SUBPROC = os.getenv("JOBS_SUBPROCESS", "true").lower() == "true"
+_BASE = os.path.dirname(os.path.abspath(__file__))
+
+
+def subprocess_job(name, fallback=None, timeout=3600, after=None):
+    """回傳一個函式：執行時開子程序 `python jobs.py <name>`，等它結束並回傳結果字串；
+    子程序的 log 直接輸出到同一個 stdout。after：跑完（不論成敗）在主程式執行，例如清快取。
+    SUBPROC 關閉時改呼叫 fallback（同一件事在主程式裡做）。"""
+    def f():
+        if not SUBPROC and fallback:
+            try:
+                return fallback()
+            finally:
+                if after:
+                    after()
+        import subprocess, sys, tempfile
+        fd, path = tempfile.mkstemp(prefix=f"job_{name}_", suffix=".txt")
+        os.close(fd)
+        try:
+            p = subprocess.run([sys.executable, os.path.join(_BASE, "jobs.py"), name, path],
+                               cwd=_BASE, timeout=timeout)
+            with open(path, encoding="utf-8") as fh:
+                res = fh.read().strip()
+            if p.returncode != 0:
+                raise RuntimeError(res or f"子程序結束碼 {p.returncode}")
+            return res
+        finally:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            if after:
+                try:
+                    after()
+                except Exception as e:
+                    logger.warning(f"[jobs] {name} 跑完清快取失敗：{e}")
+    return f
+
+
+def spawn(name, fallback, timeout=4 * 3600, after=None):
+    """啟動時的背景補資料：開一條執行緒跑 subprocess_job（不拖慢啟動）"""
+    job = subprocess_job(name, fallback, timeout, after)
+
+    def run():
+        t0 = time.time()
+        try:
+            res = job()
+            logger.info(f"[jobs] ✔ {name}（{time.time() - t0:.0f} 秒）：{res}")
+        except Exception as e:
+            logger.error(f"[jobs] ✖ {name} 失敗：{e}")
+    threading.Thread(target=run, daemon=True).start()
 MISFIRE = int(os.getenv("SCHED_MISFIRE_SEC", "3600"))
 
 
@@ -122,16 +175,17 @@ runner = JobRunner()
 _scheduler = None
 
 
-def setup(scraper=None, warrant_scraper=None, extra_jobs=()):
+def setup(scraper=None, warrant_scraper=None, extra_jobs=(), etf_after=None):
     """在 FastAPI 啟動時呼叫。extra_jobs: [(job_id, name, func, env_name, default_cron), ...]"""
     global _scheduler
     if scraper:
-        def etf_job():
+        def etf_inproc():
             n = scraper.scrape_all_etfs()
             total = len(scraper.etf_codes)
             if not n:
                 raise RuntimeError(f"0/{total} 檔成功")
             return f"{n}/{total} 檔成功"
+        etf_job = subprocess_job("etf", etf_inproc, timeout=3600, after=etf_after)
         runner.add("etf", "ETF 持股＋折溢價", etf_job,
                    os.getenv("SCHED_ETF", "0 18,19,20 * * 1-5"))
     if warrant_scraper:
