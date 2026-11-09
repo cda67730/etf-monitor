@@ -21,7 +21,7 @@
 | `improved_etf_scraper_cloud.py` | 主動式 ETF 持股爬蟲；股票名稱一律用證交所／櫃買簡稱（主程式把 `_short_names`＝`etf_report.report.market.meta()` 設給 `scraper.short_names`，查不到才用 ETF 揭露名稱中最長的）；啟動時 `_rename_holdings_to_short` 把 `etf_holdings`、`holdings_changes` 已存的長名稱換成簡稱；`etf_codes` 屬性讀 `etf_registry`。pocket.tw 自 2026-10-01 起需 guest token（`_get_token`／`_api_get`） |
 | `etf_registry.py` | ETF 清單（資料表 `etf_registry`）：分類、啟用、排序；`enabled_codes(aggressive_only=)` |
 | `scheduler.py` | APScheduler 統一排程與手動執行（`runner.run_async`）；`subprocess_job`／`spawn` 開子程序跑 `jobs.py` |
-| `jobs.py` | 子程序入口：`python jobs.py etf|inst|inst_seed|fut|fut_intraday|fut_startup|margin|margin_startup [結果檔]` |
+| `jobs.py` | 子程序入口：`python jobs.py <工作> [結果檔]`（etf、inst、inst_seed、fut、fut_intraday、fut_startup、margin、margin_startup） |
 | `warrant_scraper.py`、`warrant_volume_analyzer.py` | 權證排行與量能分析 |
 | `templates/*.html` | Jinja2 樣板，`base.html` 有導覽列（Bootstrap 5） |
 | `inst_flow.py` | 三大法人同買／連買：資料表 `inst_daily`、`inst_no_trading`，頁面與 API |
