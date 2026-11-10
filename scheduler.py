@@ -102,6 +102,17 @@ def cron_trigger(expr):
     return CronTrigger(minute=m, hour=h, day=d, month=mo, day_of_week=w, timezone=TZ)
 
 
+def rss():
+    """主程式目前的常駐記憶體（不含子程序），給 log 觀察用"""
+    try:
+        for ln in open("/proc/self/status"):
+            if ln.startswith("VmRSS"):
+                return f"主程式記憶體 {int(ln.split()[1]) // 1024} MB"
+    except Exception:
+        pass
+    return "ok"
+
+
 class JobRunner:
     """記錄每個工作的最近執行結果，並確保同一工作不會同時跑兩次"""
 

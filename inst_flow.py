@@ -23,6 +23,7 @@ import os
 import re
 import threading
 import time
+from collections import OrderedDict
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 N = int(os.getenv("INST_STREAK_DAYS", "40"))      # 連買最多回溯天數／統計區間
 KEEP = 20                                         # 頁面可切換的日期數
+RESULT_KEEP = 3                                   # 計算結果最多留幾個日期在記憶體
 BACKFILL = N + KEEP                               # 資料庫要保有的交易日數
 PUBLIC = os.getenv("INST_COBUY_PUBLIC", "true").lower() == "true"   # 預設公開；設 false 改為需登入
 SEED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inst_cobuy", "data")
@@ -47,7 +49,8 @@ class InstFlow:
         self.db = db_config
         self.lock = threading.Lock()
         self._mem = None          # 最近 BACKFILL 天的資料（記憶體快取）
-        self._results = {}
+        self._results = OrderedDict()   # 日期 -> 計算結果，只留最近用到的 RESULT_KEEP 個（一天約 1,900 檔，Python 物件約 5MB）
+        self._hist = None
         self._init_tables()
 
     # ---------- DB ----------
@@ -110,7 +113,8 @@ class InstFlow:
 
     def _invalidate(self):
         self._mem = None
-        self._results = {}
+        self._results = OrderedDict()
+        self._hist = None
 
     # ---------- 匯入與抓取 ----------
     def import_seed(self):
@@ -195,17 +199,22 @@ class InstFlow:
             return self._mem
         dates = self.dates_in_db()[-BACKFILL:]
         S = {}
-        if dates:
+        idx = {d: i for i, d in enumerate(dates)}
+        for c in range(0, len(dates), 5):          # 每次只讀 5 天，避免一次把 60 天十幾萬列全載進記憶體（尖峰會撐大常駐記憶體）
+            part = dates[c:c + 5]
             rows = self._run(
                 f"SELECT trade_date, stock_id, name, market, foreign_net, trust_net, dealer_net "
-                f"FROM inst_daily WHERE trade_date >= {self._ph()} ORDER BY trade_date", (dates[0],), fetch=True)
-            idx = {d: i for i, d in enumerate(dates)}
+                f"FROM inst_daily WHERE trade_date >= {self._ph()} AND trade_date <= {self._ph()} ORDER BY trade_date",
+                (part[0], part[-1]), fetch=True)
             for d, sid, name, mkt, f, t, de in rows:
                 if not STOCK_RE.fullmatch(sid or "") or d not in idx:
                     continue
-                s = S.setdefault(sid, {"name": name, "market": mkt, "names": {},
-                                       "v": {k: [None] * len(dates) for k in KINDS}})
-                s["names"][d] = (name, mkt)
+                s = S.get(sid)
+                if s is None:
+                    s = S[sid] = {"name": name, "market": mkt, "nm": [],
+                                  "v": {k: [None] * len(dates) for k in KINDS}}
+                if not s["nm"] or s["nm"][-1][1:] != (name, mkt):     # 名稱只記變動（不必每天存一份）
+                    s["nm"].append((idx[d], name, mkt))
                 for k, v in zip(KINDS, (f, t, de)):
                     s["v"][k][idx[d]] = round((v or 0) / 1000)     # 張，零股不計
         self._mem = (dates, S)
@@ -221,8 +230,9 @@ class InstFlow:
                 break
         return n
 
-    def compute(self, last):
+    def compute(self, last, cache=True):
         if last in self._results:
+            self._results.move_to_end(last)
             return self._results[last]
         dates, S = self._load()
         if last not in dates:
@@ -240,7 +250,11 @@ class InstFlow:
             recent = range(max(0, len(win) - PERIODS[-1]), len(win))
             if not any(pos(k, i) for k in KINDS for i in recent):
                 continue                                           # 近 10 日內至少一個法人買超過
-            name, mkt = s["names"].get(last) or (s["name"], s["market"])
+            name, mkt = s["name"], s["market"]
+            for i, n, m in reversed(s["nm"]):          # 當天（含）以前最後一次的名稱
+                if i < end:
+                    name, mkt = n, m
+                    break
             r = {"id": sid, "name": name, "market": mkt}
             for k in KINDS:
                 r[k] = today[k]
@@ -278,19 +292,22 @@ class InstFlow:
                 r[f"duel_d{w}"] = sum(1 for i in idx if dw and duel[i] == dw)
             out.append(r)
         res = {"date": last, "window": [win[0], win[-1]], "n_days": len(win), "max_days": N, "rows": out}
-        self._results[last] = res
+        if cache:
+            self._results[last] = res
+            while len(self._results) > RESULT_KEEP:
+                self._results.popitem(last=False)
         return res
 
     def history(self):
-        if "_hist" in self._results:
-            return self._results["_hist"]
+        if self._hist is not None:
+            return self._hist
         dates, _ = self._load()
         hist = []
         for d in reversed(dates[-KEEP:]):
-            co = sorted([x for x in self.compute(d)["rows"] if x["cobuy"]], key=lambda x: -x["total"])
+            co = sorted([x for x in self.compute(d, cache=(d == dates[-1]))["rows"] if x["cobuy"]], key=lambda x: -x["total"])   # 只取摘要，不把 20 天全留在記憶體
             hist.append({"date": d, "count": len(co), "top": [f'{x["id"]} {x["name"]}' for x in co[:15]]})
         res = {"dates": [h["date"] for h in hist], "cobuy_history": hist, "max_days": N}
-        self._results["_hist"] = res
+        self._hist = res
         return res
 
 

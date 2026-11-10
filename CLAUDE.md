@@ -9,7 +9,7 @@
 - 登入：單一密碼 `WEB_PASSWORD`（未設＝隨機值，無法登入；程式裡沒有預設密碼），session 存記憶體（重新部署後需重新登入）；密碼與 token 用 `hmac.compare_digest` 比對
 - **2026-10 起只有管理功能需要登入**：`/admin/etfs`、`/api/admin/*`、`/manual-scrape*`、`/test-scrape`、`/api/scheduler/*`、`/diagnostic`、`/debug/db-status`；其他瀏覽頁全部公開。登入後依 `next` 參數返回（預設 `/admin/etfs`）
 - 排程呼叫用 token：`SCHEDULER_TOKEN`（`/trigger-scrape*` 端點以 `Authorization: Bearer <token>` 驗證；未設＝隨機值，等於停用）
-- 費用：Hobby 方案（月費 5 美元抵 5 美元用量）；2026-11 實測 9 成以上是記憶體（兩個服務平均約 0.7GB），流量／CPU 幾乎不計；省記憶體：Dockerfile `MALLOC_ARENA_MAX=2`、排程工作跑完 `gc.collect()`＋`malloc_trim(0)`（`fut_live` 除外）、另有 `trim` 工作每 30 分鐘整理一次（啟動時背景補資料、網頁請求用過的記憶體也能還回去）、PDF 快取最多 6 份
+- 費用：Hobby 方案（月費 5 美元抵 5 美元用量）；2026-11 實測 9 成以上是記憶體（兩個服務平均約 0.7GB），流量／CPU 幾乎不計；省記憶體：Dockerfile `MALLOC_ARENA_MAX=2`、排程工作跑完 `gc.collect()`＋`malloc_trim(0)`（`fut_live` 除外）、另有 `trim` 工作每 30 分鐘整理一次並在 log 記「主程式記憶體 N MB」（啟動時背景補資料、網頁請求用過的記憶體也能還回去）、PDF 快取最多 6 份
 - **吃記憶體的工作另開子程序**（2026-11）：`jobs.py <工作>` 跑完整個程序結束，記憶體全還；主程式只負責網頁與排程。走子程序的：排程 `etf`、`inst`、`fut`、`margin`，啟動補資料 `fut_startup`、`margin_startup`、`inst_seed`（`scheduler.spawn`），期貨頁開頁觸發的 `fut` 更新與盤後 `fut_intraday`。包裝在 `scheduler.subprocess_job(name, fallback, timeout, after)`：子程序 log 直接輸出到同一 stdout、結果字串寫暫存檔、結束碼非 0 拋例外；`after` 在主程式清快取（三大法人 `InstFlow._invalidate()`、期貨 `_cache`、市場情緒 `_cache`、`etf_registry._cache`；**新增子程序工作時一定要檢查主程式有沒有記憶體快取**，2026-11-09 漏清三大法人 `_mem` 導致頁面停在舊日期）。jobs.py 只建資料表物件，不呼叫各模組 `init()`（避免再開背景工作）。新增重工作就在 jobs.py 加 `job_<名稱>`。`JOBS_SUBPROCESS=false` 改回在主程式裡跑。小工作（mood、fut_live、報告）仍在主程式
 - ⚠ 每次 push 到 main 都會觸發 Railway 重新部署 → 不要讓排程每天 commit 資料回 repo
 
@@ -53,6 +53,7 @@
 - 頁面樣式與 ETF 日報共用 `templates/_ed_css.html`；分頁：三大同買、外資投信同買（`ft_cobuy`／`ft_streak`／`ft_days`／`ft_total`）、土洋對作（`duel`：1＝投信買外資賣、-1＝外資買投信賣，`duel_streak` 同方向連續天數）、外資／投信／自營買超、每日同買；頁面不顯示上市櫃欄位；欄位標題用短字（同買張、連續天、外連、投連…），手機版仍維持表格，只留 股票／同買張／連續天／外資／投信；「今日觀察」是預設收合的抽屜（只露出一句話結論）；預設分頁是「外資投信同買」
 - 所有分頁（每日同買除外）都有期間下拉（當日／近 5 日／近 10 日）：`compute()` 另算 `co_d{5,10}`（同買天數）、`co_s{5,10}`（同買日張數合計）、`ft_d*`、`ft_s*`、`f/t/dl{5,10}`（各法人淨買賣合計）、`foreign/trust/dealer_d{5,10}`（期間買超天數）、`duel{5,10}`（以期間合計判斷的對作方向）與 `duel_d{5,10}`；回傳的 rows 含近 10 日內任一法人買超過的股票（約 1,900 檔、1.4MB，靠 GZip 壓縮），各分頁自行過濾；頁面不提供搜尋框
 - 股名旁的小圖示（`.tr-btn`）點了在該列下方展開個股法人走勢：當日三大法人張數、每日買賣超堆疊長條、區間累計折線（外資藍、投信橘、自營紫），期間 20／60（預設）／120 日；API `/api/inst-cobuy/stock?id=&date=&days=`（`InstFlow.stock_series`，到 date 為止）；切分頁、排序、換日期都會保持展開
+- 記憶體（2026-11-10）：原始資料 `_load` 每次讀 5 天、股名只記變動；計算結果 `_results` 只留最近 `RESULT_KEEP`=3 個日期（LRU），`history()` 算 20 天摘要時不快取（只留最新一天）；本機實測頁面使用後主程式 +178MB → +34MB。輸出與舊版逐欄一致，唯一差別是改名股票在沒交易那天顯示當時的名稱
 - 全站加 `GZipMiddleware`（BookReview 的 requests 會自動解壓，不影響）
 - 頁面 `/inst-cobuy`、API `/api/inst-cobuy/dates`、`/api/inst-cobuy?date=`、`/api/inst-cobuy.csv?date=`；預設公開，`INST_COBUY_PUBLIC=false` 改為需登入
 - 2026-10 已移除 GitHub Actions（inst-cobuy.yml、daily-scraper.yml）與靜態網頁；GitHub Pages 需使用者在 repo Settings 關閉
